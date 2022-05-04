@@ -1,0 +1,16 @@
+{
+  "go.formatFlags": [
+    "-s"
+  ],
+  "go.lintTool": "golangci-lint",
+  "cSpell.words": [
+    "Debugf",
+    "FCAPI",
+    "ffresty",
+    "fftypes",
+    "Hyperledger",
+    "Infof",
+    "TLSCA"
+  ],
+  "go.testTimeout": "10s"
+}
