@@ -1,0 +1,25 @@
+# Example YAML file for testing commandline startup
+debug:
+  port: 0
+http:
+  port: 0
+node:
+  identity: 0x91d2b4381a4cd5c7c0f27565a7d4b829844c8635
+blockchain:
+  type: utdbql
+  utdbql:
+    url: memory://
+database:
+  type: ql
+  ql:
+    url: memory://
+sharedstorage:
+  type: ipfs
+  ipfs:
+    api:
+      url: http://localhost:8080
+    gateway:
+      url: http://localhost:8080
+tokens:
+  - name: erc1155
+    connector: https
