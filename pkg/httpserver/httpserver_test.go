@@ -117,7 +117,7 @@ func TestMissingCAFile(t *testing.T) {
 	InitCORSConfig(cc)
 	cp.Set(HTTPConfTLSCAFile, "badness")
 	_, err := NewHTTPServer(context.Background(), "ut", mux.NewRouter(), make(chan error), cp, cc)
-	assert.Regexp(t, "FF10153", err)
+	assert.Regexp(t, "FF00153", err)
 }
 
 func TestBadCAFile(t *testing.T) {
@@ -127,7 +127,7 @@ func TestBadCAFile(t *testing.T) {
 	InitCORSConfig(cc)
 	cp.Set(HTTPConfTLSCAFile, configDir+"/firefly.common.yaml")
 	_, err := NewHTTPServer(context.Background(), "ut", mux.NewRouter(), make(chan error), cp, cc)
-	assert.Regexp(t, "FF10152", err)
+	assert.Regexp(t, "FF00152", err)
 }
 
 func TestTLSServerSelfSignedWithClientAuth(t *testing.T) {
