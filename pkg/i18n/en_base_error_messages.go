@@ -18,11 +18,11 @@ package i18n
 
 var (
 	registeredPrefixes = map[string]string{
-		"FF00":  "FireFly Common Utilities",
-		"FF10":  "FireFly Core",
-		"FF201": "FireFly Transaction Manager",
-		"FF202": "FireFly Signer",
-		"FF99":  "Test prefix",
+		"FF00": "FireFly Common Utilities",
+		"FF10": "FireFly Core",
+		"FF21": "FireFly Transaction Manager",
+		"FF22": "FireFly Signer",
+		"FF99": "Test prefix",
 	}
 )
 
