@@ -1,5 +1,5 @@
 VGO=go
-GOFILES := $(shell find cmd internal pkg -name '*.go' -print)
+GOFILES := $(shell find pkg -name '*.go' -print)
 GOBIN := $(shell $(VGO) env GOPATH)/bin
 LINT := $(GOBIN)/golangci-lint
 MOCKERY := $(GOBIN)/mockery
