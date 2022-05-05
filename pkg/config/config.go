@@ -85,6 +85,10 @@ type KeySet interface {
 	AddKnownKey(key string, defValue ...interface{})
 }
 
+type keyParent interface {
+	AddChild(key string, defValue ...interface{})
+}
+
 // Prefix represents the global configuration, at a nested point in
 // the config hierarchy. This allows plugins to define their
 // Note that all values are GLOBAL so this cannot be used for per-instance
@@ -242,14 +246,14 @@ func GetKnownKeys() []string {
 
 // configPrefix is the main config structure passed to plugins, and used for root to wrap viper
 type configPrefix struct {
-	prefix      string
-	arrayParent *configPrefixArray
-	parent      *configPrefix
+	prefix string
+	parent keyParent
 }
 
 // configPrefixArray is a point in the config that supports an array
 type configPrefixArray struct {
 	base     string
+	parent   keyParent
 	defaults map[string][]interface{}
 }
 
@@ -274,16 +278,15 @@ func (c *configPrefix) prefixKey(k string) string {
 
 func (c *configPrefix) SubPrefix(suffix string) Prefix {
 	return &configPrefix{
-		prefix:      c.prefix + suffix + ".",
-		arrayParent: c.arrayParent,
-		parent:      c,
+		prefix: c.prefix + suffix + ".",
+		parent: c,
 	}
 }
 
 func (c *configPrefixArray) SubPrefix(suffix string) Prefix {
 	cp := &configPrefix{
-		prefix:      c.base + "[]." + suffix + ".",
-		arrayParent: c,
+		prefix: c.base + "[]." + suffix + ".",
+		parent: c,
 	}
 	return cp
 }
@@ -291,6 +294,7 @@ func (c *configPrefixArray) SubPrefix(suffix string) Prefix {
 func (c *configPrefix) Array() PrefixArray {
 	return &configPrefixArray{
 		base:     strings.TrimSuffix(c.prefix, "."),
+		parent:   c.parent,
 		defaults: make(map[string][]interface{}),
 	}
 }
@@ -308,6 +312,7 @@ func (c *configPrefixArray) ArraySize() int {
 func (c *configPrefixArray) ArrayEntry(i int) Prefix {
 	cp := &configPrefix{
 		prefix: c.base + fmt.Sprintf(".%d.", i),
+		parent: c.parent,
 	}
 	for knownKey, defValue := range c.defaults {
 		cp.AddKnownKey(knownKey, defValue...)
@@ -329,8 +334,10 @@ func (c *configPrefixArray) AddKnownKey(k string, defValue ...interface{}) {
 	defer keysMutex.Unlock()
 
 	// Put a simulated key in the known keys array, to pop into the help info.
-	knownKeys[fmt.Sprintf("%s[].%s", c.base, k)] = true
-	c.defaults[k] = defValue
+	key := fmt.Sprintf("%s[].%s", c.base, k)
+	knownKeys[key] = true
+
+	c.AddChild(key, defValue...)
 }
 
 func (c *configPrefix) AddKnownKey(k string, defValue ...interface{}) {
@@ -343,9 +350,25 @@ func (c *configPrefix) AddKnownKey(k string, defValue ...interface{}) {
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 	knownKeys[key] = true
-	if c.arrayParent != nil {
-		prefix := c.arrayParent.base + "[]."
-		c.arrayParent.defaults[strings.TrimPrefix(key, prefix)] = defValue
+
+	if c.parent != nil {
+		c.parent.AddChild(key, defValue...)
+	}
+}
+
+func (c *configPrefixArray) AddChild(k string, defValue ...interface{}) {
+	// When a child is added anywhere below this array, add it to the defaults map
+	prefix := c.base + "[]."
+	c.defaults[strings.TrimPrefix(k, prefix)] = defValue
+
+	// Note that arrays of arrays are not supported, so we don't bubble upwards
+	// (there are a few more missing pieces if we need to support that fully)
+}
+
+func (c *configPrefix) AddChild(k string, defValue ...interface{}) {
+	// When a child is added anywhere below this key, just bubble it upwards
+	if c.parent != nil {
+		c.parent.AddChild(k, defValue...)
 	}
 }
 

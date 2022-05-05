@@ -144,20 +144,25 @@ func TestPluginConfigArrayInit(t *testing.T) {
 func TestArrayOfPlugins(t *testing.T) {
 	defer RootConfigReset()
 
-	tokPlugins := NewPluginConfig("tokens").Array()
+	pluginsRoot := NewPluginConfig("plugins")
+	tokPlugins := pluginsRoot.SubPrefix("tokens").Array()
 	tokPlugins.AddKnownKey("fftokens")
-	fft := tokPlugins.SubPrefix("fftokens")
-	fft.AddKnownKey("url")
 	tokPlugins.AddKnownKey("name")
 	tokPlugins.AddKnownKey("key1", "default value")
 	tokPlugins.AddKnownKey("key2", "def1", "def2")
+	fft := tokPlugins.SubPrefix("fftokens")
+	fft.AddKnownKey("url")
+	fft.SubPrefix("proxy").AddKnownKey("url")
 	viper.SetConfigType("yaml")
 	err := viper.ReadConfig(strings.NewReader(`
-tokens:
-- name: bob
-  type: fftokens
-  fftokens:
-    url: http://test
+plugins:
+  tokens:
+  - name: bob
+    type: fftokens
+    fftokens:
+      url: http://test
+      proxy:
+        url: http://proxy
 `))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, tokPlugins.ArraySize())
@@ -166,6 +171,8 @@ tokens:
 	assert.Equal(t, "bob", bob.GetString("name"))
 	assert.Equal(t, "default value", bob.GetString("key1"))
 	assert.Equal(t, "http://test", bob.GetString("fftokens.url"))
+	assert.Equal(t, "http://test", bob.SubPrefix("fftokens").GetString("url"))
+	assert.Equal(t, "http://proxy", bob.SubPrefix("fftokens").SubPrefix("proxy").GetString("url"))
 }
 
 func TestMapOfAdminOverridePlugins(t *testing.T) {
