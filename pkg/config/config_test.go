@@ -145,6 +145,9 @@ func TestArrayOfPlugins(t *testing.T) {
 	defer RootConfigReset()
 
 	tokPlugins := NewPluginConfig("tokens").Array()
+	tokPlugins.AddKnownKey("fftokens")
+	fft := tokPlugins.SubPrefix("fftokens")
+	fft.AddKnownKey("url")
 	tokPlugins.AddKnownKey("name")
 	tokPlugins.AddKnownKey("key1", "default value")
 	tokPlugins.AddKnownKey("key2", "def1", "def2")
@@ -152,23 +155,17 @@ func TestArrayOfPlugins(t *testing.T) {
 	err := viper.ReadConfig(strings.NewReader(`
 tokens:
 - name: bob
-- name: sally
-  key1: explicit value
-  key2:
-  - arr1
-  - arr2
+  type: fftokens
+  fftokens:
+    url: http://test
 `))
 	assert.NoError(t, err)
-	assert.Equal(t, 2, tokPlugins.ArraySize())
+	assert.Equal(t, 1, tokPlugins.ArraySize())
 	assert.Equal(t, 0, NewPluginConfig("nonexistent").Array().ArraySize())
 	bob := tokPlugins.ArrayEntry(0)
 	assert.Equal(t, "bob", bob.GetString("name"))
 	assert.Equal(t, "default value", bob.GetString("key1"))
-	assert.Equal(t, []string{"def1", "def2"}, bob.GetStringSlice("key2"))
-	sally := tokPlugins.ArrayEntry(1)
-	assert.Equal(t, "sally", sally.GetString("name"))
-	assert.Equal(t, "explicit value", sally.GetString("key1"))
-	assert.Equal(t, []string{"arr1", "arr2"}, sally.GetStringSlice("key2"))
+	assert.Equal(t, "http://test", bob.GetString("fftokens.url"))
 }
 
 func TestMapOfAdminOverridePlugins(t *testing.T) {
