@@ -118,6 +118,7 @@ type PrefixArray interface {
 	KeySet
 	ArraySize() int
 	ArrayEntry(i int) Prefix
+	SubPrefix(suffix string) Prefix
 }
 
 // RootKey key are the known configuration keys
@@ -241,7 +242,9 @@ func GetKnownKeys() []string {
 
 // configPrefix is the main config structure passed to plugins, and used for root to wrap viper
 type configPrefix struct {
-	prefix string
+	prefix      string
+	arrayParent *configPrefixArray
+	parent      *configPrefix
 }
 
 // configPrefixArray is a point in the config that supports an array
@@ -271,8 +274,18 @@ func (c *configPrefix) prefixKey(k string) string {
 
 func (c *configPrefix) SubPrefix(suffix string) Prefix {
 	return &configPrefix{
-		prefix: c.prefix + suffix + ".",
+		prefix:      c.prefix + suffix + ".",
+		arrayParent: c.arrayParent,
+		parent:      c,
 	}
+}
+
+func (c *configPrefixArray) SubPrefix(suffix string) Prefix {
+	cp := &configPrefix{
+		prefix:      c.base + "[]." + suffix + ".",
+		arrayParent: c,
+	}
+	return cp
 }
 
 func (c *configPrefix) Array() PrefixArray {
@@ -330,6 +343,10 @@ func (c *configPrefix) AddKnownKey(k string, defValue ...interface{}) {
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 	knownKeys[key] = true
+	if c.arrayParent != nil {
+		prefix := c.arrayParent.base + "[]."
+		c.arrayParent.defaults[strings.TrimPrefix(key, prefix)] = defValue
+	}
 }
 
 func (c *configPrefix) SetDefault(k string, defValue interface{}) {
