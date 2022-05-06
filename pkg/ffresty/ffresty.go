@@ -62,7 +62,7 @@ func OnAfterResponse(c *resty.Client, resp *resty.Response) {
 }
 
 // New creates a new Resty client, using static configuration (from the config file)
-// from a given nested prefix in the static configuration
+// from a given section in the static configuration
 //
 // You can use the normal Resty builder pattern, to set per-instance configuration
 // as required.

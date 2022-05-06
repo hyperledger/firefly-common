@@ -42,11 +42,11 @@ func newTestClient(t *testing.T, response ffcapiResponse) (*apiClient, func()) {
 		_, err = w.Write(resBytes)
 		assert.NoError(t, err)
 	}))
-	prefix := config.RootSection("unittest")
-	ffresty.InitPrefix(prefix)
-	prefix.Set(ffresty.HTTPConfigURL, fmt.Sprintf("http://%s", server.Listener.Addr()))
+	section := config.RootSection("unittest")
+	ffresty.InitConfig(section)
+	section.Set(ffresty.HTTPConfigURL, fmt.Sprintf("http://%s", server.Listener.Addr()))
 	ctx := context.Background()
-	api := NewFFCAPIClient(ctx, prefix, VariantEVM)
+	api := NewFFCAPIClient(ctx, section, VariantEVM)
 	return api.(*apiClient), server.Close
 }
 
@@ -56,12 +56,12 @@ func TestBadResponseContentType(t *testing.T) {
 		w.Write([]byte("not JSON"))
 	}))
 	defer server.Close()
-	prefix := config.RootSection("unittest")
-	ffresty.InitPrefix(prefix)
-	prefix.Set(ffresty.HTTPConfigURL, fmt.Sprintf("http://%s", server.Listener.Addr()))
+	section := config.RootSection("unittest")
+	ffresty.InitConfig(section)
+	section.Set(ffresty.HTTPConfigURL, fmt.Sprintf("http://%s", server.Listener.Addr()))
 	ctx := context.Background()
 
-	api := NewFFCAPIClient(ctx, prefix, VariantEVM).(*apiClient)
+	api := NewFFCAPIClient(ctx, section, VariantEVM).(*apiClient)
 	_, err := api.invokeAPI(ctx, &ExecQueryRequest{}, &ResponseBase{})
 	assert.Regexp(t, "FF00156", err)
 
@@ -73,13 +73,13 @@ func TestBadResponseError(t *testing.T) {
 		w.Write([]byte("not JSON"))
 	}))
 	config.RootConfigReset()
-	prefix := config.RootSection("ffcapi_tests")
-	ffresty.InitPrefix(prefix)
-	prefix.Set(ffresty.HTTPConfigURL, fmt.Sprintf("http://%s", server.Listener.Addr()))
+	section := config.RootSection("ffcapi_tests")
+	ffresty.InitConfig(section)
+	section.Set(ffresty.HTTPConfigURL, fmt.Sprintf("http://%s", server.Listener.Addr()))
 	ctx := context.Background()
 
 	server.Close()
-	api := NewFFCAPIClient(ctx, prefix, VariantEVM)
+	api := NewFFCAPIClient(ctx, section, VariantEVM)
 	_, _, err := api.ExecQuery(ctx, &ExecQueryRequest{})
 	assert.Regexp(t, "FF00155", err)
 

@@ -39,15 +39,15 @@ const (
 	CorsMaxAge = "maxAge"
 )
 
-func InitCORSConfig(prefix config.Section) {
+func InitCORSConfig(conf config.Section) {
 
-	prefix.AddKnownKey(CorsAllowCredentials, true)
-	prefix.AddKnownKey(CorsAllowedHeaders, []string{"*"})
-	prefix.AddKnownKey(CorsAllowedMethods, []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete})
-	prefix.AddKnownKey(CorsAllowedOrigins, []string{"*"})
-	prefix.AddKnownKey(CorsEnabled, true)
-	prefix.AddKnownKey(CorsMaxAge, 600)
-	prefix.AddKnownKey(CorsDebug, false)
+	conf.AddKnownKey(CorsAllowCredentials, true)
+	conf.AddKnownKey(CorsAllowedHeaders, []string{"*"})
+	conf.AddKnownKey(CorsAllowedMethods, []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete})
+	conf.AddKnownKey(CorsAllowedOrigins, []string{"*"})
+	conf.AddKnownKey(CorsEnabled, true)
+	conf.AddKnownKey(CorsMaxAge, 600)
+	conf.AddKnownKey(CorsDebug, false)
 
 }
 
@@ -76,16 +76,16 @@ const (
 	HTTPConfTLSKeyFile = "tls.keyFile"
 )
 
-func InitHTTPConfPrefix(prefix config.Section, defaultPort int) {
-	prefix.AddKnownKey(HTTPConfAddress, "127.0.0.1")
-	prefix.AddKnownKey(HTTPConfPublicURL)
-	prefix.AddKnownKey(HTTPConfPort, defaultPort)
-	prefix.AddKnownKey(HTTPConfReadTimeout, "15s")
-	prefix.AddKnownKey(HTTPConfWriteTimeout, "15s")
-	prefix.AddKnownKey(HTTPConfTLSCAFile)
-	prefix.AddKnownKey(HTTPConfTLSCertFile)
-	prefix.AddKnownKey(HTTPConfTLSClientAuth)
-	prefix.AddKnownKey(HTTPConfTLSEnabled, false)
-	prefix.AddKnownKey(HTTPConfTLSKeyFile)
-	prefix.AddKnownKey(HTTPConfShutdownTimeout, "10s")
+func InitHTTPConfig(conf config.Section, defaultPort int) {
+	conf.AddKnownKey(HTTPConfAddress, "127.0.0.1")
+	conf.AddKnownKey(HTTPConfPublicURL)
+	conf.AddKnownKey(HTTPConfPort, defaultPort)
+	conf.AddKnownKey(HTTPConfReadTimeout, "15s")
+	conf.AddKnownKey(HTTPConfWriteTimeout, "15s")
+	conf.AddKnownKey(HTTPConfTLSCAFile)
+	conf.AddKnownKey(HTTPConfTLSCertFile)
+	conf.AddKnownKey(HTTPConfTLSClientAuth)
+	conf.AddKnownKey(HTTPConfTLSEnabled, false)
+	conf.AddKnownKey(HTTPConfTLSKeyFile)
+	conf.AddKnownKey(HTTPConfShutdownTimeout, "10s")
 }

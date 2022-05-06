@@ -28,7 +28,7 @@ const (
 )
 
 const (
-	// WSSpecificConfPrefix is the sub-section of the http config options that contains websocket specific config
+	// WSSpecificConfPrefix is the named sub-section of the http config options that contains websocket specific config
 	WSSpecificConfPrefix = "ws"
 	// WSConfigKeyWriteBufferSize is the write buffer size
 	WSConfigKeyWriteBufferSize = "ws.writeBufferSize"
@@ -42,29 +42,29 @@ const (
 	WSConfigHeartbeatInterval = "ws.heartbeatInterval"
 )
 
-// InitPrefix ensures the prefix is initialized for HTTP too, as WS and HTTP
+// InitConfig ensures the config is initialized for HTTP too, as WS and HTTP
 // can share the same tree of configuration (and all the HTTP options apply to the initial upgrade)
-func InitPrefix(prefix config.KeySet) {
-	ffresty.InitPrefix(prefix)
-	prefix.AddKnownKey(WSConfigKeyWriteBufferSize, defaultBufferSize)
-	prefix.AddKnownKey(WSConfigKeyReadBufferSize, defaultBufferSize)
-	prefix.AddKnownKey(WSConfigKeyInitialConnectAttempts, defaultInitialConnectAttempts)
-	prefix.AddKnownKey(WSConfigKeyPath)
-	prefix.AddKnownKey(WSConfigHeartbeatInterval, defaultHeartbeatInterval)
+func InitConfig(conf config.KeySet) {
+	ffresty.InitConfig(conf)
+	conf.AddKnownKey(WSConfigKeyWriteBufferSize, defaultBufferSize)
+	conf.AddKnownKey(WSConfigKeyReadBufferSize, defaultBufferSize)
+	conf.AddKnownKey(WSConfigKeyInitialConnectAttempts, defaultInitialConnectAttempts)
+	conf.AddKnownKey(WSConfigKeyPath)
+	conf.AddKnownKey(WSConfigHeartbeatInterval, defaultHeartbeatInterval)
 }
 
-func GenerateConfigFromPrefix(prefix config.Section) *WSConfig {
+func GenerateConfig(conf config.Section) *WSConfig {
 	return &WSConfig{
-		HTTPURL:                prefix.GetString(ffresty.HTTPConfigURL),
-		WSKeyPath:              prefix.GetString(WSConfigKeyPath),
-		ReadBufferSize:         int(prefix.GetByteSize(WSConfigKeyReadBufferSize)),
-		WriteBufferSize:        int(prefix.GetByteSize(WSConfigKeyWriteBufferSize)),
-		InitialDelay:           prefix.GetDuration(ffresty.HTTPConfigRetryInitDelay),
-		MaximumDelay:           prefix.GetDuration(ffresty.HTTPConfigRetryMaxDelay),
-		InitialConnectAttempts: prefix.GetInt(WSConfigKeyInitialConnectAttempts),
-		HTTPHeaders:            prefix.GetObject(ffresty.HTTPConfigHeaders),
-		AuthUsername:           prefix.GetString(ffresty.HTTPConfigAuthUsername),
-		AuthPassword:           prefix.GetString(ffresty.HTTPConfigAuthPassword),
-		HeartbeatInterval:      prefix.GetDuration(WSConfigHeartbeatInterval),
+		HTTPURL:                conf.GetString(ffresty.HTTPConfigURL),
+		WSKeyPath:              conf.GetString(WSConfigKeyPath),
+		ReadBufferSize:         int(conf.GetByteSize(WSConfigKeyReadBufferSize)),
+		WriteBufferSize:        int(conf.GetByteSize(WSConfigKeyWriteBufferSize)),
+		InitialDelay:           conf.GetDuration(ffresty.HTTPConfigRetryInitDelay),
+		MaximumDelay:           conf.GetDuration(ffresty.HTTPConfigRetryMaxDelay),
+		InitialConnectAttempts: conf.GetInt(WSConfigKeyInitialConnectAttempts),
+		HTTPHeaders:            conf.GetObject(ffresty.HTTPConfigHeaders),
+		AuthUsername:           conf.GetString(ffresty.HTTPConfigAuthUsername),
+		AuthPassword:           conf.GetString(ffresty.HTTPConfigAuthPassword),
+		HeartbeatInterval:      conf.GetDuration(WSConfigHeartbeatInterval),
 	}
 }

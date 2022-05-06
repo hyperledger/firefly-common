@@ -46,7 +46,7 @@ const configDir = "../../test/data/config"
 
 func TestInvalidListener(t *testing.T) {
 	cp := config.RootSection("ut")
-	InitHTTPConfPrefix(cp, 0)
+	InitHTTPConfig(cp, 0)
 	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
 	cp.Set(HTTPConfAddress, "...")
@@ -57,7 +57,7 @@ func TestInvalidListener(t *testing.T) {
 func TestServeFail(t *testing.T) {
 	config.RootConfigReset()
 	cp := config.RootSection("ut")
-	InitHTTPConfPrefix(cp, 0)
+	InitHTTPConfig(cp, 0)
 	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
 	errChan := make(chan error)
@@ -72,7 +72,7 @@ func TestServeFail(t *testing.T) {
 func TestShutdownOk(t *testing.T) {
 	config.RootConfigReset()
 	cp := config.RootSection("ut")
-	InitHTTPConfPrefix(cp, 0)
+	InitHTTPConfig(cp, 0)
 	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
 	errChan := make(chan error)
@@ -87,7 +87,7 @@ func TestShutdownError(t *testing.T) {
 	config.RootConfigReset()
 	cp := config.RootSection("ut")
 	cp.Set(HTTPConfShutdownTimeout, "1ms")
-	InitHTTPConfPrefix(cp, 0)
+	InitHTTPConfig(cp, 0)
 	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
 	errChan := make(chan error)
@@ -112,7 +112,7 @@ func TestShutdownError(t *testing.T) {
 
 func TestMissingCAFile(t *testing.T) {
 	cp := config.RootSection("ut")
-	InitHTTPConfPrefix(cp, 0)
+	InitHTTPConfig(cp, 0)
 	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
 	cp.Set(HTTPConfTLSCAFile, "badness")
@@ -122,7 +122,7 @@ func TestMissingCAFile(t *testing.T) {
 
 func TestBadCAFile(t *testing.T) {
 	cp := config.RootSection("ut")
-	InitHTTPConfPrefix(cp, 0)
+	InitHTTPConfig(cp, 0)
 	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
 	cp.Set(HTTPConfTLSCAFile, configDir+"/firefly.common.yaml")
@@ -161,7 +161,7 @@ func TestTLSServerSelfSignedWithClientAuth(t *testing.T) {
 	// Start up a listener configured for TLS Mutual auth
 	config.RootConfigReset() // ensure APIShutdownTimeout cleared from earlier tests
 	cp := config.RootSection("ut")
-	InitHTTPConfPrefix(cp, 0)
+	InitHTTPConfig(cp, 0)
 	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
 	cp.Set(HTTPConfAddress, "127.0.0.1")
