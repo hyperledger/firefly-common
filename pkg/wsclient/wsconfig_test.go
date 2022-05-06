@@ -9,30 +9,30 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var utConfPrefix = config.RootSection("ws")
+var utConf = config.RootSection("ws")
 
 func resetConf() {
 	config.RootConfigReset()
-	InitPrefix(utConfPrefix)
+	InitConfig(utConf)
 }
 
 func TestWSConfigGeneration(t *testing.T) {
 	resetConf()
 
-	utConfPrefix.Set(ffresty.HTTPConfigURL, "http://test:12345")
-	utConfPrefix.Set(ffresty.HTTPConfigHeaders, map[string]interface{}{
+	utConf.Set(ffresty.HTTPConfigURL, "http://test:12345")
+	utConf.Set(ffresty.HTTPConfigHeaders, map[string]interface{}{
 		"custom-header": "custom value",
 	})
-	utConfPrefix.Set(ffresty.HTTPConfigAuthUsername, "user")
-	utConfPrefix.Set(ffresty.HTTPConfigAuthPassword, "pass")
-	utConfPrefix.Set(ffresty.HTTPConfigRetryInitDelay, 1)
-	utConfPrefix.Set(ffresty.HTTPConfigRetryMaxDelay, 1)
-	utConfPrefix.Set(WSConfigKeyReadBufferSize, 1024)
-	utConfPrefix.Set(WSConfigKeyWriteBufferSize, 1024)
-	utConfPrefix.Set(WSConfigKeyInitialConnectAttempts, 1)
-	utConfPrefix.Set(WSConfigKeyPath, "/websocket")
+	utConf.Set(ffresty.HTTPConfigAuthUsername, "user")
+	utConf.Set(ffresty.HTTPConfigAuthPassword, "pass")
+	utConf.Set(ffresty.HTTPConfigRetryInitDelay, 1)
+	utConf.Set(ffresty.HTTPConfigRetryMaxDelay, 1)
+	utConf.Set(WSConfigKeyReadBufferSize, 1024)
+	utConf.Set(WSConfigKeyWriteBufferSize, 1024)
+	utConf.Set(WSConfigKeyInitialConnectAttempts, 1)
+	utConf.Set(WSConfigKeyPath, "/websocket")
 
-	wsConfig := GenerateConfigFromPrefix(utConfPrefix)
+	wsConfig := GenerateConfig(utConf)
 
 	assert.Equal(t, "http://test:12345", wsConfig.HTTPURL)
 	assert.Equal(t, "user", wsConfig.AuthUsername)

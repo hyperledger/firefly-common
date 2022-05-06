@@ -25,17 +25,17 @@ import (
 	"github.com/rs/cors"
 )
 
-func wrapCorsIfEnabled(ctx context.Context, prefix config.Section, chain http.Handler) http.Handler {
-	if !prefix.GetBool(CorsEnabled) {
+func wrapCorsIfEnabled(ctx context.Context, conf config.Section, chain http.Handler) http.Handler {
+	if !conf.GetBool(CorsEnabled) {
 		return chain
 	}
 	corsOptions := cors.Options{
-		AllowedOrigins:   prefix.GetStringSlice(CorsAllowedOrigins),
-		AllowedMethods:   prefix.GetStringSlice(CorsAllowedMethods),
-		AllowedHeaders:   prefix.GetStringSlice(CorsAllowedHeaders),
-		AllowCredentials: prefix.GetBool(CorsAllowCredentials),
-		MaxAge:           prefix.GetInt(CorsMaxAge),
-		Debug:            prefix.GetBool(CorsDebug),
+		AllowedOrigins:   conf.GetStringSlice(CorsAllowedOrigins),
+		AllowedMethods:   conf.GetStringSlice(CorsAllowedMethods),
+		AllowedHeaders:   conf.GetStringSlice(CorsAllowedHeaders),
+		AllowCredentials: conf.GetBool(CorsAllowCredentials),
+		MaxAge:           conf.GetInt(CorsMaxAge),
+		Debug:            conf.GetBool(CorsDebug),
 	}
 	log.L(ctx).Debugf("CORS origins=%v methods=%v headers=%v creds=%t maxAge=%d",
 		corsOptions.AllowedOrigins,
