@@ -44,7 +44,7 @@ type apiClient struct {
 	variant Variant
 }
 
-func NewFFCAPIClient(ctx context.Context, ffrestyConfig config.Prefix, variant Variant) API {
+func NewFFCAPIClient(ctx context.Context, ffrestyConfig config.Section, variant Variant) API {
 	return &apiClient{
 		client:  ffresty.New(ctx, ffrestyConfig),
 		variant: variant,

@@ -25,7 +25,7 @@ import (
 	"github.com/rs/cors"
 )
 
-func wrapCorsIfEnabled(ctx context.Context, prefix config.Prefix, chain http.Handler) http.Handler {
+func wrapCorsIfEnabled(ctx context.Context, prefix config.Section, chain http.Handler) http.Handler {
 	if !prefix.GetBool(CorsEnabled) {
 		return chain
 	}

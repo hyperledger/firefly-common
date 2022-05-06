@@ -53,7 +53,7 @@ func InitPrefix(prefix config.KeySet) {
 	prefix.AddKnownKey(WSConfigHeartbeatInterval, defaultHeartbeatInterval)
 }
 
-func GenerateConfigFromPrefix(prefix config.Prefix) *WSConfig {
+func GenerateConfigFromPrefix(prefix config.Section) *WSConfig {
 	return &WSConfig{
 		HTTPURL:                prefix.GetString(ffresty.HTTPConfigURL),
 		WSKeyPath:              prefix.GetString(WSConfigKeyPath),

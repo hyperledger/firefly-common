@@ -85,19 +85,17 @@ type KeySet interface {
 	AddKnownKey(key string, defValue ...interface{})
 }
 
-type keyParent interface {
+type sectionParent interface {
 	AddChild(key string, defValue ...interface{})
 }
 
-// Prefix represents the global configuration, at a nested point in
-// the config hierarchy. This allows plugins to define their
-// Note that all values are GLOBAL so this cannot be used for per-instance
-// customization. Rather for global initialization of plugins.
-type Prefix interface {
+// Section represents a section of the global configuration, at a nested point in the config hierarchy.
+// Note that all keys are added to a GLOBAL map, so this cannot be used for per-instance customization.
+type Section interface {
 	KeySet
 	SetDefault(key string, defValue interface{})
-	SubPrefix(suffix string) Prefix
-	Array() PrefixArray
+	SubSection(name string) Section
+	SubArray(name string) ArraySection
 	Set(key string, value interface{})
 	Resolve(key string) string
 
@@ -114,15 +112,14 @@ type Prefix interface {
 	Get(key string) interface{}
 }
 
-// PrefixArray represents an array of options at a particular layer in the config.
+// ArraySection represents an array of options at a particular layer in the config.
 // This allows specifying the schema of keys that exist for every entry, and the defaults,
-// as well as querying how many entries exist and generating a prefix for each entry
-// (so that you can iterate).
-type PrefixArray interface {
+// as well as querying how many entries exist and iterating through them.
+type ArraySection interface {
 	KeySet
 	ArraySize() int
-	ArrayEntry(i int) Prefix
-	SubPrefix(suffix string) Prefix
+	ArrayEntry(i int) Section
+	SubSection(name string) Section
 }
 
 // RootKey key are the known configuration keys
@@ -221,9 +218,9 @@ func MergeConfig(configRecords []*fftypes.ConfigRecord) error {
 	return nil
 }
 
-var knownKeys = map[string]bool{} // All keys go here, including those defined in sub prefixes
+var knownKeys = map[string]bool{} // All config keys go here, including those defined in sub-sections
 var keysMutex sync.Mutex
-var root = &configPrefix{}
+var root = &configSection{}
 
 // AddRootKey adds a root key, used to define the keys that are used within the core
 func AddRootKey(k string) RootKey {
@@ -244,62 +241,74 @@ func GetKnownKeys() []string {
 	return keys
 }
 
-// configPrefix is the main config structure passed to plugins, and used for root to wrap viper
-type configPrefix struct {
+// configSection is the main config structure passed to plugins, and used for root to wrap viper
+type configSection struct {
 	prefix string
-	parent keyParent
+	parent sectionParent
 }
 
-// configPrefixArray is a point in the config that supports an array
-type configPrefixArray struct {
+// configArray is a point in the config that supports an array
+type configArray struct {
 	base     string
-	parent   keyParent
+	parent   sectionParent
 	defaults map[string][]interface{}
 }
 
-// NewPluginConfig creates a new plugin configuration object, at the specified prefix
-func NewPluginConfig(prefix string) Prefix {
-	if !strings.HasSuffix(prefix, ".") {
-		prefix += "."
-	}
-	return &configPrefix{
-		prefix: prefix,
+// RootSection creates a new configuration section starting from the config root
+func RootSection(prefix string) Section {
+	return &configSection{
+		prefix: strings.TrimSuffix(prefix, "."),
 	}
 }
 
-func (c *configPrefix) prefixKey(k string) string {
+// RootArray creates a new configuration array starting from the config root
+func RootArray(prefix string) ArraySection {
+	return &configArray{
+		base:     strings.TrimSuffix(prefix, "."),
+		defaults: make(map[string][]interface{}),
+	}
+}
+
+func keyName(prefix, name string) string {
+	if prefix != "" {
+		return prefix + "." + name
+	}
+	return name
+}
+
+func (c *configSection) prefixKey(k string) string {
 	// Caller responsible for holding lock when calling
-	key := c.prefix + k
+	key := keyName(c.prefix, k)
 	if !knownKeys[key] {
 		panic(fmt.Sprintf("Undefined configuration key '%s'", key))
 	}
 	return key
 }
 
-func (c *configPrefix) SubPrefix(suffix string) Prefix {
-	return &configPrefix{
-		prefix: c.prefix + suffix + ".",
+func (c *configSection) SubSection(name string) Section {
+	return &configSection{
+		prefix: keyName(c.prefix, name),
 		parent: c,
 	}
 }
 
-func (c *configPrefixArray) SubPrefix(suffix string) Prefix {
-	cp := &configPrefix{
-		prefix: c.base + "[]." + suffix + ".",
+func (c *configArray) SubSection(name string) Section {
+	cp := &configSection{
+		prefix: keyName(c.base+"[]", name),
 		parent: c,
 	}
 	return cp
 }
 
-func (c *configPrefix) Array() PrefixArray {
-	return &configPrefixArray{
-		base:     strings.TrimSuffix(c.prefix, "."),
-		parent:   c.parent,
+func (c *configSection) SubArray(name string) ArraySection {
+	return &configArray{
+		base:     keyName(c.prefix, name),
+		parent:   c,
 		defaults: make(map[string][]interface{}),
 	}
 }
 
-func (c *configPrefixArray) ArraySize() int {
+func (c *configArray) ArraySize() int {
 	val := viper.Get(c.base)
 	vt := reflect.TypeOf(val)
 	if vt != nil && (vt.Kind() == reflect.Slice || vt.Kind() == reflect.Map) {
@@ -309,9 +318,9 @@ func (c *configPrefixArray) ArraySize() int {
 }
 
 // ArrayEntry must only be called after the config has been loaded
-func (c *configPrefixArray) ArrayEntry(i int) Prefix {
-	cp := &configPrefix{
-		prefix: c.base + fmt.Sprintf(".%d.", i),
+func (c *configArray) ArrayEntry(i int) Section {
+	cp := &configSection{
+		prefix: keyName(c.base, fmt.Sprintf("%d", i)),
 		parent: c.parent,
 	}
 	for knownKey, defValue := range c.defaults {
@@ -329,19 +338,19 @@ func (c *configPrefixArray) ArrayEntry(i int) Prefix {
 	return cp
 }
 
-func (c *configPrefixArray) AddKnownKey(k string, defValue ...interface{}) {
+func (c *configArray) AddKnownKey(k string, defValue ...interface{}) {
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 
 	// Put a simulated key in the known keys array, to pop into the help info.
-	key := fmt.Sprintf("%s[].%s", c.base, k)
+	key := keyName(c.base+"[]", k)
 	knownKeys[key] = true
 
 	c.AddChild(key, defValue...)
 }
 
-func (c *configPrefix) AddKnownKey(k string, defValue ...interface{}) {
-	key := c.prefix + k
+func (c *configSection) AddKnownKey(k string, defValue ...interface{}) {
+	key := keyName(c.prefix, k)
 	if len(defValue) == 1 {
 		c.SetDefault(k, defValue[0])
 	} else if len(defValue) > 0 {
@@ -356,7 +365,7 @@ func (c *configPrefix) AddKnownKey(k string, defValue ...interface{}) {
 	}
 }
 
-func (c *configPrefixArray) AddChild(k string, defValue ...interface{}) {
+func (c *configArray) AddChild(k string, defValue ...interface{}) {
 	// When a child is added anywhere below this array, add it to the defaults map
 	prefix := c.base + "[]."
 	c.defaults[strings.TrimPrefix(k, prefix)] = defValue
@@ -365,15 +374,15 @@ func (c *configPrefixArray) AddChild(k string, defValue ...interface{}) {
 	// (there are a few more missing pieces if we need to support that fully)
 }
 
-func (c *configPrefix) AddChild(k string, defValue ...interface{}) {
+func (c *configSection) AddChild(k string, defValue ...interface{}) {
 	// When a child is added anywhere below this key, just bubble it upwards
 	if c.parent != nil {
 		c.parent.AddChild(k, defValue...)
 	}
 }
 
-func (c *configPrefix) SetDefault(k string, defValue interface{}) {
-	key := c.prefix + k
+func (c *configSection) SetDefault(k string, defValue interface{}) {
+	key := keyName(c.prefix, k)
 	viper.SetDefault(key, defValue)
 }
 
@@ -390,7 +399,7 @@ func GetConfig() fftypes.JSONObject {
 func GetString(key RootKey) string {
 	return root.GetString(string(key))
 }
-func (c *configPrefix) GetString(key string) string {
+func (c *configSection) GetString(key string) string {
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 
@@ -401,7 +410,7 @@ func (c *configPrefix) GetString(key string) string {
 func GetStringSlice(key RootKey) []string {
 	return root.GetStringSlice(string(key))
 }
-func (c *configPrefix) GetStringSlice(key string) []string {
+func (c *configSection) GetStringSlice(key string) []string {
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 
@@ -412,7 +421,7 @@ func (c *configPrefix) GetStringSlice(key string) []string {
 func GetBool(key RootKey) bool {
 	return root.GetBool(string(key))
 }
-func (c *configPrefix) GetBool(key string) bool {
+func (c *configSection) GetBool(key string) bool {
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 
@@ -423,7 +432,7 @@ func (c *configPrefix) GetBool(key string) bool {
 func GetDuration(key RootKey) time.Duration {
 	return root.GetDuration(string(key))
 }
-func (c *configPrefix) GetDuration(key string) time.Duration {
+func (c *configSection) GetDuration(key string) time.Duration {
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 
@@ -434,7 +443,7 @@ func (c *configPrefix) GetDuration(key string) time.Duration {
 func GetByteSize(key RootKey) int64 {
 	return root.GetByteSize(string(key))
 }
-func (c *configPrefix) GetByteSize(key string) int64 {
+func (c *configSection) GetByteSize(key string) int64 {
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 
@@ -445,7 +454,7 @@ func (c *configPrefix) GetByteSize(key string) int64 {
 func GetUint(key RootKey) uint {
 	return root.GetUint(string(key))
 }
-func (c *configPrefix) GetUint(key string) uint {
+func (c *configSection) GetUint(key string) uint {
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 
@@ -456,7 +465,7 @@ func (c *configPrefix) GetUint(key string) uint {
 func GetInt(key RootKey) int {
 	return root.GetInt(string(key))
 }
-func (c *configPrefix) GetInt(key string) int {
+func (c *configSection) GetInt(key string) int {
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 
@@ -467,7 +476,7 @@ func (c *configPrefix) GetInt(key string) int {
 func GetInt64(key RootKey) int64 {
 	return root.GetInt64(string(key))
 }
-func (c *configPrefix) GetInt64(key string) int64 {
+func (c *configSection) GetInt64(key string) int64 {
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 
@@ -478,7 +487,7 @@ func (c *configPrefix) GetInt64(key string) int64 {
 func GetFloat64(key RootKey) float64 {
 	return root.GetFloat64(string(key))
 }
-func (c *configPrefix) GetFloat64(key string) float64 {
+func (c *configSection) GetFloat64(key string) float64 {
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 
@@ -489,7 +498,7 @@ func (c *configPrefix) GetFloat64(key string) float64 {
 func GetObject(key RootKey) fftypes.JSONObject {
 	return root.GetObject(string(key))
 }
-func (c *configPrefix) GetObject(key string) fftypes.JSONObject {
+func (c *configSection) GetObject(key string) fftypes.JSONObject {
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 
@@ -500,7 +509,7 @@ func (c *configPrefix) GetObject(key string) fftypes.JSONObject {
 func GetObjectArray(key RootKey) fftypes.JSONObjectArray {
 	return root.GetObjectArray(string(key))
 }
-func (c *configPrefix) GetObjectArray(key string) fftypes.JSONObjectArray {
+func (c *configSection) GetObjectArray(key string) fftypes.JSONObjectArray {
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 
@@ -512,7 +521,7 @@ func (c *configPrefix) GetObjectArray(key string) fftypes.JSONObjectArray {
 func Get(key RootKey) interface{} {
 	return root.Get(string(key))
 }
-func (c *configPrefix) Get(key string) interface{} {
+func (c *configSection) Get(key string) interface{} {
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 
@@ -523,7 +532,7 @@ func (c *configPrefix) Get(key string) interface{} {
 func Set(key RootKey, value interface{}) {
 	root.Set(string(key), value)
 }
-func (c *configPrefix) Set(key string, value interface{}) {
+func (c *configSection) Set(key string, value interface{}) {
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 
@@ -531,7 +540,7 @@ func (c *configPrefix) Set(key string, value interface{}) {
 }
 
 // Resolve gives the fully qualified path of a key
-func (c *configPrefix) Resolve(key string) string {
+func (c *configSection) Resolve(key string) string {
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 

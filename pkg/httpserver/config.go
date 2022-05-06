@@ -39,7 +39,7 @@ const (
 	CorsMaxAge = "maxAge"
 )
 
-func InitCORSConfig(prefix config.Prefix) {
+func InitCORSConfig(prefix config.Section) {
 
 	prefix.AddKnownKey(CorsAllowCredentials, true)
 	prefix.AddKnownKey(CorsAllowedHeaders, []string{"*"})
@@ -76,7 +76,7 @@ const (
 	HTTPConfTLSKeyFile = "tls.keyFile"
 )
 
-func InitHTTPConfPrefix(prefix config.Prefix, defaultPort int) {
+func InitHTTPConfPrefix(prefix config.Section, defaultPort int) {
 	prefix.AddKnownKey(HTTPConfAddress, "127.0.0.1")
 	prefix.AddKnownKey(HTTPConfPublicURL)
 	prefix.AddKnownKey(HTTPConfPort, defaultPort)
