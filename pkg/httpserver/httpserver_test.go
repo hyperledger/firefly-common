@@ -45,9 +45,9 @@ import (
 const configDir = "../../test/data/config"
 
 func TestInvalidListener(t *testing.T) {
-	cp := config.NewPluginConfig("ut")
+	cp := config.RootSection("ut")
 	InitHTTPConfPrefix(cp, 0)
-	cc := config.NewPluginConfig("utCors")
+	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
 	cp.Set(HTTPConfAddress, "...")
 	_, err := NewHTTPServer(context.Background(), "ut", mux.NewRouter(), make(chan error), cp, cc)
@@ -56,9 +56,9 @@ func TestInvalidListener(t *testing.T) {
 
 func TestServeFail(t *testing.T) {
 	config.RootConfigReset()
-	cp := config.NewPluginConfig("ut")
+	cp := config.RootSection("ut")
 	InitHTTPConfPrefix(cp, 0)
-	cc := config.NewPluginConfig("utCors")
+	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
 	errChan := make(chan error)
 	hs, err := NewHTTPServer(context.Background(), "ut", mux.NewRouter(), errChan, cp, cc)
@@ -71,9 +71,9 @@ func TestServeFail(t *testing.T) {
 
 func TestShutdownOk(t *testing.T) {
 	config.RootConfigReset()
-	cp := config.NewPluginConfig("ut")
+	cp := config.RootSection("ut")
 	InitHTTPConfPrefix(cp, 0)
-	cc := config.NewPluginConfig("utCors")
+	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
 	errChan := make(chan error)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -85,10 +85,10 @@ func TestShutdownOk(t *testing.T) {
 func TestShutdownError(t *testing.T) {
 	testDone := make(chan struct{})
 	config.RootConfigReset()
-	cp := config.NewPluginConfig("ut")
+	cp := config.RootSection("ut")
 	cp.Set(HTTPConfShutdownTimeout, "1ms")
 	InitHTTPConfPrefix(cp, 0)
-	cc := config.NewPluginConfig("utCors")
+	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
 	errChan := make(chan error)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -111,9 +111,9 @@ func TestShutdownError(t *testing.T) {
 }
 
 func TestMissingCAFile(t *testing.T) {
-	cp := config.NewPluginConfig("ut")
+	cp := config.RootSection("ut")
 	InitHTTPConfPrefix(cp, 0)
-	cc := config.NewPluginConfig("utCors")
+	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
 	cp.Set(HTTPConfTLSCAFile, "badness")
 	_, err := NewHTTPServer(context.Background(), "ut", mux.NewRouter(), make(chan error), cp, cc)
@@ -121,9 +121,9 @@ func TestMissingCAFile(t *testing.T) {
 }
 
 func TestBadCAFile(t *testing.T) {
-	cp := config.NewPluginConfig("ut")
+	cp := config.RootSection("ut")
 	InitHTTPConfPrefix(cp, 0)
-	cc := config.NewPluginConfig("utCors")
+	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
 	cp.Set(HTTPConfTLSCAFile, configDir+"/firefly.common.yaml")
 	_, err := NewHTTPServer(context.Background(), "ut", mux.NewRouter(), make(chan error), cp, cc)
@@ -160,9 +160,9 @@ func TestTLSServerSelfSignedWithClientAuth(t *testing.T) {
 
 	// Start up a listener configured for TLS Mutual auth
 	config.RootConfigReset() // ensure APIShutdownTimeout cleared from earlier tests
-	cp := config.NewPluginConfig("ut")
+	cp := config.RootSection("ut")
 	InitHTTPConfPrefix(cp, 0)
-	cc := config.NewPluginConfig("utCors")
+	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
 	cp.Set(HTTPConfAddress, "127.0.0.1")
 	cp.Set(HTTPConfTLSEnabled, true)

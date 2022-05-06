@@ -48,8 +48,8 @@ type httpServer struct {
 	name            string
 	s               GoHTTPServer
 	l               net.Listener
-	conf            config.Prefix
-	corsConf        config.Prefix
+	conf            config.Section
+	corsConf        config.Section
 	onClose         chan error
 	tlsEnabled      bool
 	tlsCertFile     string
@@ -57,7 +57,7 @@ type httpServer struct {
 	shutdownTimeout time.Duration
 }
 
-func NewHTTPServer(ctx context.Context, name string, r *mux.Router, onClose chan error, conf config.Prefix, corsConf config.Prefix) (is HTTPServer, err error) {
+func NewHTTPServer(ctx context.Context, name string, r *mux.Router, onClose chan error, conf config.Section, corsConf config.Section) (is HTTPServer, err error) {
 	hs := &httpServer{
 		name:            name,
 		onClose:         onClose,

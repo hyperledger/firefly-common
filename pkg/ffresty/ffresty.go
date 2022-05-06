@@ -66,7 +66,7 @@ func OnAfterResponse(c *resty.Client, resp *resty.Response) {
 //
 // You can use the normal Resty builder pattern, to set per-instance configuration
 // as required.
-func New(ctx context.Context, staticConfig config.Prefix) *resty.Client {
+func New(ctx context.Context, staticConfig config.Section) *resty.Client {
 
 	var client *resty.Client
 

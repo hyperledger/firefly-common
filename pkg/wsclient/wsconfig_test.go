@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var utConfPrefix = config.NewPluginConfig("ws")
+var utConfPrefix = config.RootSection("ws")
 
 func resetConf() {
 	config.RootConfigReset()

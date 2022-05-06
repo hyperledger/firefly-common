@@ -130,13 +130,13 @@ func TestGetBadDurationZero(t *testing.T) {
 }
 
 func TestPluginConfig(t *testing.T) {
-	pic := NewPluginConfig("my")
+	pic := RootSection("my")
 	pic.AddKnownKey("special.config", 12345)
 	assert.Equal(t, 12345, pic.GetInt("special.config"))
 }
 
 func TestPluginConfigArrayInit(t *testing.T) {
-	pic := NewPluginConfig("my").SubPrefix("special")
+	pic := RootSection("my").SubSection("special")
 	pic.AddKnownKey("config", "val1", "val2", "val3")
 	assert.Equal(t, []string{"val1", "val2", "val3"}, pic.GetStringSlice("config"))
 }
@@ -144,15 +144,15 @@ func TestPluginConfigArrayInit(t *testing.T) {
 func TestArrayOfPlugins(t *testing.T) {
 	defer RootConfigReset()
 
-	pluginsRoot := NewPluginConfig("plugins")
-	tokPlugins := pluginsRoot.SubPrefix("tokens").Array()
+	pluginsRoot := RootSection("plugins")
+	tokPlugins := pluginsRoot.SubArray("tokens")
 	tokPlugins.AddKnownKey("fftokens")
 	tokPlugins.AddKnownKey("name")
 	tokPlugins.AddKnownKey("key1", "default value")
 	tokPlugins.AddKnownKey("key2", "def1", "def2")
-	fft := tokPlugins.SubPrefix("fftokens")
+	fft := tokPlugins.SubSection("fftokens")
 	fft.AddKnownKey("url")
-	fft.SubPrefix("proxy").AddKnownKey("url")
+	fft.SubSection("proxy").AddKnownKey("url")
 	viper.SetConfigType("yaml")
 	err := viper.ReadConfig(strings.NewReader(`
 plugins:
@@ -166,19 +166,19 @@ plugins:
 `))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, tokPlugins.ArraySize())
-	assert.Equal(t, 0, NewPluginConfig("nonexistent").Array().ArraySize())
+	assert.Equal(t, 0, RootArray("nonexistent").ArraySize())
 	bob := tokPlugins.ArrayEntry(0)
 	assert.Equal(t, "bob", bob.GetString("name"))
 	assert.Equal(t, "default value", bob.GetString("key1"))
 	assert.Equal(t, "http://test", bob.GetString("fftokens.url"))
-	assert.Equal(t, "http://test", bob.SubPrefix("fftokens").GetString("url"))
-	assert.Equal(t, "http://proxy", bob.SubPrefix("fftokens").SubPrefix("proxy").GetString("url"))
+	assert.Equal(t, "http://test", bob.SubSection("fftokens").GetString("url"))
+	assert.Equal(t, "http://proxy", bob.SubSection("fftokens").SubSection("proxy").GetString("url"))
 }
 
 func TestMapOfAdminOverridePlugins(t *testing.T) {
 	defer RootConfigReset()
 
-	tokPlugins := NewPluginConfig("tokens").Array()
+	tokPlugins := RootArray("tokens")
 	tokPlugins.AddKnownKey("firstkey")
 	tokPlugins.AddKnownKey("secondkey")
 	viper.SetConfigType("json")
