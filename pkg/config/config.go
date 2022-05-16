@@ -150,8 +150,6 @@ func RootConfigReset(setServiceDefaults ...func()) {
 	for _, fn := range setServiceDefaults {
 		fn()
 	}
-
-	i18n.SetLang(viper.GetString(string(Lang)))
 }
 
 // ReadConfig initializes the config

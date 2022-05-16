@@ -36,13 +36,22 @@ type ErrorMessageKey MessageKey
 type ConfigMessageKey MessageKey
 
 // Expand for use in docs and logging - returns a translated message, translated the language of the context
+// If a translation is not found for the language of the context, the default language text will be returned instead
 func Expand(ctx context.Context, key MessageKey, inserts ...interface{}) string {
-	return pFor(ctx).Sprintf(string(key), inserts...)
+	translation := pFor(ctx).Sprintf(string(key), inserts...)
+	if translation != string(key) {
+		return translation
+	}
+	return defaultLangPrinter.Sprintf(string(key), inserts...)
 }
 
 // ExpandWithCode for use in error scenarios - returns a translated message with a "MSG012345:" prefix, translated the language of the context
 func ExpandWithCode(ctx context.Context, key MessageKey, inserts ...interface{}) string {
-	return string(key) + ": " + pFor(ctx).Sprintf(string(key), inserts...)
+	translation := string(key) + ": " + pFor(ctx).Sprintf(string(key), inserts...)
+	if translation != string(key)+": "+string(key) {
+		return translation
+	}
+	return string(key) + ": " + defaultLangPrinter.Sprintf(string(key), inserts...)
 }
 
 // WithLang sets the language on the context
@@ -54,21 +63,14 @@ type (
 	ctxLangKey struct{}
 )
 
-// en language is special, as the definition of each key comes directly with the english language description
-var enLang = language.MustParse("en")
-
-var serverLangs = []language.Tag{
-	language.AmericanEnglish, // Only English currently supported
-}
-
-var langMatcher = language.NewMatcher(serverLangs)
-
 var statusHints = map[string]int{}
 var fieldTypes = map[string]string{}
 var msgIDUniq = map[string]bool{}
 
+var defaultLangPrinter = message.NewPrinter(language.AmericanEnglish)
+
 // FFE is the translations helper to register an error message
-func FFE(key, enTranslation string, statusHint ...int) ErrorMessageKey {
+func FFE(language language.Tag, key, enTranslation string, statusHint ...int) ErrorMessageKey {
 	validPrefix := false
 	for rp := range registeredPrefixes {
 		if strings.HasPrefix(key, rp) {
@@ -79,7 +81,7 @@ func FFE(key, enTranslation string, statusHint ...int) ErrorMessageKey {
 	if !validPrefix {
 		panic(fmt.Sprintf("Message ID %s does not use one of the registered prefixes in the common utility package", key))
 	}
-	msgID := FFM(key, enTranslation)
+	msgID := FFM(language, key, enTranslation)
 	if len(statusHint) > 0 {
 		statusHints[key] = statusHint[0]
 	}
@@ -87,27 +89,25 @@ func FFE(key, enTranslation string, statusHint ...int) ErrorMessageKey {
 }
 
 // FFM is the enTranslations helper to define a new message (not used in translation files)
-func FFM(key, enTranslation string) MessageKey {
-	if _, exists := msgIDUniq[key]; exists {
+func FFM(language language.Tag, key, translation string) MessageKey {
+	if checkKeyExists(language, key) {
 		panic(fmt.Sprintf("Message ID %s re-used", key))
 	}
-	msgIDUniq[key] = true
-	_ = message.Set(enLang, key, catalog.String(enTranslation))
+	setKeyExists(language, key)
+	_ = message.Set(language, key, catalog.String(translation))
 	return MessageKey(key)
 }
 
 // FFC is the enTranslations helper to define a configuration key description and type
-func FFC(key, enTranslation string, fieldType string) ConfigMessageKey {
-	if _, exists := msgIDUniq[key]; exists {
+func FFC(language language.Tag, key, translation string, fieldType string) ConfigMessageKey {
+	if checkKeyExists(language, key) {
 		panic(fmt.Sprintf("Config ID %s re-used", key))
 	}
-	msgIDUniq[key] = true
+	setKeyExists(language, key)
 	fieldTypes[key] = fieldType
-	_ = message.Set(enLang, key, catalog.String(enTranslation))
+	_ = message.Set(language, key, catalog.String(translation))
 	return ConfigMessageKey(key)
 }
-
-var defaultLangPrinter *message.Printer
 
 func pFor(ctx context.Context) *message.Printer {
 	lang := ctx.Value(ctxLangKey{})
@@ -118,14 +118,7 @@ func pFor(ctx context.Context) *message.Printer {
 }
 
 func init() {
-	SetLang("en")
 	msgIDUniq = map[string]bool{} // Clear out that memory as no longer needed
-}
-
-func SetLang(lang string) {
-	// Allow a lang var to be used
-	tag, _, _ := langMatcher.Match(language.Make(lang))
-	defaultLangPrinter = message.NewPrinter(tag)
 }
 
 func GetStatusHint(code string) (int, bool) {
@@ -136,4 +129,13 @@ func GetStatusHint(code string) (int, bool) {
 func GetFieldType(code string) (string, bool) {
 	s, ok := fieldTypes[code]
 	return s, ok
+}
+
+func setKeyExists(language language.Tag, key string) {
+	msgIDUniq[fmt.Sprintf("%s_%s", language, key)] = true
+	fmt.Println(msgIDUniq)
+}
+
+func checkKeyExists(language language.Tag, key string) bool {
+	return msgIDUniq[fmt.Sprintf("%s_%s", language, key)]
 }

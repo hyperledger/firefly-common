@@ -25,24 +25,43 @@ import (
 )
 
 var (
-	TestError1  = FFE("FF99900", "Test error 1: %s")
-	TestError2  = FFE("FF99901", "Test error 2: %s")
-	TestError3  = FFE("FF99902", "Test error 3", 400)
-	TestConfig1 = FFC("config.something.1", "Test config field 1", "some type")
+	TestError1  = FFE(language.AmericanEnglish, "FF99900", "Test error 1: %s")
+	TestError2  = FFE(language.AmericanEnglish, "FF99901", "Test error 2: %s")
+	TestError3  = FFE(language.AmericanEnglish, "FF99902", "Test error 3", 400)
+	TestConfig1 = FFC(language.AmericanEnglish, "config.something.1", "Test config field 1", "some type")
+
+	TestError1Lang2  = FFE(language.Spanish, "FF99900", "Error de prueba 1: %s")
+	TestConfig1Lang2 = FFC(language.Spanish, "config.something.1", "campo de configuración de prueba", "some type")
 )
 
 func TestExpand(t *testing.T) {
-	lang := language.Make("en")
-	ctx := WithLang(context.Background(), lang)
+	ctx := WithLang(context.Background(), language.AmericanEnglish)
 	str := Expand(ctx, MessageKey(TestError1), "myinsert")
 	assert.Equal(t, "Test error 1: myinsert", str)
 }
 
+func TestExpandLanguageFallback(t *testing.T) {
+	ctx := WithLang(context.Background(), language.Spanish)
+	str := Expand(ctx, MessageKey(TestError2), "myinsert")
+	assert.Equal(t, "Test error 2: myinsert", str)
+}
+
 func TestExpandWithCode(t *testing.T) {
-	lang := language.Make("en")
-	ctx := WithLang(context.Background(), lang)
+	ctx := WithLang(context.Background(), language.AmericanEnglish)
 	str := ExpandWithCode(ctx, MessageKey(TestError2), "myinsert")
 	assert.Equal(t, "FF99901: Test error 2: myinsert", str)
+}
+
+func TestExpandWithCodeLangaugeFallback(t *testing.T) {
+	ctx := WithLang(context.Background(), language.Spanish)
+	str := ExpandWithCode(ctx, MessageKey(TestError2), "myinsert")
+	assert.Equal(t, "FF99901: Test error 2: myinsert", str)
+}
+
+func TestExpandWithCodeLang2(t *testing.T) {
+	ctx := WithLang(context.Background(), language.Spanish)
+	str := ExpandWithCode(ctx, MessageKey(TestError1), "myinsert")
+	assert.Equal(t, "FF99900: Error de prueba 1: myinsert", str)
 }
 
 func TestGetStatusHint(t *testing.T) {
@@ -52,23 +71,28 @@ func TestGetStatusHint(t *testing.T) {
 }
 
 func TestDuplicateKey(t *testing.T) {
-	FFM("FF109999", "test1")
+	FFM(language.AmericanEnglish, "FF109999", "test1")
 	assert.Panics(t, func() {
-		FFM("FF109999", "test2")
+		FFM(language.AmericanEnglish, "FF109999", "test2")
 	})
 }
 
 func TestInvalidPrefixKey(t *testing.T) {
 	assert.Panics(t, func() {
-		FFE("ABCD1234", "test1")
+		FFE(language.AmericanEnglish, "ABCD1234", "test1")
 	})
 }
 
 func TestConfigMessageKey(t *testing.T) {
-	lang := language.Make("en")
-	ctx := WithLang(context.Background(), lang)
+	ctx := WithLang(context.Background(), language.AmericanEnglish)
 	str := Expand(ctx, MessageKey(TestConfig1))
 	assert.Equal(t, "Test config field 1", str)
+}
+
+func TestConfigMessageKeyLang2(t *testing.T) {
+	ctx := WithLang(context.Background(), language.Spanish)
+	str := Expand(ctx, MessageKey(TestConfig1))
+	assert.Equal(t, "campo de configuración de prueba", str)
 }
 
 func TestGetFieldType(t *testing.T) {
@@ -78,8 +102,8 @@ func TestGetFieldType(t *testing.T) {
 }
 
 func TestDuplicateConfigKey(t *testing.T) {
-	FFC("config.test.2", "test2 description", "type")
+	FFC(language.AmericanEnglish, "config.test.2", "test2 description", "type")
 	assert.Panics(t, func() {
-		FFC("config.test.2", "test2 dupe", "dupe type")
+		FFC(language.AmericanEnglish, "config.test.2", "test2 dupe", "dupe type")
 	})
 }
