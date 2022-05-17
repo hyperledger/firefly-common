@@ -153,6 +153,8 @@ func TestArrayOfPlugins(t *testing.T) {
 	fft := tokPlugins.SubSection("fftokens")
 	fft.AddKnownKey("url")
 	fft.SubSection("proxy").AddKnownKey("url")
+	headers := fft.SubArray("headers")
+	headers.AddKnownKey("name")
 	viper.SetConfigType("yaml")
 	err := viper.ReadConfig(strings.NewReader(`
 plugins:
@@ -163,6 +165,9 @@ plugins:
       url: http://test
       proxy:
         url: http://proxy
+      headers:
+      - name: header1
+      - name: header2
 `))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, tokPlugins.ArraySize())
@@ -171,8 +176,13 @@ plugins:
 	assert.Equal(t, "bob", bob.GetString("name"))
 	assert.Equal(t, "default value", bob.GetString("key1"))
 	assert.Equal(t, "http://test", bob.GetString("fftokens.url"))
-	assert.Equal(t, "http://test", bob.SubSection("fftokens").GetString("url"))
-	assert.Equal(t, "http://proxy", bob.SubSection("fftokens").SubSection("proxy").GetString("url"))
+	bobfft := bob.SubSection("fftokens")
+	assert.Equal(t, "http://test", bobfft.GetString("url"))
+	assert.Equal(t, "http://proxy", bobfft.SubSection("proxy").GetString("url"))
+	bobheaders := bobfft.SubArray("headers")
+	assert.Equal(t, 2, bobheaders.ArraySize())
+	assert.Equal(t, "header1", bobheaders.ArrayEntry(0).GetString("name"))
+	assert.Equal(t, "header2", bobheaders.ArrayEntry(1).GetString("name"))
 }
 
 func TestMapOfAdminOverridePlugins(t *testing.T) {

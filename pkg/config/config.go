@@ -300,12 +300,34 @@ func (c *configArray) SubSection(name string) Section {
 	return cp
 }
 
+func findArrayParent(c *configSection) *configArray {
+	switch p := c.parent.(type) {
+	case *configArray:
+		return p
+	case *configSection:
+		return findArrayParent(p)
+	default:
+		return nil
+	}
+}
+
 func (c *configSection) SubArray(name string) ArraySection {
-	return &configArray{
+	a := &configArray{
 		base:     keyName(c.prefix, name),
 		parent:   c,
 		defaults: make(map[string][]interface{}),
 	}
+	// If a parent array already has defaults for this subtree, copy them here (for later use in ArrayEntry)
+	parentArray := findArrayParent(c)
+	if parentArray != nil {
+		prefix := a.base + "[]."
+		for key, val := range parentArray.defaults {
+			if strings.HasPrefix(key, prefix) {
+				a.defaults[strings.TrimPrefix(key, prefix)] = val
+			}
+		}
+	}
+	return a
 }
 
 func (c *configArray) ArraySize() int {
@@ -321,7 +343,7 @@ func (c *configArray) ArraySize() int {
 func (c *configArray) ArrayEntry(i int) Section {
 	cp := &configSection{
 		prefix: keyName(c.base, fmt.Sprintf("%d", i)),
-		parent: c.parent,
+		parent: c,
 	}
 	for knownKey, defValue := range c.defaults {
 		cp.AddKnownKey(knownKey, defValue...)
@@ -370,8 +392,10 @@ func (c *configArray) AddChild(k string, defValue ...interface{}) {
 	prefix := c.base + "[]."
 	c.defaults[strings.TrimPrefix(k, prefix)] = defValue
 
-	// Note that arrays of arrays are not supported, so we don't bubble upwards
-	// (there are a few more missing pieces if we need to support that fully)
+	// Also bubble it upwards
+	if c.parent != nil {
+		c.parent.AddChild(k, defValue...)
+	}
 }
 
 func (c *configSection) AddChild(k string, defValue ...interface{}) {
