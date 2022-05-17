@@ -42,7 +42,7 @@ func Expand(ctx context.Context, key MessageKey, inserts ...interface{}) string 
 	if translation != string(key) {
 		return translation
 	}
-	return defaultLangPrinter.Sprintf(string(key), inserts...)
+	return fallbackLangPrinter.Sprintf(string(key), inserts...)
 }
 
 // ExpandWithCode for use in error scenarios - returns a translated message with a "MSG012345:" prefix, translated the language of the context
@@ -51,7 +51,7 @@ func ExpandWithCode(ctx context.Context, key MessageKey, inserts ...interface{})
 	if translation != string(key)+": "+string(key) {
 		return translation
 	}
-	return string(key) + ": " + defaultLangPrinter.Sprintf(string(key), inserts...)
+	return string(key) + ": " + fallbackLangPrinter.Sprintf(string(key), inserts...)
 }
 
 // WithLang sets the language on the context
@@ -67,7 +67,7 @@ var statusHints = map[string]int{}
 var fieldTypes = map[string]string{}
 var msgIDUniq = map[string]bool{}
 
-var defaultLangPrinter = message.NewPrinter(language.AmericanEnglish)
+var fallbackLangPrinter = message.NewPrinter(language.AmericanEnglish)
 
 // FFE is the translations helper to register an error message
 func FFE(language language.Tag, key, enTranslation string, statusHint ...int) ErrorMessageKey {
@@ -109,6 +109,8 @@ func FFC(language language.Tag, key, translation string, fieldType string) Confi
 	return ConfigMessageKey(key)
 }
 
+var defaultLangPrinter *message.Printer
+
 func pFor(ctx context.Context) *message.Printer {
 	lang := ctx.Value(ctxLangKey{})
 	if lang == nil {
@@ -118,7 +120,14 @@ func pFor(ctx context.Context) *message.Printer {
 }
 
 func init() {
+	SetLang("en")
 	msgIDUniq = map[string]bool{} // Clear out that memory as no longer needed
+}
+
+func SetLang(lang string) {
+	// Allow a lang var to be used
+	tag := message.MatchLanguage(lang)
+	defaultLangPrinter = message.NewPrinter(tag)
 }
 
 func GetStatusHint(code string) (int, bool) {
@@ -133,7 +142,6 @@ func GetFieldType(code string) (string, bool) {
 
 func setKeyExists(language language.Tag, key string) {
 	msgIDUniq[fmt.Sprintf("%s_%s", language, key)] = true
-	fmt.Println(msgIDUniq)
 }
 
 func checkKeyExists(language language.Tag, key string) bool {

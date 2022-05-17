@@ -40,6 +40,26 @@ func TestExpand(t *testing.T) {
 	assert.Equal(t, "Test error 1: myinsert", str)
 }
 
+func TestExpandNoLangContext(t *testing.T) {
+	ctx := context.Background()
+	str := Expand(ctx, MessageKey(TestError1), "myinsert")
+	assert.Equal(t, "Test error 1: myinsert", str)
+}
+
+func TestExpandNoLangContextLang2(t *testing.T) {
+	ctx := context.Background()
+	SetLang("es")
+	str := Expand(ctx, MessageKey(TestError1), "myinsert")
+	assert.Equal(t, "Error de prueba 1: myinsert", str)
+}
+
+func TestExpandNoLangContextLang2Fallback(t *testing.T) {
+	ctx := context.Background()
+	SetLang("es")
+	str := Expand(ctx, MessageKey(TestError2), "myinsert")
+	assert.Equal(t, "Test error 2: myinsert", str)
+}
+
 func TestExpandLanguageFallback(t *testing.T) {
 	ctx := WithLang(context.Background(), language.Spanish)
 	str := Expand(ctx, MessageKey(TestError2), "myinsert")
