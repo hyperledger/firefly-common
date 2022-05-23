@@ -4,14 +4,18 @@
   ],
   "go.lintTool": "golangci-lint",
   "cSpell.words": [
+    "codecov",
     "Debugf",
     "FCAPI",
     "FFCAPI",
     "ffresty",
     "fftypes",
+    "httpserver",
     "Hyperledger",
     "Infof",
-    "TLSCA"
+    "runtimes",
+    "TLSCA",
+    "wsclient"
   ],
   "go.testTimeout": "10s"
 }
