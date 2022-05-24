@@ -13,8 +13,10 @@
     "httpserver",
     "Hyperledger",
     "Infof",
+    "Nowarn",
     "runtimes",
     "TLSCA",
+    "Warnf",
     "wsclient"
   ],
   "go.testTimeout": "10s"

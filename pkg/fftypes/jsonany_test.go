@@ -132,6 +132,18 @@ func TestScan(t *testing.T) {
 
 }
 
+func TestJSONAnyToJSONObjectArray(t *testing.T) {
+
+	var h JSONAny
+
+	assert.NoError(t, h.Scan(`[{"some": "stuff"}]`))
+	assert.Equal(t, "stuff", h.JSONObjectArray()[0].GetString("some"))
+
+	assert.NoError(t, h.Scan(`{"some": "stuff"}`))
+	assert.Empty(t, h.JSONObjectArray())
+
+}
+
 func TestValue(t *testing.T) {
 
 	var h *JSONAny
