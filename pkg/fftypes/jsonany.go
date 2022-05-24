@@ -128,7 +128,7 @@ func (h *JSONAny) JSONObjectOk(noWarn ...bool) (JSONObject, bool) {
 	return jo, err == nil
 }
 
-// JSONObject attempts to de-serailize the contained structure as a JSON Object (map)
+// JSONObject attempts to de-serialize the contained structure as a JSON Object (map)
 // Safe and will never return nil
 // Will return an empty object if the type is array, string, bool, number etc.
 func (h *JSONAny) JSONObject() JSONObject {
@@ -141,6 +141,28 @@ func (h *JSONAny) JSONObject() JSONObject {
 func (h *JSONAny) JSONObjectNowarn() JSONObject {
 	jo, _ := h.JSONObjectOk(true)
 	return jo
+}
+
+func (h *JSONAny) JSONObjectArrayOk(noWarn ...bool) (JSONObjectArray, bool) {
+	var joa JSONObjectArray
+	b := []byte{}
+	if h != nil {
+		b = []byte(*h)
+	}
+	err := json.Unmarshal(b, &joa)
+	if err != nil {
+		if len(noWarn) == 0 || !noWarn[0] {
+			log.L(context.Background()).Warnf("Unable to deserialize as JSON object array: %s", string(b))
+		}
+		joa = JSONObjectArray{}
+	}
+	return joa, err == nil
+}
+
+// JSONObject attempts to de-serialize the contained structure an array of JSON objects
+func (h *JSONAny) JSONObjectArray() JSONObjectArray {
+	joa, _ := h.JSONObjectArrayOk()
+	return joa
 }
 
 // Value ensures we write null to the DB for null values

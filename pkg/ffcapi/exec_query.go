@@ -36,7 +36,7 @@ type ExecQueryRequest struct {
 
 type ExecQueryResponse struct {
 	ResponseBase
-	Outputs []*fftypes.JSONAny `json:"outputs"`
+	Outputs *fftypes.JSONAny `json:"outputs"`
 }
 
 const RequestTypeExecQuery RequestType = "exec_query"

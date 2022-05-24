@@ -26,13 +26,17 @@ import (
 
 func TestExecQueryOK(t *testing.T) {
 	a, cancel := newTestClient(t, &ExecQueryResponse{
-		Outputs: []*fftypes.JSONAny{fftypes.JSONAnyPtr("{}")},
+		Outputs: fftypes.JSONAnyPtr(`[{
+			"name": "return",
+			"value": "value1"
+		}]`),
 	})
 	defer cancel()
 	res, reason, err := a.ExecQuery(context.Background(), &ExecQueryRequest{})
 	assert.NoError(t, err)
 	assert.Empty(t, reason)
-	assert.Len(t, res.Outputs, 1)
+	assert.Len(t, res.Outputs.JSONObjectArray(), 1)
+	assert.Equal(t, "value1", res.Outputs.JSONObjectArray()[0].GetString("value"))
 }
 
 func TestExecQueryFail(t *testing.T) {
