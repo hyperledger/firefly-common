@@ -103,6 +103,7 @@ type Section interface {
 	GetBool(key string) bool
 	GetInt(key string) int
 	GetInt64(key string) int64
+	GetFloat64(key string) float64
 	GetByteSize(key string) int64
 	GetUint(key string) uint
 	GetDuration(key string) time.Duration
