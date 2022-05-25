@@ -58,8 +58,6 @@ const (
 	ErrorReasonNotFound ErrorReason = "not_found"
 	// ErrorKnownTransaction if the exact transaction is already known
 	ErrorKnownTransaction ErrorReason = "known_transaction"
-	// ErrorExecutionReverted if the transaction was executed, but resulted in a failure. Only expected from the prepare phase, or execution of a query, where a synchronous blockchain invocation might be required.
-	ErrorExecutionReverted ErrorReason = "execution_reverted"
 )
 
 // Header is included consistently as a "ffcapi" structure on each request
