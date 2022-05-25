@@ -155,7 +155,7 @@ func TestArrayOfPlugins(t *testing.T) {
 	fft.AddKnownKey("url")
 	fft.SubSection("proxy").AddKnownKey("url")
 	headers := fft.SubArray("headers")
-	headers.AddKnownKey("name")
+	headers.AddKnownKey("name", "defname")
 	viper.SetConfigType("yaml")
 	err := viper.ReadConfig(strings.NewReader(`
 plugins:
@@ -168,7 +168,7 @@ plugins:
         url: http://proxy
       headers:
       - name: header1
-      - name: header2
+      - badkey: bad
 `))
 	assert.NoError(t, err)
 	assert.Equal(t, 1, tokPlugins.ArraySize())
@@ -183,7 +183,7 @@ plugins:
 	bobheaders := bobfft.SubArray("headers")
 	assert.Equal(t, 2, bobheaders.ArraySize())
 	assert.Equal(t, "header1", bobheaders.ArrayEntry(0).GetString("name"))
-	assert.Equal(t, "header2", bobheaders.ArrayEntry(1).GetString("name"))
+	assert.Equal(t, "defname", bobheaders.ArrayEntry(1).GetString("name"))
 }
 
 func TestMapOfAdminOverridePlugins(t *testing.T) {
