@@ -244,8 +244,9 @@ func GetKnownKeys() []string {
 
 // configSection is the main config structure passed to plugins, and used for root to wrap viper
 type configSection struct {
-	prefix string
-	parent sectionParent
+	prefix     string
+	parent     sectionParent
+	arrayEntry bool
 }
 
 // configArray is a point in the config that supports an array
@@ -301,12 +302,21 @@ func (c *configArray) SubSection(name string) Section {
 	return cp
 }
 
-func findArrayParent(c *configSection) *configArray {
-	switch p := c.parent.(type) {
+// If any parent is an array entry, retrieve fully-qualified defaults via its array parent
+func getArrayEntryDefaults(p sectionParent) map[string][]interface{} {
+	switch c := p.(type) {
 	case *configArray:
-		return p
+		return getArrayEntryDefaults(c.parent)
 	case *configSection:
-		return findArrayParent(p)
+		if !c.arrayEntry {
+			return getArrayEntryDefaults(c.parent)
+		}
+		arrayParent := c.parent.(*configArray)
+		defaults := make(map[string][]interface{})
+		for k, v := range arrayParent.defaults {
+			defaults[c.prefix+"."+k] = v
+		}
+		return defaults
 	default:
 		return nil
 	}
@@ -318,14 +328,12 @@ func (c *configSection) SubArray(name string) ArraySection {
 		parent:   c,
 		defaults: make(map[string][]interface{}),
 	}
-	// If a parent array already has defaults for this subtree, copy them here (for later use in ArrayEntry)
-	parentArray := findArrayParent(c)
-	if parentArray != nil {
-		prefix := a.base + "[]."
-		for key, val := range parentArray.defaults {
-			if strings.HasPrefix(key, prefix) {
-				a.defaults[strings.TrimPrefix(key, prefix)] = val
-			}
+	// Get defaults from any enclosing array entry, and copy over any applicable to this subtree
+	// This is necessary to propagate known keys for arrays within arrays
+	prefix := a.base + "[]."
+	for key, val := range getArrayEntryDefaults(c) {
+		if strings.HasPrefix(key, prefix) {
+			a.defaults[strings.TrimPrefix(key, prefix)] = val
 		}
 	}
 	return a
@@ -343,8 +351,9 @@ func (c *configArray) ArraySize() int {
 // ArrayEntry must only be called after the config has been loaded
 func (c *configArray) ArrayEntry(i int) Section {
 	cp := &configSection{
-		prefix: keyName(c.base, fmt.Sprintf("%d", i)),
-		parent: c,
+		prefix:     keyName(c.base, fmt.Sprintf("%d", i)),
+		parent:     c,
+		arrayEntry: true,
 	}
 	for knownKey, defValue := range c.defaults {
 		cp.AddKnownKey(knownKey, defValue...)
@@ -391,7 +400,9 @@ func (c *configSection) AddKnownKey(k string, defValue ...interface{}) {
 func (c *configArray) AddChild(k string, defValue ...interface{}) {
 	// When a child is added anywhere below this array, add it to the defaults map
 	prefix := c.base + "[]."
-	c.defaults[strings.TrimPrefix(k, prefix)] = defValue
+	if strings.HasPrefix(k, prefix) {
+		c.defaults[strings.TrimPrefix(k, prefix)] = defValue
+	}
 
 	// Also bubble it upwards
 	if c.parent != nil {
