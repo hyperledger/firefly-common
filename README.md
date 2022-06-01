@@ -5,7 +5,6 @@
 
 Common utility modules and interface definitions, used across Hyperledger FireFly microservice runtimes (the Go ones anyway):
 
-- FireFly Connector API (FFCAPI) - [pkg/ffcapi](https://pkg.go.dev/github.com/hyperledger/firefly-common/pkg/ffcapi)
 - Logging - [pkg/log](https://pkg.go.dev/github.com/hyperledger/firefly-common/pkg/log)
 - Translation (i18n) - [pkg/i18n](https://pkg.go.dev/github.com/hyperledger/firefly-common/pkg/i18n)
 - Configuration - [pkg/config](https://pkg.go.dev/github.com/hyperledger/firefly-common/pkg/config)
