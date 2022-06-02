@@ -35,6 +35,7 @@ import (
 
 type HTTPServer interface {
 	ServeHTTP(ctx context.Context)
+	Addr() net.Addr
 }
 
 type GoHTTPServer interface {
@@ -73,6 +74,10 @@ func NewHTTPServer(ctx context.Context, name string, r *mux.Router, onClose chan
 		hs.s, err = hs.createServer(ctx, r)
 	}
 	return hs, err
+}
+
+func (hs *httpServer) Addr() net.Addr {
+	return hs.l.Addr()
 }
 
 func (hs *httpServer) createListener(ctx context.Context) (net.Listener, error) {
