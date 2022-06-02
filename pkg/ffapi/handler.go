@@ -1,0 +1,301 @@
+// Copyright © 2022 Kaleido, Inc.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package ffapi
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"io/ioutil"
+	"mime/multipart"
+	"net/http"
+	"reflect"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/gorilla/mux"
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/hyperledger/firefly-common/pkg/log"
+)
+
+type HandlerFactory struct {
+	DefaultRequestTimeout time.Duration
+	MinTimeout            time.Duration
+	MaxTimeout            time.Duration
+}
+
+var ffMsgCodeExtractor = regexp.MustCompile(`^(FF\d+):`)
+
+type multipartState struct {
+	mpr        *multipart.Reader
+	formParams map[string]string
+	part       *Multipart
+	close      func()
+}
+
+func (hs *HandlerFactory) getFilePart(req *http.Request) (*multipartState, error) {
+
+	formParams := make(map[string]string)
+	ctx := req.Context()
+	l := log.L(ctx)
+	mpr, err := req.MultipartReader()
+	if err != nil {
+		return nil, i18n.WrapError(ctx, err, i18n.MsgMultiPartFormReadError)
+	}
+	for {
+		part, err := mpr.NextPart()
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, i18n.MsgMultiPartFormReadError)
+		}
+		if part.FileName() == "" {
+			value, _ := ioutil.ReadAll(part)
+			formParams[part.FormName()] = string(value)
+		} else {
+			l.Debugf("Processing multi-part upload. Field='%s' Filename='%s'", part.FormName(), part.FileName())
+			mp := &Multipart{
+				Data:     part,
+				Filename: part.FileName(),
+				Mimetype: part.Header.Get("Content-Disposition"),
+			}
+			return &multipartState{
+				mpr:        mpr,
+				formParams: formParams,
+				part:       mp,
+				close:      func() { _ = part.Close() },
+			}, nil
+		}
+	}
+}
+
+func (hs *HandlerFactory) getParams(req *http.Request, route *Route) (queryParams, pathParams map[string]string) {
+	queryParams = make(map[string]string)
+	pathParams = make(map[string]string)
+	if len(route.PathParams) > 0 {
+		v := mux.Vars(req)
+		for _, pp := range route.PathParams {
+			pathParams[pp.Name] = v[pp.Name]
+		}
+	}
+	for _, qp := range route.QueryParams {
+		val, exists := req.URL.Query()[qp.Name]
+		if qp.IsBool {
+			if exists && (len(val) == 0 || val[0] == "" || strings.EqualFold(val[0], "true")) {
+				val = []string{"true"}
+			} else {
+				val = []string{"false"}
+			}
+		}
+		if exists && len(val) > 0 {
+			queryParams[qp.Name] = val[0]
+		}
+	}
+	return queryParams, pathParams
+}
+
+func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
+	// Check the mandatory parts are ok at startup time
+	return hs.APIWrapper(func(res http.ResponseWriter, req *http.Request) (int, error) {
+
+		var jsonInput interface{}
+		if route.JSONInputValue != nil {
+			jsonInput = route.JSONInputValue()
+		}
+		var queryParams, pathParams map[string]string
+		var multipart *multipartState
+		contentType := req.Header.Get("Content-Type")
+		var err error
+		if req.Method != http.MethodGet && req.Method != http.MethodDelete {
+			switch {
+			case strings.HasPrefix(strings.ToLower(contentType), "multipart/form-data") && route.FormUploadHandler != nil:
+				multipart, err = hs.getFilePart(req)
+				if err != nil {
+					return 400, err
+				}
+				defer multipart.close()
+			case strings.HasPrefix(strings.ToLower(contentType), "application/json"):
+				if jsonInput != nil {
+					err = json.NewDecoder(req.Body).Decode(&jsonInput)
+				}
+			default:
+				return 415, i18n.NewError(req.Context(), i18n.MsgInvalidContentType)
+			}
+		}
+
+		var status = 400 // if fail parsing input
+		var output interface{}
+		if err == nil {
+			queryParams, pathParams = hs.getParams(req, route)
+		}
+
+		if err == nil {
+			r := &APIRequest{
+				Req:             req,
+				PP:              pathParams,
+				QP:              queryParams,
+				Input:           jsonInput,
+				SuccessStatus:   http.StatusOK,
+				ResponseHeaders: res.Header(),
+			}
+			if len(route.JSONOutputCodes) > 0 {
+				r.SuccessStatus = route.JSONOutputCodes[0]
+			}
+			if multipart != nil {
+				r.FP = multipart.formParams
+				r.Part = multipart.part
+				output, err = route.FormUploadHandler(r)
+			} else {
+				output, err = route.JSONHandler(r)
+			}
+			status = r.SuccessStatus // Can be updated by the route
+		}
+		if err == nil && multipart != nil {
+			// Catch the case that someone puts form fields after the file in a multi-part body.
+			// We don't support that, so that we can stream through the core rather than having
+			// to hold everything in memory.
+			trailing, expectEOF := multipart.mpr.NextPart()
+			if expectEOF == nil {
+				err = i18n.NewError(req.Context(), i18n.MsgFieldsAfterFile, trailing.FormName())
+			}
+		}
+		if err == nil {
+			status, err = hs.handleOutput(req.Context(), res, status, output)
+		}
+		return status, err
+	})
+}
+
+func (hs *HandlerFactory) SwaggerUIHandler(url string) func(res http.ResponseWriter, req *http.Request) (status int, err error) {
+	return func(res http.ResponseWriter, req *http.Request) (status int, err error) {
+		res.Header().Add("Content-Type", "text/html")
+		_, _ = res.Write(SwaggerUIHTML(req.Context(), url))
+		return 200, nil
+	}
+}
+
+func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWriter, status int, output interface{}) (int, error) {
+	vOutput := reflect.ValueOf(output)
+	outputKind := vOutput.Kind()
+	isPointer := outputKind == reflect.Ptr
+	invalid := outputKind == reflect.Invalid
+	isNil := output == nil || invalid || (isPointer && vOutput.IsNil())
+	var reader io.ReadCloser
+	var marshalErr error
+	if !isNil && vOutput.CanInterface() {
+		reader, _ = vOutput.Interface().(io.ReadCloser)
+	}
+	switch {
+	case isNil:
+		if status != 204 {
+			return 404, i18n.NewError(ctx, i18n.Msg404NoResult)
+		}
+		res.WriteHeader(204)
+	case reader != nil:
+		defer reader.Close()
+		res.Header().Add("Content-Type", "application/octet-stream")
+		res.WriteHeader(status)
+		_, marshalErr = io.Copy(res, reader)
+	default:
+		res.Header().Add("Content-Type", "application/json")
+		res.WriteHeader(status)
+		marshalErr = json.NewEncoder(res).Encode(output)
+	}
+	if marshalErr != nil {
+		err := i18n.WrapError(ctx, marshalErr, i18n.MsgResponseMarshalError)
+		log.L(ctx).Errorf(err.Error())
+		return 500, err
+	}
+	return status, nil
+}
+
+func (hs *HandlerFactory) getTimeout(req *http.Request) time.Duration {
+	// Configure a server-side timeout on each request, to try and avoid cases where the API requester
+	// times out, and we continue to churn indefinitely processing the request.
+	// Long-running processes should be dispatched asynchronously (API returns 202 Accepted asap),
+	// and the caller can either listen on the websocket for updates, or poll the status of the affected object.
+	// This is dependent on the context being passed down through to all blocking operations down the stack
+	// (while avoiding passing the context to asynchronous tasks that are dispatched as a result of the request)
+	reqTimeout := hs.DefaultRequestTimeout
+	reqTimeoutHeader := req.Header.Get("Request-Timeout")
+	if reqTimeoutHeader != "" {
+		customTimeout, err := fftypes.ParseDurationString(reqTimeoutHeader, time.Second /* default is seconds */)
+		if err != nil {
+			log.L(req.Context()).Warnf("Invalid Request-Timeout header '%s': %s", reqTimeoutHeader, err)
+		} else {
+			reqTimeout = time.Duration(customTimeout)
+			if reqTimeout > hs.MaxTimeout {
+				reqTimeout = hs.MaxTimeout
+			}
+		}
+	}
+	return reqTimeout
+}
+
+func (hs *HandlerFactory) APIWrapper(handler func(res http.ResponseWriter, req *http.Request) (status int, err error)) http.HandlerFunc {
+	return func(res http.ResponseWriter, req *http.Request) {
+
+		reqTimeout := hs.getTimeout(req)
+		ctx, cancel := context.WithTimeout(req.Context(), reqTimeout)
+		httpReqID := fftypes.ShortID()
+		ctx = log.WithLogField(ctx, "httpreq", httpReqID)
+		req = req.WithContext(ctx)
+		defer cancel()
+
+		// Wrap the request itself in a log wrapper, that gives minimal request/response and timing info
+		l := log.L(ctx)
+		l.Infof("--> %s %s", req.Method, req.URL.Path)
+		startTime := time.Now()
+		status, err := handler(res, req)
+		durationMS := float64(time.Since(startTime)) / float64(time.Millisecond)
+		if err != nil {
+
+			// Routers don't need to tweak the status code when sending errors.
+			// .. either the FF12345 error they raise is mapped to a status hint
+			ffMsgCodeExtract := ffMsgCodeExtractor.FindStringSubmatch(err.Error())
+			if len(ffMsgCodeExtract) >= 2 {
+				if statusHint, ok := i18n.GetStatusHint(ffMsgCodeExtract[1]); ok {
+					status = statusHint
+				}
+			}
+
+			// If the context is done, we wrap in 408
+			if status != http.StatusRequestTimeout {
+				select {
+				case <-ctx.Done():
+					l.Errorf("Request failed and context is closed. Returning %d (overriding %d): %s", http.StatusRequestTimeout, status, err)
+					status = http.StatusRequestTimeout
+					err = i18n.WrapError(ctx, err, i18n.MsgRequestTimeout, httpReqID, durationMS)
+				default:
+				}
+			}
+
+			// ... or we default to 500
+			if status < 300 {
+				status = 500
+			}
+			l.Infof("<-- %s %s [%d] (%.2fms): %s", req.Method, req.URL.Path, status, durationMS, err)
+			res.Header().Add("Content-Type", "application/json")
+			res.WriteHeader(status)
+			_ = json.NewEncoder(res).Encode(&fftypes.RESTError{
+				Error: err.Error(),
+			})
+		} else {
+			l.Infof("<-- %s %s [%d] (%.2fms)", req.Method, req.URL.Path, status, durationMS)
+		}
+	}
+}

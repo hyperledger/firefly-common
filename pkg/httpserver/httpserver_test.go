@@ -77,8 +77,9 @@ func TestShutdownOk(t *testing.T) {
 	InitCORSConfig(cc)
 	errChan := make(chan error)
 	ctx, cancel := context.WithCancel(context.Background())
-	_, err := NewHTTPServer(ctx, "ut", mux.NewRouter(), errChan, cp, cc)
+	l, err := NewHTTPServer(ctx, "ut", mux.NewRouter(), errChan, cp, cc)
 	assert.NoError(t, err)
+	assert.NotEmpty(t, l.Addr().String())
 	cancel()
 }
 

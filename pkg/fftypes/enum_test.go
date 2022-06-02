@@ -1,0 +1,58 @@
+// Copyright © 2021 Kaleido, Inc.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package fftypes
+
+import (
+	"database/sql/driver"
+	"encoding/json"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+type TestEnum = FFEnum
+
+var (
+	TestEnumVal1 = FFEnumValue("ut", "test_enum_val1")
+	TestEnumVal2 = FFEnumValue("ut", "test_enum_val2")
+)
+
+func TestFFEnumStringCompareEtc(t *testing.T) {
+
+	testEnum1 := TestEnum("Test_Enum_VAL1")
+	assert.True(t, TestEnumVal1.Equals(testEnum1))
+	assert.Equal(t, TestEnumVal1, testEnum1.Lower())
+
+	var tdv driver.Valuer = testEnum1
+	v, err := tdv.Value()
+	assert.Nil(t, err)
+	assert.Equal(t, "test_enum_val1", v)
+
+	var utStruct struct {
+		TXType TestEnum `json:"txType"`
+	}
+	err = json.Unmarshal([]byte(`{"txType": "Test_Enum_VAL1"}`), &utStruct)
+	assert.NoError(t, err)
+	assert.Equal(t, "test_enum_val1", string(utStruct.TXType))
+
+}
+
+func TestFFEnumValues(t *testing.T) {
+	assert.Equal(t, FFEnum("test_enum_val1"), TestEnumVal1)
+	assert.Equal(t, FFEnum("test_enum_val2"), TestEnumVal2)
+	assert.Equal(t, []interface{}{"test_enum_val1", "test_enum_val2"}, FFEnumValues("ut"))
+}
