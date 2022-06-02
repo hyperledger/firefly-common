@@ -36,7 +36,6 @@ import (
 
 type HandlerFactory struct {
 	DefaultRequestTimeout time.Duration
-	MinTimeout            time.Duration
 	MaxTimeout            time.Duration
 }
 
