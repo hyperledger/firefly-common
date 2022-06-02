@@ -28,6 +28,5 @@ type APIRequest struct {
 	Input           interface{}
 	Part            *Multipart
 	SuccessStatus   int
-	APIBaseURL      string
 	ResponseHeaders http.Header
 }
