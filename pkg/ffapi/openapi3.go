@@ -351,5 +351,7 @@ func (sg *SwaggerGen) addRoute(ctx context.Context, doc *openapi3.T, route *Rout
 		pi.Post = op
 	case http.MethodDelete:
 		pi.Delete = op
+	case http.MethodPatch:
+		pi.Patch = op
 	}
 }

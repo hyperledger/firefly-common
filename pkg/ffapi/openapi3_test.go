@@ -70,7 +70,7 @@ var testRoutes = []*Route{
 	{
 		Name:   "op1",
 		Path:   "namespaces/{ns}/example1/{id}",
-		Method: http.MethodPost,
+		Method: http.MethodPatch,
 		PathParams: []*PathParam{
 			{Name: "lang", ExampleFromConf: config.Lang, Description: ExampleDesc},
 			{Name: "id", Example: "id12345", Description: ExampleDesc},
