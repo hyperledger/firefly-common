@@ -42,6 +42,8 @@ type Route struct {
 	Method string
 	// Description is a message key to a translatable description of the operation
 	Description i18n.MessageKey
+	// PreTranslatedDescription is a string describing the operation - used for programmatically generated routes where a built-in string translation is not available
+	PreTranslatedDescription string
 	// JSONInputValue is a function that returns a pointer to a structure to take JSON input
 	JSONInputValue func() interface{}
 	// JSONInputMask are fields that aren't available for users to supply on input
