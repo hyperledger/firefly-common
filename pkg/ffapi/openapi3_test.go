@@ -64,8 +64,6 @@ type TestStruct2 struct {
 
 var ExampleDesc = i18n.FFM(language.AmericanEnglish, "TestKey", "Test Description")
 
-// var ExampleConf = i18n.FFC(language.AmericanEnglish, "config.conf.key1", "Test Config Key", "string")
-
 var testRoutes = []*Route{
 	{
 		Name:   "op1",
@@ -378,4 +376,26 @@ func TestPanicOnMissingRouteDescription(t *testing.T) {
 			PanicOnMissingDescription: true,
 		}).Generate(context.Background(), routes)
 	})
+}
+
+func TestPreTranslatedRouteDescription(t *testing.T) {
+	routes := []*Route{
+		{
+			Name:                     "PostTagTest",
+			Path:                     "namespaces/{ns}/example1/test",
+			Method:                   http.MethodPost,
+			JSONInputValue:           func() interface{} { return &TestInOutType{} },
+			JSONOutputValue:          func() interface{} { return &TestInOutType{} },
+			JSONOutputCodes:          []int{http.StatusOK},
+			PreTranslatedDescription: "this is a description",
+		},
+	}
+	swagger := NewSwaggerGen(&Options{
+		Title:   "UnitTest",
+		Version: "1.0",
+		BaseURL: "http://localhost:12345/api/v1",
+	}).Generate(context.Background(), routes)
+	assert.NotNil(t, swagger.Paths["/namespaces/{ns}/example1/test"].Post.RequestBody.Value)
+	description := swagger.Paths["/namespaces/{ns}/example1/test"].Post.Description
+	assert.Equal(t, "this is a description", description)
 }

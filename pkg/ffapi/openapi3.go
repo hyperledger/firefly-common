@@ -304,10 +304,15 @@ func (sg *SwaggerGen) AddParam(ctx context.Context, op *openapi3.Operation, in, 
 }
 
 func (sg *SwaggerGen) addRoute(ctx context.Context, doc *openapi3.T, route *Route) {
+	var routeDescription string
 	pi := sg.getPathItem(doc, route.Path)
-	routeDescription := i18n.Expand(ctx, route.Description)
-	if routeDescription == "" && sg.options.PanicOnMissingDescription {
-		log.Panicf(i18n.NewError(ctx, i18n.MsgRouteDescriptionMissing, route.Name).Error())
+	if route.PreTranslatedDescription != "" {
+		routeDescription = route.PreTranslatedDescription
+	} else {
+		routeDescription = i18n.Expand(ctx, route.Description)
+		if routeDescription == "" && sg.options.PanicOnMissingDescription {
+			log.Panicf(i18n.NewError(ctx, i18n.MsgRouteDescriptionMissing, route.Name).Error())
+		}
 	}
 	op := &openapi3.Operation{
 		Description: routeDescription,
