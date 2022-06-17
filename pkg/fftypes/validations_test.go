@@ -40,9 +40,11 @@ func TestValidateFFNameField(t *testing.T) {
 	err = ValidateFFNameField(context.Background(), "af34658e-a728-4b21-b9cf-8451f07be065", "badField")
 	assert.NoError(t, err)
 
+	err = ValidateFFNameFieldNoUUID(context.Background(), "not_a_uuid", "badField")
+	assert.NoError(t, err)
+
 	err = ValidateFFNameFieldNoUUID(context.Background(), "af34658e-a728-4b21-b9cf-8451f07be065", "badField")
 	assert.Regexp(t, "FF00141.*badField", err)
-
 }
 
 func TestValidateLength(t *testing.T) {
@@ -53,4 +55,12 @@ func TestValidateLength(t *testing.T) {
 	err = ValidateLength(context.Background(), "short string", "test", 50)
 	assert.NoError(t, err)
 
+}
+
+func TestValidateSafeCharsOnly(t *testing.T) {
+	err := ValidateSafeCharsOnly(context.Background(), "only_safe_chars", "test")
+	assert.NoError(t, err)
+
+	err = ValidateSafeCharsOnly(context.Background(), "has a space", "test")
+	assert.Regexp(t, "FF00139.*test", err)
 }
