@@ -1,0 +1,1 @@
+{"buildTargets":["/Users/pbroadhurst/go/bin/golangci-lint","/Users/pbroadhurst/go/bin/mockery","all","build","clean","coverage","coverage.html","deps","firefly-common","go-mod-tidy","lint","mocks","mocks-pkg/httpserver-GoHTTPServer","test"],"launchTargets":[],"customConfigurationProvider":{"workspaceBrowse":{"browsePath":[],"compilerArgs":[]},"fileIndex":[]}}
