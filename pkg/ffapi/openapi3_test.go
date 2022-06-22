@@ -68,7 +68,7 @@ var testRoutes = []*Route{
 	{
 		Name:   "op1",
 		Path:   "namespaces/{ns}/example1/{id}",
-		Method: http.MethodPatch,
+		Method: http.MethodGet,
 		PathParams: []*PathParam{
 			{Name: "lang", ExampleFromConf: config.Lang, Description: ExampleDesc},
 			{Name: "id", Example: "id12345", Description: ExampleDesc},
@@ -82,30 +82,20 @@ var testRoutes = []*Route{
 	{
 		Name:           "op2",
 		Path:           "example2",
-		Method:         http.MethodGet,
+		Method:         http.MethodPatch,
 		PathParams:     nil,
 		QueryParams:    nil,
 		Description:    ExampleDesc,
 		JSONInputValue: func() interface{} { return nil },
-		JSONInputSchema: func(ctx context.Context) string {
-			return `{
-			"type": "object",
-			"properties": {
-				"id": {
-					"type": "string"
-				}
-			}
-		}`
+		JSONInputSchema: func(ctx context.Context, schemaGen SchemaGenerator) (*openapi3.SchemaRef, error) {
+			s1, _ := schemaGen(&TestStruct1{})
+			s2, _ := schemaGen(&TestStruct2{})
+			return &openapi3.SchemaRef{
+				Value: openapi3.NewAnyOfSchema(s1.Value, s2.Value),
+			}, nil
 		},
-		JSONOutputSchema: func(ctx context.Context) string {
-			return `{
-			"type": "object",
-			"properties": {
-				"id": {
-					"type": "string"
-				}
-			}
-		}`
+		JSONOutputSchema: func(ctx context.Context, schemaGen SchemaGenerator) (*openapi3.SchemaRef, error) {
+			return schemaGen(&TestStruct1{})
 		},
 		JSONOutputCodes: []int{http.StatusOK},
 	},
@@ -184,21 +174,22 @@ func TestOpenAPI3SwaggerGen(t *testing.T) {
 	fmt.Print(string(b))
 }
 
-func TestBadCustomInputSchema(t *testing.T) {
+func TestBadCustomInputSchemaFail(t *testing.T) {
 
 	routes := []*Route{
 		{
-			Name:             "op6",
-			Path:             "namespaces/{ns}/example1/{id}",
-			Method:           http.MethodPost,
-			JSONInputValue:   func() interface{} { return &TestStruct1{} },
-			JSONInputMask:    []string{"id"},
-			JSONOutputCodes:  []int{http.StatusOK},
-			JSONInputSchema:  func(ctx context.Context) string { return `!json` },
-			JSONOutputSchema: func(ctx context.Context) string { return `!json` },
+			Name:            "op6",
+			Path:            "namespaces/{ns}/example1/{id}",
+			Method:          http.MethodPost,
+			JSONInputValue:  func() interface{} { return &TestStruct1{} },
+			JSONInputMask:   []string{"id"},
+			JSONOutputCodes: []int{http.StatusOK},
+			JSONInputSchema: func(ctx context.Context, schemaGen SchemaGenerator) (*openapi3.SchemaRef, error) {
+				return nil, fmt.Errorf("pop")
+			},
 		},
 	}
-	assert.PanicsWithValue(t, "invalid schema: invalid character '!' looking for beginning of value", func() {
+	assert.Panics(t, func() {
 		_ = NewSwaggerGen(&Options{
 			Title:   "UnitTest",
 			Version: "1.0",
@@ -207,19 +198,20 @@ func TestBadCustomInputSchema(t *testing.T) {
 	})
 }
 
-func TestBadCustomOutputSchema(t *testing.T) {
+func TestBadCustomOutputSchemaFail(t *testing.T) {
 	routes := []*Route{
 		{
-			Name:            "op7",
-			Path:            "namespaces/{ns}/example1/{id}",
-			Method:          http.MethodGet,
-			JSONInputValue:  func() interface{} { return &TestStruct1{} },
-			JSONInputMask:   []string{"id"},
-			JSONOutputCodes: []int{http.StatusOK}, JSONInputSchema: func(ctx context.Context) string { return `!json` },
-			JSONOutputSchema: func(ctx context.Context) string { return `!json` },
+			Name:           "op7",
+			Path:           "namespaces/{ns}/example1/{id}",
+			Method:         http.MethodGet,
+			JSONInputValue: func() interface{} { return &TestStruct1{} },
+			JSONInputMask:  []string{"id"},
+			JSONOutputSchema: func(ctx context.Context, schemaGen SchemaGenerator) (*openapi3.SchemaRef, error) {
+				return nil, fmt.Errorf("pop")
+			},
 		},
 	}
-	assert.PanicsWithValue(t, "invalid schema: invalid character '!' looking for beginning of value", func() {
+	assert.Panics(t, func() {
 		_ = NewSwaggerGen(&Options{
 			Title:   "UnitTest",
 			Version: "1.0",
@@ -288,31 +280,6 @@ func TestFFExcludeTag(t *testing.T) {
 	assert.Regexp(t, "object has no field", err)
 	_, err = swagger.Paths["/namespaces/{ns}/example1/test"].Post.RequestBody.Value.Content.Get("application/json").Schema.Value.Properties.JSONLookup("conditionalInput")
 	assert.Regexp(t, "object has no field", err)
-}
-
-func TestCustomSchema(t *testing.T) {
-	routes := []*Route{
-		{
-			Name:   "PostCustomSchema",
-			Path:   "namespaces/{ns}/example1/test",
-			Method: http.MethodPost,
-			JSONInputSchema: func(ctx context.Context) string {
-				return `{"properties": {"foo": {"type": "string", "description": "a custom foo"}}}`
-			},
-			JSONOutputSchema: func(ctx context.Context) string {
-				return `{"properties": {"bar": {"type": "string", "description": "a custom bar"}}}`
-			},
-		},
-	}
-	swagger := NewSwaggerGen(&Options{
-		Title:   "UnitTest",
-		Version: "1.0",
-		BaseURL: "http://localhost:12345/api/v1",
-	}).Generate(context.Background(), routes)
-	assert.NotNil(t, swagger.Paths["/namespaces/{ns}/example1/test"].Post.RequestBody.Value)
-	length, err := swagger.Paths["/namespaces/{ns}/example1/test"].Post.RequestBody.Value.Content.Get("application/json").Schema.Value.Properties.JSONLookup("foo")
-	assert.NoError(t, err)
-	assert.NotNil(t, length)
 }
 
 func TestPanicOnMissingDescription(t *testing.T) {

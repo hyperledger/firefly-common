@@ -19,9 +19,14 @@ package ffapi
 import (
 	"context"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 )
+
+// SchemaGenerator is passed into the JSONInputSchema advanced customization function, to give
+// access to tools like object schema generation, for an anyOf schema for example
+type SchemaGenerator func(o interface{}) (*openapi3.SchemaRef, error)
 
 // Route defines each API operation on the REST API of Firefly
 // Having a standard pluggable layer here on top of Gorilla allows us to autmoatically
@@ -49,9 +54,9 @@ type Route struct {
 	// JSONInputMask are fields that aren't available for users to supply on input
 	JSONInputMask []string
 	// JSONInputSchema is a custom schema definition, for the case where the auto-gen + mask isn't good enough
-	JSONInputSchema func(ctx context.Context) string
+	JSONInputSchema func(ctx context.Context, schemaGen SchemaGenerator) (*openapi3.SchemaRef, error)
 	// JSONOutputSchema is a custom schema definition, for the case where the auto-gen + mask isn't good enough
-	JSONOutputSchema func(ctx context.Context) string
+	JSONOutputSchema func(ctx context.Context, schemaGen SchemaGenerator) (*openapi3.SchemaRef, error)
 	// JSONOutputValue is a function that returns a pointer to a structure to take JSON output
 	JSONOutputValue func() interface{}
 	// JSONOutputCodes is the success response code

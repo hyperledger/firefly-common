@@ -18,7 +18,6 @@ package ffapi
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -192,7 +191,9 @@ func (sg *SwaggerGen) addInput(ctx context.Context, doc *openapi3.T, route *Rout
 	}
 	switch {
 	case route.JSONInputSchema != nil:
-		err = json.Unmarshal([]byte(route.JSONInputSchema(ctx)), &schemaRef)
+		schemaRef, err = route.JSONInputSchema(ctx, func(obj interface{}) (*openapi3.SchemaRef, error) {
+			return openapi3gen.NewSchemaRefForValue(obj, doc.Components.Schemas, openapi3gen.SchemaCustomizer(schemaCustomizer))
+		})
 		if err != nil {
 			panic(fmt.Sprintf("invalid schema: %s", err))
 		}
@@ -245,7 +246,9 @@ func (sg *SwaggerGen) addOutput(ctx context.Context, doc *openapi3.T, route *Rou
 	}
 	switch {
 	case route.JSONOutputSchema != nil:
-		err := json.Unmarshal([]byte(route.JSONOutputSchema(ctx)), &schemaRef)
+		schemaRef, err = route.JSONOutputSchema(ctx, func(obj interface{}) (*openapi3.SchemaRef, error) {
+			return openapi3gen.NewSchemaRefForValue(obj, doc.Components.Schemas, openapi3gen.SchemaCustomizer(schemaCustomizer))
+		})
 		if err != nil {
 			panic(fmt.Sprintf("invalid schema: %s", err))
 		}
