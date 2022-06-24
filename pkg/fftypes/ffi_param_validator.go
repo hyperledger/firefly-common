@@ -42,6 +42,30 @@ func (v *BaseFFIParamValidator) GetMetaSchema() *jsonschema.Schema {
 					}
 				}
 			},
+			"numberTypeOptions": {
+				"type": "object",
+				"properties": {
+					"type": {
+						"type": "string",
+						"enum": [
+							"number",
+							"string"
+						]
+					}
+				}
+			},
+			"booleanTypeOptions": {
+				"type": "object",
+				"properties": {
+					"type": {
+						"type": "string",
+						"enum": [
+							"boolean",
+							"string"
+						]
+					}
+				}
+			},
 			"ffiParam": {
 				"oneOf": [
 					{
@@ -68,9 +92,23 @@ func (v *BaseFFIParamValidator) GetMetaSchema() *jsonschema.Schema {
 						"properties": {
 							"oneOf": {
 								"type": "array",
-								"items": {
-									"$ref": "#/$defs/integerTypeOptions"
-								}
+								"oneOf": [
+									{
+										"items": {
+											"$ref": "#/$defs/integerTypeOptions"
+										}
+									},
+									{
+										"items": {
+											"$ref": "#/$defs/numberTypeOptions"
+										}
+									},
+									{
+										"items": {
+											"$ref": "#/$defs/booleanTypeOptions"
+										}
+									}
+								]
 							}
 						},
 						"required": [
