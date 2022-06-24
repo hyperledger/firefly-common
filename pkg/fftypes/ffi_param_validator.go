@@ -77,6 +77,7 @@ func (v *BaseFFIParamValidator) GetMetaSchema() *jsonschema.Schema {
 								"enum": [
 									"boolean",
 									"integer",
+									"number",
 									"string",
 									"array",
 									"object"
