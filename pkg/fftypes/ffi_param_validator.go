@@ -30,13 +30,15 @@ func (v *BaseFFIParamValidator) GetMetaSchema() *jsonschema.Schema {
 	return jsonschema.MustCompileString("ffi.json", `{
 		"$ref": "#/$defs/ffiParam",
 		"$defs": {
-			"integerTypeOptions": {
+			"nonStringTypeOptions": {
 				"type": "object",
 				"properties": {
 					"type": {
 						"type": "string",
 						"enum": [
 							"integer",
+							"number",
+							"boolean",
 							"string"
 						]
 					}
@@ -53,6 +55,7 @@ func (v *BaseFFIParamValidator) GetMetaSchema() *jsonschema.Schema {
 								"enum": [
 									"boolean",
 									"integer",
+									"number",
 									"string",
 									"array",
 									"object"
@@ -69,7 +72,7 @@ func (v *BaseFFIParamValidator) GetMetaSchema() *jsonschema.Schema {
 							"oneOf": {
 								"type": "array",
 								"items": {
-									"$ref": "#/$defs/integerTypeOptions"
+									"$ref": "#/$defs/nonStringTypeOptions"
 								}
 							}
 						},
