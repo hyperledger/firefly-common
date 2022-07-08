@@ -37,6 +37,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/hyperledger/firefly-common/mocks/httpservermocks"
+	"github.com/hyperledger/firefly-common/pkg/auth/basic"
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -213,4 +214,74 @@ func TestTLSServerSelfSignedWithClientAuth(t *testing.T) {
 	cancelCtx()
 	err = <-errChan
 	assert.NoError(t, err)
+}
+
+func TestServeAuthorization(t *testing.T) {
+	config.RootConfigReset()
+	cp := config.RootSection("ut")
+	InitHTTPConfig(cp, 0)
+	cp.Set(HTTPAuthType, "basic")
+	ac := cp.SubSection("auth")
+	// authfactory.InitConfig(ac)
+	bc := ac.SubSection("basic")
+	bc.Set(basic.PasswordFile, "../../test/data/test_users")
+	cc := config.RootSection("utCors")
+	InitCORSConfig(cc)
+
+	r := mux.NewRouter()
+	r.HandleFunc("/test", func(res http.ResponseWriter, req *http.Request) {
+		res.WriteHeader(200)
+		json.NewEncoder(res).Encode(map[string]interface{}{"hello": "world"})
+	})
+	errChan := make(chan error)
+	hs, err := NewHTTPServer(context.Background(), "ut", r, errChan, cp, cc)
+	assert.NoError(t, err)
+
+	go hs.ServeHTTP(context.Background())
+
+	c := http.Client{}
+	httpAddr := fmt.Sprintf("http://%s/test", hs.(*httpServer).l.Addr().String())
+	res, err := c.Get(httpAddr)
+	assert.NoError(t, err)
+	if res != nil {
+		assert.Equal(t, 403, res.StatusCode)
+		var resBody map[string]interface{}
+		json.NewDecoder(res.Body).Decode(&resBody)
+		assert.Equal(t, "FF00169: Unauthorized", resBody["error"])
+	}
+
+	req, err := http.NewRequest("GET", httpAddr, nil)
+	assert.NoError(t, err)
+	req.SetBasicAuth("firefly", "awesome")
+	c = http.Client{}
+	res, err = c.Do(req)
+	assert.NoError(t, err)
+	if res != nil {
+		assert.Equal(t, 200, res.StatusCode)
+		var resBody map[string]interface{}
+		json.NewDecoder(res.Body).Decode(&resBody)
+		assert.Equal(t, "world", resBody["hello"])
+	}
+}
+
+func TestServeAuthorizationBadPluginName(t *testing.T) {
+	config.RootConfigReset()
+	cp := config.RootSection("ut")
+	InitHTTPConfig(cp, 0)
+	cp.Set(HTTPAuthType, "banana")
+	ac := cp.SubSection("auth")
+	// authfactory.InitConfig(ac)
+	bc := ac.SubSection("basic")
+	bc.Set(basic.PasswordFile, "../../test/data/test_users")
+	cc := config.RootSection("utCors")
+	InitCORSConfig(cc)
+
+	r := mux.NewRouter()
+	r.HandleFunc("/test", func(res http.ResponseWriter, req *http.Request) {
+		res.WriteHeader(200)
+		json.NewEncoder(res).Encode(map[string]interface{}{"hello": "world"})
+	})
+	errChan := make(chan error)
+	_, err := NewHTTPServer(context.Background(), "ut", r, errChan, cp, cc)
+	assert.Regexp(t, "FF00168", err)
 }

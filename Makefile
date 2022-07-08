@@ -31,6 +31,7 @@ mocks-$(strip $(1))-$(strip $(2)): ${MOCKERY}
 endef
 
 $(eval $(call makemock, pkg/httpserver,            GoHTTPServer,       httpservermocks))
+$(eval $(call makemock, pkg/auth,                  Plugin,             authmocks))
 
 firefly-common: ${GOFILES}
 		$(VGO) build ./pkg/*
