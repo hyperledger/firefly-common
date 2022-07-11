@@ -36,6 +36,8 @@ var pluginsByType = map[string]func() auth.Plugin{
 	basic.Name(): func() auth.Plugin { return &basic.Auth{} },
 }
 
+// Allows other code to register additional implementations of Auth plugins
+// that can also be initialized with this factory
 func RegisterPlugins(plugins map[string]func() auth.Plugin, conf config.Section) {
 	for k, plugin := range plugins {
 		plugin().InitConfig(conf)
@@ -43,6 +45,8 @@ func RegisterPlugins(plugins map[string]func() auth.Plugin, conf config.Section)
 	}
 }
 
+// Initialize several different config sections with known keys
+// Used in a list of plugins
 func InitConfigArray(config config.ArraySection) {
 	config.AddKnownKey(ConfigName)
 	config.AddKnownKey(ConfigType)
@@ -51,6 +55,8 @@ func InitConfigArray(config config.ArraySection) {
 	}
 }
 
+// Initialize a single config section with known keys
+// Used as part of an HTTP server config section
 func InitConfig(config config.Section) {
 	config.AddKnownKey(ConfigType)
 	for name, plugin := range pluginsByType {

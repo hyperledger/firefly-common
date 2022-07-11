@@ -21,9 +21,9 @@ import (
 )
 
 const (
-	// BasicAuthConfigKey description
+	// BasicAuthConfigKey The name of the basic auth config section
 	BasicAuthConfigKey = "basic"
-	// PasswordFile description
+	// PasswordFile The path to a file with the list of allowed users in htpasswd format with passwords hashed with bcrypt
 	PasswordFile = "passwordfile"
 )
 
