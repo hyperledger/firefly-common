@@ -100,4 +100,7 @@ var (
 	MsgResponseMarshalError        = ffe("FF00165", "Failed to serialize response data", 400)
 	MsgRequestTimeout              = ffe("FF00166", "The request with id '%s' timed out after %.2fms", 408)
 	Msg404NotFound                 = ffe("FF00167", "Not found", 404)
+	MsgUnknownAuthPlugin           = ffe("FF00168", "Unknown auth plugin: '%s'")
+	MsgUnauthorized                = ffe("FF00169", "Unauthorized", 401)
+	MsgForbidden                   = ffe("FF00170", "Forbidden", 403)
 )

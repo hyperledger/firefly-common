@@ -19,6 +19,7 @@ package httpserver
 import (
 	"net/http"
 
+	"github.com/hyperledger/firefly-common/pkg/auth/authfactory"
 	"github.com/hyperledger/firefly-common/pkg/config"
 )
 
@@ -74,6 +75,8 @@ const (
 	HTTPConfTLSEnabled = "tls.enabled"
 	// HTTPConfTLSKeyFile the private key file for TLS on the server
 	HTTPConfTLSKeyFile = "tls.keyFile"
+	// HTTPAuthType the auth plugin to use for the HTTP server
+	HTTPAuthType = "auth.type"
 )
 
 func InitHTTPConfig(conf config.Section, defaultPort int) {
@@ -88,4 +91,8 @@ func InitHTTPConfig(conf config.Section, defaultPort int) {
 	conf.AddKnownKey(HTTPConfTLSEnabled, false)
 	conf.AddKnownKey(HTTPConfTLSKeyFile)
 	conf.AddKnownKey(HTTPConfShutdownTimeout, "10s")
+	conf.AddKnownKey(HTTPAuthType)
+
+	ac := conf.SubSection("auth")
+	authfactory.InitConfig(ac)
 }

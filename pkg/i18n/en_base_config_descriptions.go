@@ -74,6 +74,7 @@ var (
 	ConfigGlobalIdleTimeout           = ffc("config.global.idleTimeout", "The max duration to hold a HTTP keepalive connection between calls", TimeDurationType)
 	ConfigGlobalMaxIdleConns          = ffc("config.global.maxIdleConns", "The max number of idle connections to hold pooled", IntType)
 	ConfigGlobalMethod                = ffc("config.global.method", "The HTTP method to use when making requests to the Address Resolver", StringType)
+	ConfigGlobalAuthType              = ffc("config.global.auth.type", "The auth plugin to use for server side authentication of requests", StringType)
 
 	ConfigLang                  = ffc("config.lang", "Default language for translation (API calls may support language override using headers)", StringType)
 	ConfigLogCompress           = ffc("config.log.compress", "Determines if the rotated log files should be compressed using gzip", BooleanType)

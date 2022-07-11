@@ -119,8 +119,15 @@ func (hs *httpServer) createServer(ctx context.Context, r *mux.Router) (srv *htt
 		return nil, i18n.WrapError(ctx, err, i18n.MsgTLSConfigFailed)
 	}
 
+	authConfig := hs.conf.SubSection("auth")
+	authPluginName := hs.conf.GetString(HTTPAuthType)
+	handler, err := wrapAuthIfEnabled(ctx, authConfig, authPluginName, r)
+	if err != nil {
+		return nil, err
+	}
+	handler = wrapCorsIfEnabled(ctx, hs.corsConf, handler)
 	srv = &http.Server{
-		Handler:      wrapCorsIfEnabled(ctx, hs.corsConf, r),
+		Handler:      handler,
 		WriteTimeout: hs.conf.GetDuration(HTTPConfWriteTimeout),
 		ReadTimeout:  hs.conf.GetDuration(HTTPConfReadTimeout),
 		TLSConfig: &tls.Config{
