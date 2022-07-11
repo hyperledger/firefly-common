@@ -28,8 +28,10 @@ type Handler struct {
 	plugin Plugin
 }
 
-func (h *Handler) Init(plugin Plugin) {
-	h.plugin = plugin
+func NewHandler(plugin Plugin) *Handler {
+	return &Handler{
+		plugin: plugin,
+	}
 }
 
 func (h *Handler) Handler(chain http.Handler) http.Handler {

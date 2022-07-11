@@ -34,8 +34,7 @@ func wrapAuthIfEnabled(ctx context.Context, conf config.Section, pluginName stri
 		if err := authPlugin.Init(ctx, "", conf.SubSection(authPlugin.Name())); err != nil {
 			return nil, err
 		}
-		handler := &auth.Handler{}
-		handler.Init(authPlugin)
+		handler := auth.NewHandler(authPlugin)
 		return handler.Handler(chain), nil
 	}
 	return chain, nil

@@ -33,7 +33,7 @@ const (
 )
 
 var pluginsByType = map[string]func() auth.Plugin{
-	(*basic.Auth)(nil).Name(): func() auth.Plugin { return &basic.Auth{} },
+	basic.Name(): func() auth.Plugin { return &basic.Auth{} },
 }
 
 func RegisterPlugins(plugins map[string]func() auth.Plugin, conf config.Section) {

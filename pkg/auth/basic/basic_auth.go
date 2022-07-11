@@ -30,12 +30,21 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+const (
+	authHeaderName        = "Authorization"
+	basicAuthHeaderPrefix = "Basic "
+)
+
 type Auth struct {
 	users map[string][]byte
 }
 
-func (a *Auth) Name() string {
+func Name() string {
 	return "basic"
+}
+
+func (a *Auth) Name() string {
+	return Name()
 }
 
 func (a *Auth) Init(ctx context.Context, name string, config config.Section) error {
@@ -49,20 +58,22 @@ func (a *Auth) Init(ctx context.Context, name string, config config.Section) err
 }
 
 func (a *Auth) Authorize(ctx context.Context, req *fftypes.AuthReq) error {
-	authHeader := strings.TrimPrefix(req.Header.Get("Authorization"), "Basic ")
-	if authHeader != "" {
-		decodedAuthHeader, err := base64.StdEncoding.DecodeString(authHeader)
-		if err != nil {
-			return i18n.NewError(ctx, i18n.MsgUnauthorized)
-		}
-		split := strings.Split(string(decodedAuthHeader), ":")
-		username := split[0]
-		password := split[1]
-		if hash, ok := a.users[username]; ok {
-			if err := bcrypt.CompareHashAndPassword(hash, []byte(password)); err != nil {
-				log.L(ctx).Warnf("user authentication failed: %s", err.Error())
-			} else {
-				return nil
+	if strings.HasPrefix(req.Header.Get(authHeaderName), basicAuthHeaderPrefix) {
+		authHeader := strings.TrimPrefix(req.Header.Get(authHeaderName), basicAuthHeaderPrefix)
+		if authHeader != "" {
+			decodedAuthHeader, err := base64.StdEncoding.DecodeString(authHeader)
+			if err != nil {
+				return i18n.NewError(ctx, i18n.MsgUnauthorized)
+			}
+			split := strings.Split(string(decodedAuthHeader), ":")
+			username := split[0]
+			password := split[1]
+			if hash, ok := a.users[username]; ok {
+				if err := bcrypt.CompareHashAndPassword(hash, []byte(password)); err != nil {
+					log.L(ctx).Warnf("user authentication failed: %s", err.Error())
+				} else {
+					return nil
+				}
 			}
 		}
 	}

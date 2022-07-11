@@ -37,8 +37,7 @@ func getTestBasicAuth() *basic.Auth {
 }
 
 func getTestHandler() *Handler {
-	h := &Handler{}
-	h.Init(getTestBasicAuth())
+	h := NewHandler(getTestBasicAuth())
 	return h
 }
 

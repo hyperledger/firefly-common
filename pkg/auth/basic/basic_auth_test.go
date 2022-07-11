@@ -74,6 +74,15 @@ func TestAuthorize(t *testing.T) {
 	assert.Regexp(t, "FF00169", err)
 
 	authReq = &fftypes.AuthReq{
+		URL: url,
+		Header: http.Header{
+			"Authorization": []string{"Basic Not base64"},
+		},
+	}
+	err = a.Authorize(context.Background(), authReq)
+	assert.Regexp(t, "FF00169", err)
+
+	authReq = &fftypes.AuthReq{
 		URL:    url,
 		Header: nil,
 	}
