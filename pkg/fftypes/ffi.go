@@ -92,9 +92,6 @@ type FFIGenerationRequest struct {
 }
 
 func (f *FFI) Validate(ctx context.Context, existing bool) (err error) {
-	if err = ValidateFFNameField(ctx, f.Namespace, "namespace"); err != nil {
-		return err
-	}
 	if err = ValidateFFNameField(ctx, f.Name, "name"); err != nil {
 		return err
 	}
