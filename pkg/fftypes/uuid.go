@@ -59,6 +59,9 @@ func (u UUID) MarshalText() ([]byte, error) {
 }
 
 func (u *UUID) UnmarshalText(b []byte) error {
+	if len(b) == 0 {
+		return nil
+	}
 	return (*uuid.UUID)(u).UnmarshalText(b)
 }
 
