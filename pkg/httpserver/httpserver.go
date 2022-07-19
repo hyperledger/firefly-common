@@ -127,9 +127,10 @@ func (hs *httpServer) createServer(ctx context.Context, r *mux.Router) (srv *htt
 	}
 	handler = wrapCorsIfEnabled(ctx, hs.corsConf, handler)
 	srv = &http.Server{
-		Handler:      handler,
-		WriteTimeout: hs.conf.GetDuration(HTTPConfWriteTimeout),
-		ReadTimeout:  hs.conf.GetDuration(HTTPConfReadTimeout),
+		Handler:           handler,
+		WriteTimeout:      hs.conf.GetDuration(HTTPConfWriteTimeout),
+		ReadTimeout:       hs.conf.GetDuration(HTTPConfReadTimeout),
+		ReadHeaderTimeout: hs.conf.GetDuration(HTTPConfReadTimeout),
 		TLSConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 			ClientAuth: clientAuth,
