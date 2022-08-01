@@ -57,8 +57,7 @@ func TestAddJSONFieldsToMap(t *testing.T) {
 		EmptySeven:    []string{},
 	}
 
-	m := make(map[string]interface{})
-	AddJSONFieldsToMap(reflect.ValueOf(t1), m)
+	m := StructToJSONMap(t1)
 	b, err := json.Marshal(m)
 	assert.NoError(t, err)
 	assert.Equal(t, `{"DefaultName":"def111","f1":"val1","f2":2222,"f3":"val3"}`, string(b))

@@ -21,6 +21,12 @@ import (
 	"strings"
 )
 
+func StructToJSONMap(i interface{}) map[string]interface{} {
+	m := make(map[string]interface{})
+	AddJSONFieldsToMap(reflect.ValueOf(i), m)
+	return m
+}
+
 // AddJSONFieldsToMap is a helper for marshalling struct fields down into a map
 //
 // Note: Does not currently respect the `omitempty` JSON flag semantics
