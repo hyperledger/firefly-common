@@ -28,8 +28,6 @@ func StructToJSONMap(i interface{}) map[string]interface{} {
 }
 
 // AddJSONFieldsToMap is a helper for marshalling struct fields down into a map
-//
-// Note: Does not currently respect the `omitempty` JSON flag semantics
 func AddJSONFieldsToMap(val reflect.Value, data map[string]interface{}) {
 	varType := val.Type()
 	if varType.Kind() == reflect.Ptr {
