@@ -16,7 +16,9 @@
 
 package i18n
 
-import "golang.org/x/text/language"
+import (
+	"golang.org/x/text/language"
+)
 
 var TimeDurationType = "[`time.Duration`](https://pkg.go.dev/time#Duration)"
 var TimeFormatType = "[Time format](https://pkg.go.dev/time#pkg-constants) `string`"
@@ -50,11 +52,12 @@ var (
 
 	ConfigGlobalUsername = ffc("config.global.auth.username", "Username", StringType)
 	ConfigGlobalPassword = ffc("config.global.auth.password", "Password", StringType)
+	ConfigGlobalProxyURL = ffc("config.global.proxy.url", "Optional HTTP proxy server to connect through", StringType)
 
 	ConfigGlobalSize = ffc("config.global.cache.size", "The size of the cache", ByteSizeType)
 	ConfigGlobalTTL  = ffc("config.global.cache.ttl", "The time to live (TTL) for the cache", TimeDurationType)
 
-	ConfigGlobaltWsHeartbeatInterval     = ffc("config.global.ws.heartbeatInterval", "The amount of time to wait between heartbeat signals on the WebSocket connection", TimeDurationType)
+	ConfigGlobalWsHeartbeatInterval      = ffc("config.global.ws.heartbeatInterval", "The amount of time to wait between heartbeat signals on the WebSocket connection", TimeDurationType)
 	ConfigGlobalWsInitialConnectAttempts = ffc("config.global.ws.initialConnectAttempts", "The number of attempts FireFly will make to connect to the WebSocket when starting up, before failing", IntType)
 	ConfigGlobalWsPath                   = ffc("config.global.ws.path", "The WebSocket sever URL to which FireFly should connect", "WebSocket URL "+StringType)
 	ConfigGlobalWsReadBufferSize         = ffc("config.global.ws.readBufferSize", "The size in bytes of the read buffer for the WebSocket connection", ByteSizeType)
@@ -102,4 +105,6 @@ var (
 	ConfigCorsMaxAge  = ffc("config.global.cors.maxAge", "The maximum age a browser should rely on CORS checks", TimeDurationType)
 	ConfigCorsMethods = ffc("config.global.cors.methods", " CORS setting to control the allowed methods", StringType)
 	ConfigCorsOrigins = ffc("config.global.cors.origins", "CORS setting to control the allowed origins", StringType)
+
+	ConfigGlobalAuthBasicPasswordFile = ffc("config.global.basic.passwordfile", "The path to a .htpasswd file to use for authenticating requests. Passwords should be hashed with bcrypt.", StringType)
 )
