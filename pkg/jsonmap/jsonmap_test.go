@@ -33,7 +33,7 @@ func TestAddJSONFieldsToMap(t *testing.T) {
 
 	type testType2 struct {
 		testType1
-		Field3        string `json:"f3"`
+		Field3        string `json:"f3,omitempty"`
 		IgnoreMe      string `json:"-"`
 		DefaultName   string
 		internalField string
