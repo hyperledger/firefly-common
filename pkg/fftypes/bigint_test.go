@@ -108,7 +108,7 @@ func TestBigIntJSONBadJSON(t *testing.T) {
 
 }
 
-func TestLagePositiveBigIntValue(t *testing.T) {
+func TestLargePositiveBigIntValue(t *testing.T) {
 
 	var iMax FFBigInt
 	_ = iMax.Int().Exp(big.NewInt(2), big.NewInt(256), nil)
@@ -165,6 +165,7 @@ func TestScanString(t *testing.T) {
 	err := i.Scan("-feedbeef")
 	assert.NoError(t, err)
 	assert.Equal(t, int64(-4276993775), i.Int().Int64())
+	assert.Equal(t, "-4276993775", i.String())
 
 }
 

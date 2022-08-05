@@ -116,3 +116,7 @@ func (i *FFBigInt) Equals(i2 *FFBigInt) bool {
 		return (*big.Int)(i).Cmp((*big.Int)(i2)) == 0
 	}
 }
+
+func (i *FFBigInt) String() string {
+	return (*big.Int)(i).String()
+}
