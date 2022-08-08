@@ -60,6 +60,10 @@ func (jd JSONObject) GetString(key string) string {
 
 func (jd JSONObject) GetInteger(key string) *big.Int {
 	s := jd.GetString(key)
+	if s == "" {
+		log.L(context.Background()).Debugf("Int value unset for key '%s'", key)
+		return big.NewInt(0)
+	}
 	i, ok := big.NewInt(0).SetString(s, 0)
 	if !ok {
 		log.L(context.Background()).Errorf("Invalid int value '%+v' for key '%s'", s, key)

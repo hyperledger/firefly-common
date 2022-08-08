@@ -47,10 +47,12 @@ func AddJSONFieldsToMap(val reflect.Value, data map[string]interface{}) {
 		tag, ok := varType.Field(i).Tag.Lookup(`json`)
 		var fieldName string
 		if ok && len(tag) > 0 {
-			if tag == "-" || strings.Contains(tag, ",omitempty") && isEmptyValue(f) {
+			tagValues := strings.Split(tag, ",")
+			tagName := tagValues[0]
+			if tagName == "-" || len(tagValues) > 1 && tagValues[1] == "omitempty" && isEmptyValue(f) {
 				continue
 			}
-			fieldName = tag
+			fieldName = tagName
 		} else {
 			fieldName = fType.Name
 		}
