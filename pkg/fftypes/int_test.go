@@ -76,7 +76,7 @@ func TestFFUint64JSON(t *testing.T) {
 	}
 
 	jsonVal := []byte(`{
-		"field1": -111111,
+		"field1": 111111,
 		"field2": 2222.22,
 		"field3": "333333",
 		"field4": "0xfeedBEEF"
@@ -84,7 +84,7 @@ func TestFFUint64JSON(t *testing.T) {
 
 	err := json.Unmarshal(jsonVal, &myStruct)
 	assert.NoError(t, err)
-	assert.Equal(t, uint64(0), myStruct.Field1.Uint64())
+	assert.Equal(t, uint64(111111), myStruct.Field1.Uint64())
 	assert.Equal(t, uint64(2222), myStruct.Field2.Uint64())
 	assert.Equal(t, uint64(333333), myStruct.Field3.Uint64())
 	assert.Equal(t, uint64(4276993775), myStruct.Field4.Uint64())
@@ -93,7 +93,7 @@ func TestFFUint64JSON(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.JSONEq(t, `{
-		"field1": "0",
+		"field1": "111111",
 		"field2": "2222",
 		"field3": "333333",
 		"field4": "4276993775"
