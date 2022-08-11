@@ -51,6 +51,7 @@ type httpServer struct {
 	l               net.Listener
 	conf            config.Section
 	corsConf        config.Section
+	options         ServerOptions
 	onClose         chan error
 	tlsEnabled      bool
 	tlsCertFile     string
@@ -58,7 +59,13 @@ type httpServer struct {
 	shutdownTimeout time.Duration
 }
 
-func NewHTTPServer(ctx context.Context, name string, r *mux.Router, onClose chan error, conf config.Section, corsConf config.Section) (is HTTPServer, err error) {
+// ServerOptions are config parameters that are not set from the config, but rather the context
+// in which the HTTP server is being used
+type ServerOptions struct {
+	MaximumRequestTimeout time.Duration
+}
+
+func NewHTTPServer(ctx context.Context, name string, r *mux.Router, onClose chan error, conf config.Section, corsConf config.Section, opts ...*ServerOptions) (is HTTPServer, err error) {
 	hs := &httpServer{
 		name:            name,
 		onClose:         onClose,
@@ -68,6 +75,9 @@ func NewHTTPServer(ctx context.Context, name string, r *mux.Router, onClose chan
 		tlsCertFile:     conf.GetString(HTTPConfTLSCertFile),
 		tlsKeyFile:      conf.GetString(HTTPConfTLSKeyFile),
 		shutdownTimeout: conf.GetDuration(HTTPConfShutdownTimeout),
+	}
+	for _, o := range opts {
+		hs.options = *o
 	}
 	hs.l, err = hs.createListener(ctx)
 	if err == nil {
@@ -126,11 +136,16 @@ func (hs *httpServer) createServer(ctx context.Context, r *mux.Router) (srv *htt
 		return nil, err
 	}
 	handler = wrapCorsIfEnabled(ctx, hs.corsConf, handler)
+	readHeaderTimeout := hs.conf.GetDuration(HTTPConfReadTimeout)
+	maxRequestTimeout := hs.options.MaximumRequestTimeout
+	if maxRequestTimeout < readHeaderTimeout {
+		maxRequestTimeout = readHeaderTimeout
+	}
 	srv = &http.Server{
 		Handler:           handler,
 		WriteTimeout:      hs.conf.GetDuration(HTTPConfWriteTimeout),
-		ReadTimeout:       hs.conf.GetDuration(HTTPConfReadTimeout),
-		ReadHeaderTimeout: hs.conf.GetDuration(HTTPConfReadTimeout),
+		ReadTimeout:       maxRequestTimeout,
+		ReadHeaderTimeout: readHeaderTimeout,
 		TLSConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 			ClientAuth: clientAuth,
