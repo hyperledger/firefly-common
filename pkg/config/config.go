@@ -420,6 +420,7 @@ func (c *configSection) AddChild(k string, defValue ...interface{}) {
 func (c *configSection) SetDefault(k string, defValue interface{}) {
 	key := keyName(c.prefix, k)
 	viper.SetDefault(key, defValue)
+	c.AddChild(key, defValue)
 }
 
 func GetConfig() fftypes.JSONObject {
