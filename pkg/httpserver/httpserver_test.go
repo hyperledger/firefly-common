@@ -70,7 +70,7 @@ func TestServeFail(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestShutdownOk(t *testing.T) {
+func TestShutdownOkCustomOpts(t *testing.T) {
 	config.RootConfigReset()
 	cp := config.RootSection("ut")
 	InitHTTPConfig(cp, 0)
@@ -78,9 +78,12 @@ func TestShutdownOk(t *testing.T) {
 	InitCORSConfig(cc)
 	errChan := make(chan error)
 	ctx, cancel := context.WithCancel(context.Background())
-	l, err := NewHTTPServer(ctx, "ut", mux.NewRouter(), errChan, cp, cc)
+	l, err := NewHTTPServer(ctx, "ut", mux.NewRouter(), errChan, cp, cc, &ServerOptions{
+		MaximumRequestTimeout: 1 * time.Hour,
+	})
 	assert.NoError(t, err)
 	assert.NotEmpty(t, l.Addr().String())
+	assert.Equal(t, 1*time.Hour, l.(*httpServer).options.MaximumRequestTimeout)
 	cancel()
 }
 
