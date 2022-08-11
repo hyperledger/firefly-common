@@ -79,11 +79,11 @@ func TestShutdownOkCustomOpts(t *testing.T) {
 	errChan := make(chan error)
 	ctx, cancel := context.WithCancel(context.Background())
 	l, err := NewHTTPServer(ctx, "ut", mux.NewRouter(), errChan, cp, cc, &ServerOptions{
-		MaximumRequestTimeout: 1 * time.Second,
+		MaximumRequestTimeout: 1 * time.Hour,
 	})
 	assert.NoError(t, err)
 	assert.NotEmpty(t, l.Addr().String())
-	assert.Equal(t, 1*time.Second, l.(*httpServer).options.MaximumRequestTimeout)
+	assert.Equal(t, 1*time.Hour, l.(*httpServer).options.MaximumRequestTimeout)
 	cancel()
 }
 

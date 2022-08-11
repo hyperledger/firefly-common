@@ -136,16 +136,24 @@ func (hs *httpServer) createServer(ctx context.Context, r *mux.Router) (srv *htt
 		return nil, err
 	}
 	handler = wrapCorsIfEnabled(ctx, hs.corsConf, handler)
-	readHeaderTimeout := hs.conf.GetDuration(HTTPConfReadTimeout)
-	maxRequestTimeout := hs.options.MaximumRequestTimeout
-	if maxRequestTimeout < readHeaderTimeout {
-		maxRequestTimeout = readHeaderTimeout
+
+	// Where a maximum request timeout is set, it does not make sense for either the
+	// read timeout (time to read full body), or the write timeout (time to write the
+	// response after processing the request) to be less than that
+	readTimeout := hs.conf.GetDuration(HTTPConfReadTimeout)
+	if readTimeout < hs.options.MaximumRequestTimeout {
+		readTimeout = hs.options.MaximumRequestTimeout + 1*time.Second
 	}
+	writeTimeout := hs.conf.GetDuration(HTTPConfWriteTimeout)
+	if writeTimeout < hs.options.MaximumRequestTimeout {
+		writeTimeout = hs.conf.GetDuration(HTTPConfWriteTimeout) + 1*time.Second
+	}
+
 	srv = &http.Server{
 		Handler:           handler,
-		WriteTimeout:      hs.conf.GetDuration(HTTPConfWriteTimeout),
-		ReadTimeout:       maxRequestTimeout,
-		ReadHeaderTimeout: readHeaderTimeout,
+		WriteTimeout:      writeTimeout,
+		ReadTimeout:       readTimeout,
+		ReadHeaderTimeout: hs.conf.GetDuration(HTTPConfReadTimeout), // safe for this to always be the read timeout - should be short
 		TLSConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 			ClientAuth: clientAuth,
