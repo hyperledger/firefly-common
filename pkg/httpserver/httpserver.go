@@ -146,7 +146,7 @@ func (hs *httpServer) createServer(ctx context.Context, r *mux.Router) (srv *htt
 	}
 	writeTimeout := hs.conf.GetDuration(HTTPConfWriteTimeout)
 	if writeTimeout < hs.options.MaximumRequestTimeout {
-		writeTimeout = hs.conf.GetDuration(HTTPConfWriteTimeout) + 1*time.Second
+		writeTimeout = hs.options.MaximumRequestTimeout + 1*time.Second
 	}
 
 	log.L(ctx).Debugf("HTTP Server Timeouts (%s): read=%s write=%s request=%s", hs.l.Addr(), readTimeout, writeTimeout, hs.options.MaximumRequestTimeout)
