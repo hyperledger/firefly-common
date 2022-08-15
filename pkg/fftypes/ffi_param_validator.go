@@ -22,104 +22,106 @@ import (
 
 type BaseFFIParamValidator struct{}
 
+var compiledMetaSchema = jsonschema.MustCompileString("ffi.json", `{
+	"$ref": "#/$defs/ffiParam",
+	"$defs": {
+		"integerTypeOptions": {
+			"type": "object",
+			"properties": {
+				"type": {
+					"type": "string",
+					"enum": [
+						"integer",
+						"string"
+					]
+				}
+			}
+		},
+		"numberTypeOptions": {
+			"type": "object",
+			"properties": {
+				"type": {
+					"type": "string",
+					"enum": [
+						"number",
+						"string"
+					]
+				}
+			}
+		},
+		"booleanTypeOptions": {
+			"type": "object",
+			"properties": {
+				"type": {
+					"type": "string",
+					"enum": [
+						"boolean",
+						"string"
+					]
+				}
+			}
+		},
+		"ffiParam": {
+			"oneOf": [
+				{
+					"properties": {
+						"type": {
+							"type": [
+								"string"
+							],
+							"enum": [
+								"boolean",
+								"integer",
+								"number",
+								"string",
+								"array",
+								"object"
+							]
+						}
+					},
+					"required": [
+						"type"
+					]
+				},
+				{
+					"type": "object",
+					"properties": {
+						"oneOf": {
+							"type": "array",
+							"oneOf": [
+								{
+									"items": {
+										"$ref": "#/$defs/integerTypeOptions"
+									}
+								},
+								{
+									"items": {
+										"$ref": "#/$defs/numberTypeOptions"
+									}
+								},
+								{
+									"items": {
+										"$ref": "#/$defs/booleanTypeOptions"
+									}
+								}
+							]
+						}
+					},
+					"required": [
+						"oneOf"
+					]
+				}
+			]
+		}
+	}
+}`)
+
 func (v BaseFFIParamValidator) Compile(ctx jsonschema.CompilerContext, m map[string]interface{}) (jsonschema.ExtSchema, error) {
 	return nil, nil
 }
 
 func (v *BaseFFIParamValidator) GetMetaSchema() *jsonschema.Schema {
-	return jsonschema.MustCompileString("ffi.json", `{
-		"$ref": "#/$defs/ffiParam",
-		"$defs": {
-			"integerTypeOptions": {
-				"type": "object",
-				"properties": {
-					"type": {
-						"type": "string",
-						"enum": [
-							"integer",
-							"string"
-						]
-					}
-				}
-			},
-			"numberTypeOptions": {
-				"type": "object",
-				"properties": {
-					"type": {
-						"type": "string",
-						"enum": [
-							"number",
-							"string"
-						]
-					}
-				}
-			},
-			"booleanTypeOptions": {
-				"type": "object",
-				"properties": {
-					"type": {
-						"type": "string",
-						"enum": [
-							"boolean",
-							"string"
-						]
-					}
-				}
-			},
-			"ffiParam": {
-				"oneOf": [
-					{
-						"properties": {
-							"type": {
-								"type": [
-									"string"
-								],
-								"enum": [
-									"boolean",
-									"integer",
-									"number",
-									"string",
-									"array",
-									"object"
-								]
-							}
-						},
-						"required": [
-							"type"
-						]
-					},
-					{
-						"type": "object",
-						"properties": {
-							"oneOf": {
-								"type": "array",
-								"oneOf": [
-									{
-										"items": {
-											"$ref": "#/$defs/integerTypeOptions"
-										}
-									},
-									{
-										"items": {
-											"$ref": "#/$defs/numberTypeOptions"
-										}
-									},
-									{
-										"items": {
-											"$ref": "#/$defs/booleanTypeOptions"
-										}
-									}
-								]
-							}
-						},
-						"required": [
-							"oneOf"
-						]
-					}
-				]
-			}
-		}
-	}`)
+	return compiledMetaSchema
 }
 
 func (v *BaseFFIParamValidator) GetExtensionName() string {
