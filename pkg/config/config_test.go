@@ -340,7 +340,7 @@ func TestGenerateConfigMarkdown(t *testing.T) {
 		viper.SetDefault(string(key4), "val4")
 	})
 
-	_, err := GenerateConfigMarkdown(context.Background(), []string{
+	_, err := GenerateConfigMarkdown(context.Background(), "", []string{
 		string(key1), string(key2), string(key3), string(key4),
 	})
 	assert.NoError(t, err)
@@ -354,7 +354,7 @@ func TestGenerateConfigMarkdownPanic(t *testing.T) {
 	RootConfigReset()
 
 	assert.Panics(t, func() {
-		_, _ = GenerateConfigMarkdown(context.Background(), []string{
+		_, _ = GenerateConfigMarkdown(context.Background(), "", []string{
 			string(key1),
 		})
 	})
