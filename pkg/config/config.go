@@ -614,12 +614,12 @@ func SetupLogging(ctx context.Context) {
 	log.L(ctx).Debugf("Log level: %s", logrus.GetLevel())
 }
 
-func GenerateConfigMarkdown(ctx context.Context, keys []string) ([]byte, error) {
+func GenerateConfigMarkdown(ctx context.Context, header string, keys []string) ([]byte, error) {
 	b := bytes.NewBuffer([]byte{})
 
 	rootKeyHeaderLevel := 2
 
-	b.WriteString(configDocHeader)
+	b.WriteString(header)
 
 	configObjects := make(map[string][]string)
 	configObjectNames := make([]string, 0)
@@ -685,22 +685,3 @@ func getGlobalDescriptionforConfigKey(ctx context.Context, key string) (string, 
 	}
 	panic(fmt.Sprintf("Translation for config key '%s' was not found", key))
 }
-
-const configDocHeader = `---
-layout: default
-title: pages.reference
-parent: Reference
-nav_order: 2
----
-
-# Configuration Reference
-{: .no_toc }
-
-<!-- ## Table of contents
-{: .no_toc .text-delta }
-
-1. TOC
-{:toc} -->
-
----
-`
