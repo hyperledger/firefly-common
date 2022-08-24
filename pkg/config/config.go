@@ -111,6 +111,8 @@ type Section interface {
 	GetObject(key string) fftypes.JSONObject
 	GetObjectArray(key string) fftypes.JSONObjectArray
 	Get(key string) interface{}
+
+	IsSet(key string) bool
 }
 
 // ArraySection represents an array of options at a particular layer in the config.
@@ -582,6 +584,18 @@ func (c *configSection) Resolve(key string) string {
 	defer keysMutex.Unlock()
 
 	return c.prefixKey(key)
+}
+
+func IsSet(key RootKey) bool {
+	return root.IsSet(string(key))
+}
+
+// IsSet return whether a key has non-default value set
+func (c *configSection) IsSet(key string) bool {
+	keysMutex.Lock()
+	defer keysMutex.Unlock()
+
+	return viper.IsSet(key)
 }
 
 // SetupLogging initializes logging
