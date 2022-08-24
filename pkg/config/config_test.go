@@ -82,6 +82,14 @@ func TestDefaults(t *testing.T) {
 	assert.Equal(t, int64(1024*1024), GetByteSize(key9))
 }
 
+func TestValueSet(t *testing.T) {
+	RootConfigReset()
+	// keys with default values are not set
+	assert.False(t, IsSet("key1"))
+	Set("key1", "updatedvalue")
+	assert.True(t, IsSet("key1"))
+}
+
 func TestSpecificConfigFileOk(t *testing.T) {
 	RootConfigReset()
 	err := ReadConfig("common", configDir+"/firefly.common.yaml")

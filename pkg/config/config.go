@@ -97,6 +97,7 @@ type Section interface {
 	SubSection(name string) Section
 	SubArray(name string) ArraySection
 	Set(key string, value interface{})
+	IsSet(key string) bool
 	Resolve(key string) string
 
 	GetString(key string) string
@@ -582,6 +583,18 @@ func (c *configSection) Resolve(key string) string {
 	defer keysMutex.Unlock()
 
 	return c.prefixKey(key)
+}
+
+func IsSet(key RootKey) bool {
+	return root.IsSet(string(key))
+}
+
+// IsSet returns true when a key has non-default value set
+func (c *configSection) IsSet(key string) bool {
+	keysMutex.Lock()
+	defer keysMutex.Unlock()
+
+	return viper.IsSet(key)
 }
 
 // SetupLogging initializes logging
