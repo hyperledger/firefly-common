@@ -97,6 +97,7 @@ type Section interface {
 	SubSection(name string) Section
 	SubArray(name string) ArraySection
 	Set(key string, value interface{})
+	IsSet(key string) bool
 	Resolve(key string) string
 
 	GetString(key string) string
@@ -111,8 +112,6 @@ type Section interface {
 	GetObject(key string) fftypes.JSONObject
 	GetObjectArray(key string) fftypes.JSONObjectArray
 	Get(key string) interface{}
-
-	IsSet(key string) bool
 }
 
 // ArraySection represents an array of options at a particular layer in the config.
@@ -590,7 +589,7 @@ func IsSet(key RootKey) bool {
 	return root.IsSet(string(key))
 }
 
-// IsSet return whether a key has non-default value set
+// IsSet returns true when a key has non-default value set
 func (c *configSection) IsSet(key string) bool {
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
