@@ -17,8 +17,11 @@
 package fftypes
 
 import (
+	"context"
 	"database/sql/driver"
 	"strings"
+
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 )
 
 type FFEnum string
@@ -55,15 +58,15 @@ func (ts *FFEnum) UnmarshalText(b []byte) error {
 	return nil
 }
 
-func FFEnumParseString(t string, i string) FFEnum {
-	e, ok := enumValues[t]
+func FFEnumParseString(ctx context.Context, t string, i string) (FFEnum, error) {
+	e, ok := enumValues[strings.ToLower(t)]
 	if !ok {
-		return ""
+		return "", i18n.NewError(ctx, i18n.MsgInvalidEnum, t)
 	}
 	for _, val := range e {
-		if val == i {
-			return FFEnum(i)
+		if val == strings.ToLower(i) {
+			return FFEnum(strings.ToLower(i)), nil
 		}
 	}
-	return ""
+	return "", i18n.NewError(ctx, i18n.MsgInvalidEnumValue, i, t)
 }
