@@ -68,5 +68,5 @@ func FFEnumParseString(ctx context.Context, t string, i string) (FFEnum, error) 
 			return FFEnum(strings.ToLower(i)), nil
 		}
 	}
-	return "", i18n.NewError(ctx, i18n.MsgInvalidEnumValue, i, t)
+	return "", i18n.NewError(ctx, i18n.MsgInvalidEnumValue, i, t, e)
 }

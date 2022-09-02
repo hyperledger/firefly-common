@@ -104,5 +104,5 @@ var (
 	MsgUnauthorized                = ffe("FF00169", "Unauthorized", 401)
 	MsgForbidden                   = ffe("FF00170", "Forbidden", 403)
 	MsgInvalidEnum                 = ffe("FF00171", "'%s' is not a valid enum type", 400)
-	MsgInvalidEnumValue            = ffe("FF00172", "'%s' is not a valid enum value for enum type '%s'", 400)
+	MsgInvalidEnumValue            = ffe("FF00172", "'%s' is not a valid enum value for enum type '%s'. Valid options are: %v", 400)
 )
