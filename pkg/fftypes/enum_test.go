@@ -17,6 +17,7 @@
 package fftypes
 
 import (
+	"context"
 	"database/sql/driver"
 	"encoding/json"
 	"testing"
@@ -55,4 +56,19 @@ func TestFFEnumValues(t *testing.T) {
 	assert.Equal(t, FFEnum("test_enum_val1"), TestEnumVal1)
 	assert.Equal(t, FFEnum("test_enum_val2"), TestEnumVal2)
 	assert.Equal(t, []interface{}{"test_enum_val1", "test_enum_val2"}, FFEnumValues("ut"))
+}
+
+func TestFFEnumParseString(t *testing.T) {
+	ctx := context.Background()
+	v, err := FFEnumParseString(ctx, "ut", "test_enum_val1")
+	assert.NoError(t, err)
+	assert.Equal(t, v, TestEnumVal1)
+
+	v, err = FFEnumParseString(ctx, "foobar", "foobar")
+	assert.Regexp(t, "FF00171", err)
+	assert.Empty(t, v)
+
+	v, err = FFEnumParseString(ctx, "ut", "foobar")
+	assert.Regexp(t, "FF00172", err)
+	assert.Empty(t, v)
 }
