@@ -54,3 +54,16 @@ func (ts *FFEnum) UnmarshalText(b []byte) error {
 	*ts = FFEnum(strings.ToLower(string(b)))
 	return nil
 }
+
+func FFEnumParseString(t string, i string) FFEnum {
+	e, ok := enumValues[t]
+	if !ok {
+		return ""
+	}
+	for _, val := range e {
+		if val == i {
+			return FFEnum(i)
+		}
+	}
+	return ""
+}

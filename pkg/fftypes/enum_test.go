@@ -56,3 +56,9 @@ func TestFFEnumValues(t *testing.T) {
 	assert.Equal(t, FFEnum("test_enum_val2"), TestEnumVal2)
 	assert.Equal(t, []interface{}{"test_enum_val1", "test_enum_val2"}, FFEnumValues("ut"))
 }
+
+func TestFFEnumParseString(t *testing.T) {
+	assert.Equal(t, FFEnumParseString("ut", "test_enum_val1"), TestEnumVal1)
+	assert.Equal(t, FFEnumParseString("ut", "foobar"), FFEnum(""))
+	assert.Equal(t, FFEnumParseString("foobar", "foobar"), FFEnum(""))
+}
