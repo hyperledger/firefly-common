@@ -25,9 +25,10 @@ var TimeFormatType = "[Time format](https://pkg.go.dev/time#pkg-constants) `stri
 var ByteSizeType = "[`BytesSize`](https://pkg.go.dev/github.com/docker/go-units#BytesSize)"
 var GoTemplateType = "[Go Template](https://pkg.go.dev/text/template) `string`"
 var StringType = "`string`"
+var ArrayStringType = "`[]string`"
 var IntType = "`int`"
 var BooleanType = "`boolean`"
-var FloatType = "`boolean`"
+var FloatType = "`float32`"
 var MapStringStringType = "`map[string]string`"
 var IgnoredType = "IGNORE"
 
@@ -101,10 +102,10 @@ var (
 
 	ConfigCorsDebug   = ffc("config.global.cors.debug", "Whether debug is enabled for the CORS implementation", BooleanType)
 	ConfigCorsEnabled = ffc("config.global.cors.enabled", "Whether CORS is enabled", BooleanType)
-	ConfigCorsHeaders = ffc("config.global.cors.headers", "CORS setting to control the allowed headers", StringType)
+	ConfigCorsHeaders = ffc("config.global.cors.headers", "CORS setting to control the allowed headers", ArrayStringType)
 	ConfigCorsMaxAge  = ffc("config.global.cors.maxAge", "The maximum age a browser should rely on CORS checks", TimeDurationType)
-	ConfigCorsMethods = ffc("config.global.cors.methods", " CORS setting to control the allowed methods", StringType)
-	ConfigCorsOrigins = ffc("config.global.cors.origins", "CORS setting to control the allowed origins", StringType)
+	ConfigCorsMethods = ffc("config.global.cors.methods", " CORS setting to control the allowed methods", ArrayStringType)
+	ConfigCorsOrigins = ffc("config.global.cors.origins", "CORS setting to control the allowed origins", ArrayStringType)
 
 	ConfigGlobalAuthBasicPasswordFile = ffc("config.global.basic.passwordfile", "The path to a .htpasswd file to use for authenticating requests. Passwords should be hashed with bcrypt.", StringType)
 )
