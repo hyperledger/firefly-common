@@ -282,7 +282,7 @@ func (sg *SwaggerGen) AddParam(ctx context.Context, op *openapi3.Operation, in, 
 	}
 	var defValue interface{}
 	if def != "" {
-		defValue = &def
+		defValue = def
 	}
 	var exampleValue interface{}
 	if example != "" {
