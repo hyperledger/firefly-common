@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -41,6 +42,9 @@ type Options struct {
 	Description               string
 	PanicOnMissingDescription bool
 	DefaultRequestTimeout     time.Duration
+	APIMaxFilterSkip          uint
+	APIDefaultFilterLimit     string
+	APIMaxFilterLimit         uint
 
 	RouteCustomizations func(ctx context.Context, sg *SwaggerGen, route *Route, op *openapi3.Operation)
 }
@@ -306,6 +310,22 @@ func (sg *SwaggerGen) AddParam(ctx context.Context, op *openapi3.Operation, in, 
 	})
 }
 
+func (sg *SwaggerGen) addFilters(ctx context.Context, route *Route, op *openapi3.Operation) {
+	if route.FilterFactory != nil {
+		fields := route.FilterFactory.NewFilter(ctx).Fields()
+		sort.Strings(fields)
+		for _, field := range fields {
+			sg.AddParam(ctx, op, "query", field, "", "", i18n.APIFilterParamDesc, false)
+		}
+		sg.AddParam(ctx, op, "query", "sort", "", "", i18n.APIFilterSortDesc, false)
+		sg.AddParam(ctx, op, "query", "ascending", "", "", i18n.APIFilterAscendingDesc, false)
+		sg.AddParam(ctx, op, "query", "descending", "", "", i18n.APIFilterDescendingDesc, false)
+		sg.AddParam(ctx, op, "query", "skip", "", "", i18n.APIFilterSkipDesc, false, sg.options.APIMaxFilterSkip)
+		sg.AddParam(ctx, op, "query", "limit", "", sg.options.APIDefaultFilterLimit, i18n.APIFilterLimitDesc, false, sg.options.APIMaxFilterLimit)
+		sg.AddParam(ctx, op, "query", "count", "", "", i18n.APIFilterCountDesc, false)
+	}
+}
+
 func (sg *SwaggerGen) addRoute(ctx context.Context, doc *openapi3.T, route *Route) {
 	var routeDescription string
 	pi := sg.getPathItem(doc, route.Path)
@@ -347,6 +367,9 @@ func (sg *SwaggerGen) addRoute(ctx context.Context, doc *openapi3.T, route *Rout
 		sg.AddParam(ctx, op, "query", q.Name, q.Default, example, q.Description, q.Deprecated)
 	}
 	sg.AddParam(ctx, op, "header", "Request-Timeout", sg.options.DefaultRequestTimeout.String(), "", i18n.APIRequestTimeoutDesc, false)
+
+	sg.addFilters(ctx, route, op)
+
 	if sg.options.RouteCustomizations != nil {
 		sg.options.RouteCustomizations(ctx, sg, route, op)
 	}

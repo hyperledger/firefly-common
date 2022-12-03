@@ -26,6 +26,7 @@ var TestQueryFactory = &QueryFields{
 	"author":   &StringField{},
 	"cid":      &UUIDField{},
 	"created":  &TimeField{},
+	"updated":  &TimeField{},
 	"hash":     &Bytes32Field{},
 	"id":       &UUIDField{},
 	"masked":   &BoolField{},

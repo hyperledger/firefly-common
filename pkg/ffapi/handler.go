@@ -37,6 +37,9 @@ import (
 type HandlerFactory struct {
 	DefaultRequestTimeout time.Duration
 	MaxTimeout            time.Duration
+	DefaultFilterLimit    uint64
+	MaxFilterSkip         uint64
+	MaxFilterLimit        uint64
 }
 
 var ffMsgCodeExtractor = regexp.MustCompile(`^(FF\d+):`)
@@ -142,11 +145,17 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 			queryParams, pathParams = hs.getParams(req, route)
 		}
 
+		var filter AndFilter
+		if err == nil && route.FilterFactory != nil {
+			filter, err = hs.buildFilter(req, route.FilterFactory)
+		}
+
 		if err == nil {
 			r := &APIRequest{
 				Req:             req,
 				PP:              pathParams,
 				QP:              queryParams,
+				Filter:          filter,
 				Input:           jsonInput,
 				SuccessStatus:   http.StatusOK,
 				ResponseHeaders: res.Header(),

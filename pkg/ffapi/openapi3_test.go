@@ -67,12 +67,13 @@ var ExampleDesc = i18n.FFM(language.AmericanEnglish, "TestKey", "Test Descriptio
 var testRoutes = []*Route{
 	{
 		Name:   "op1",
-		Path:   "namespaces/{ns}/example1/{id}",
+		Path:   "namespaces/{ns}/example1/{id}/things",
 		Method: http.MethodGet,
 		PathParams: []*PathParam{
 			{Name: "lang", ExampleFromConf: config.Lang, Description: ExampleDesc},
 			{Name: "id", Example: "id12345", Description: ExampleDesc},
 		},
+		FilterFactory:   TestQueryFactory,
 		QueryParams:     nil,
 		Description:     ExampleDesc,
 		JSONInputValue:  func() interface{} { return &TestStruct1{} },

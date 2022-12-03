@@ -123,4 +123,7 @@ var (
 	MsgHashMismatch                = ffe("FF00188", "Hash mismatch")
 	MsgIDMismatch                  = ffe("FF00189", "ID mismatch")
 	MsgUnsupportedSQLOpInFilter    = ffe("FF00190", "No SQL mapping implemented for filter operator '%s'", 400)
+	MsgMaxFilterSkip               = ffe("FF00191", "You have reached the maximum pagination limit for this query (%d)", 400)
+	MsgMaxFilterLimit              = ffe("FF00192", "Your query exceeds the maximum filter limit (%d)", 400)
+	MsgQueryOpUnsupportedMod       = ffe("FF00193", "Operation '%s' on '%s' does not support modifiers", 400)
 )

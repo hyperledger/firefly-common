@@ -195,6 +195,30 @@ func TestStatusCodeHintMapping(t *testing.T) {
 	assert.Regexp(t, "FF00165", resJSON["error"])
 }
 
+func TestFilter(t *testing.T) {
+	s, _, done := newTestServer(t, []*Route{{
+		Name:            "testRoute",
+		Path:            "/test",
+		Method:          "GET",
+		FilterFactory:   TestQueryFactory,
+		JSONInputValue:  nil,
+		JSONOutputValue: func() interface{} { return []string{} },
+		JSONOutputCodes: []int{200},
+		JSONHandler: func(r *APIRequest) (output interface{}, err error) {
+			assert.NotNil(t, r.Filter)
+			return r.FilterResult([]string{"test"}, nil, nil)
+		},
+	}})
+	defer done()
+
+	res, err := http.Get(fmt.Sprintf("http://%s/test?id=1234", s.Addr()))
+	assert.NoError(t, err)
+	assert.Equal(t, 200, res.StatusCode)
+	var resJSON []string
+	json.NewDecoder(res.Body).Decode(&resJSON)
+	assert.Equal(t, []string{"test"}, resJSON)
+}
+
 func TestStatusInvalidContentType(t *testing.T) {
 	s, _, done := newTestServer(t, []*Route{{
 		Name:            "testRoute",
