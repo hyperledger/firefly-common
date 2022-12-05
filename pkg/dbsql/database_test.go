@@ -29,6 +29,14 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+type testPreCommitAccumulator struct {
+	testFunc func(ctx context.Context, tx *TXWrapper) error
+}
+
+func (t *testPreCommitAccumulator) PreCommit(ctx context.Context, tx *TXWrapper) error {
+	return t.testFunc(ctx, tx)
+}
+
 func TestInitDatabaseMissingProvider(t *testing.T) {
 	s := &Database{}
 	err := s.Init(context.Background(), nil, nil)
@@ -161,10 +169,8 @@ func TestInsertTxOkPreAndPostCommit(t *testing.T) {
 	assert.NoError(t, err)
 
 	preCalled := false
-	tx.SetPreCommitAccumulator(&PreCommitAccumulator{
-		State: "my state",
-		PreCommit: func(ctx context.Context, tx *TXWrapper, state interface{}) error {
-			assert.Equal(t, "my state", state)
+	tx.SetPreCommitAccumulator(&testPreCommitAccumulator{
+		testFunc: func(ctx context.Context, tx *TXWrapper) error {
 			preCalled = true
 			return nil
 		},
@@ -333,8 +339,8 @@ func TestCommitTxPreCommitFail(t *testing.T) {
 	ctx, tx, autoCommit, err := mp.BeginOrUseTx(context.Background())
 	assert.NoError(t, err)
 
-	tx.SetPreCommitAccumulator(&PreCommitAccumulator{
-		PreCommit: func(ctx context.Context, tx *TXWrapper, state interface{}) error {
+	tx.SetPreCommitAccumulator(&testPreCommitAccumulator{
+		testFunc: func(ctx context.Context, tx *TXWrapper) error {
 			return fmt.Errorf("pop")
 		},
 	})

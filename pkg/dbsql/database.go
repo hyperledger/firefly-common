@@ -44,16 +44,15 @@ type Database struct {
 
 // PreCommitAccumulator is a structure that can accumulate state during
 // the transaction, then has a function that is called just before commit.
-type PreCommitAccumulator struct {
-	State     interface{}
-	PreCommit func(ctx context.Context, tx *TXWrapper, state interface{}) error
+type PreCommitAccumulator interface {
+	PreCommit(ctx context.Context, tx *TXWrapper) error
 }
 
 type txContextKey struct{}
 
 type TXWrapper struct {
 	sqlTX                *sql.Tx
-	preCommitAccumulator *PreCommitAccumulator
+	preCommitAccumulator PreCommitAccumulator
 	postCommit           []func()
 }
 
@@ -61,11 +60,11 @@ func (tx *TXWrapper) AddPostCommitHook(fn func()) {
 	tx.postCommit = append(tx.postCommit, fn)
 }
 
-func (tx *TXWrapper) PreCommitAccumulator() *PreCommitAccumulator {
+func (tx *TXWrapper) PreCommitAccumulator() PreCommitAccumulator {
 	return tx.preCommitAccumulator
 }
 
-func (tx *TXWrapper) SetPreCommitAccumulator(pca *PreCommitAccumulator) {
+func (tx *TXWrapper) SetPreCommitAccumulator(pca PreCommitAccumulator) {
 	tx.preCommitAccumulator = pca
 }
 
@@ -418,7 +417,7 @@ func (s *Database) CommitTx(ctx context.Context, tx *TXWrapper, autoCommit bool)
 	// regardless of the higher level logic, the events are always written at this point
 	// at the end of the transaction
 	if tx.preCommitAccumulator != nil {
-		if err := tx.preCommitAccumulator.PreCommit(ctx, tx, tx.preCommitAccumulator.State); err != nil {
+		if err := tx.preCommitAccumulator.PreCommit(ctx, tx); err != nil {
 			s.RollbackTx(ctx, tx, false)
 			return err
 		}
