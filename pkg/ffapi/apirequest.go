@@ -39,7 +39,7 @@ func (r *APIRequest) FilterResult(items interface{}, res *FilterResult, err erro
 	if err != nil || res == nil || res.TotalCount == nil || itemsVal.Kind() != reflect.Slice {
 		return items, err
 	}
-	return &filterResultsWithCount{
+	return &FilterResultsWithCount{
 		Total: *res.TotalCount,
 		Count: int64(itemsVal.Len()),
 		Items: items,

@@ -29,7 +29,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/log"
 )
 
-type filterResultsWithCount struct {
+type FilterResultsWithCount struct {
 	Count int64       `json:"count"`
 	Total int64       `json:"total"`
 	Items interface{} `json:"items"`
