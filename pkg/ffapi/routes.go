@@ -49,6 +49,8 @@ type Route struct {
 	Description i18n.MessageKey
 	// PreTranslatedDescription is a string describing the operation - used for programmatically generated routes where a built-in string translation is not available
 	PreTranslatedDescription string
+	// FilterFactory models the filter fields that can be specified on the API, and will automatically be parsed
+	FilterFactory QueryFactory
 	// JSONInputValue is a function that returns a pointer to a structure to take JSON input
 	JSONInputValue func() interface{}
 	// JSONInputMask are fields that aren't available for users to supply on input

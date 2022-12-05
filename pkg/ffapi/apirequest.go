@@ -18,6 +18,7 @@ package ffapi
 
 import (
 	"net/http"
+	"reflect"
 )
 
 type APIRequest struct {
@@ -25,8 +26,22 @@ type APIRequest struct {
 	QP              map[string]string
 	PP              map[string]string
 	FP              map[string]string
+	Filter          AndFilter
 	Input           interface{}
 	Part            *Multipart
 	SuccessStatus   int
 	ResponseHeaders http.Header
+}
+
+// FilterResult is a helper to transform a filter result into a REST API standard payload
+func (r *APIRequest) FilterResult(items interface{}, res *FilterResult, err error) (interface{}, error) {
+	itemsVal := reflect.ValueOf(items)
+	if err != nil || res == nil || res.TotalCount == nil || itemsVal.Kind() != reflect.Slice {
+		return items, err
+	}
+	return &FilterResultsWithCount{
+		Total: *res.TotalCount,
+		Count: int64(itemsVal.Len()),
+		Items: items,
+	}, nil
 }
