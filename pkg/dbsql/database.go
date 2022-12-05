@@ -69,7 +69,7 @@ func (tx *TXWrapper) SetPreCommitAccumulator(pca PreCommitAccumulator) {
 }
 
 func (s *Database) Init(ctx context.Context, provider Provider, config config.Section) (err error) {
-	if provider == nil || provider.Features().PlaceholderFormat == nil || config == nil {
+	if provider == nil || config == nil || provider.Features().PlaceholderFormat == nil || provider.SequenceColumn() == "" {
 		log.L(ctx).Errorf("Invalid SQL options from provider '%T'", provider)
 		return i18n.NewError(ctx, i18n.MsgDBInitFailed)
 	}
