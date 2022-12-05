@@ -134,7 +134,7 @@ func (u *setUpdate) Finalize() (*UpdateInfo, error) {
 		if !ok {
 			return nil, i18n.NewError(u.ub.ctx, i18n.MsgInvalidFilterField, name)
 		}
-		value := field.getSerialization()
+		value := field.GetSerialization()
 		if err := value.Scan(si.value); err != nil {
 			return nil, i18n.WrapError(u.ub.ctx, err, i18n.MsgInvalidValueForFilterField, name)
 		}

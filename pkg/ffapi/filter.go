@@ -352,7 +352,7 @@ func (f *baseFilter) Finalize() (fi *FilterInfo, err error) {
 			return nil, i18n.NewError(f.fb.ctx, i18n.MsgInvalidFilterField, name)
 		}
 		for i, fv := range fValues {
-			values[i] = field.getSerialization()
+			values[i] = field.GetSerialization()
 			if err = values[i].Scan(fv); err != nil {
 				return nil, i18n.WrapError(f.fb.ctx, err, i18n.MsgInvalidValueForFilterField, name)
 			}
@@ -373,15 +373,15 @@ func (f *baseFilter) Finalize() (fi *FilterInfo, err error) {
 			skipScan = true
 		case string:
 			switch {
-			case field.filterAsString():
+			case field.FilterAsString():
 				value = &stringField{}
 			case filterOpIsStringMatch(f.op):
-				return nil, i18n.NewError(f.fb.ctx, i18n.MsgFieldTypeNoStringMatching, name, field.description())
+				return nil, i18n.NewError(f.fb.ctx, i18n.MsgFieldTypeNoStringMatching, name, field.Description())
 			default:
-				value = field.getSerialization()
+				value = field.GetSerialization()
 			}
 		default:
-			value = field.getSerialization()
+			value = field.GetSerialization()
 		}
 		if !skipScan {
 			if err = value.Scan(f.value); err != nil {

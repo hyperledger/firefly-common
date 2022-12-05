@@ -43,7 +43,7 @@ func TestNullField(t *testing.T) {
 func TestStringField(t *testing.T) {
 
 	fd := &StringField{}
-	assert.NotEmpty(t, fd.description())
+	assert.NotEmpty(t, fd.Description())
 	f := stringField{}
 
 	err := f.Scan("test")
@@ -69,7 +69,7 @@ func TestStringField(t *testing.T) {
 func TestUUIDField(t *testing.T) {
 
 	fd := &UUIDField{}
-	assert.NotEmpty(t, fd.description())
+	assert.NotEmpty(t, fd.Description())
 	f := uuidField{}
 
 	err := f.Scan("")
@@ -96,7 +96,7 @@ func TestUUIDField(t *testing.T) {
 func TestBytes32Field(t *testing.T) {
 
 	fd := &Bytes32Field{}
-	assert.NotEmpty(t, fd.description())
+	assert.NotEmpty(t, fd.Description())
 	f := bytes32Field{}
 
 	err := f.Scan("")
@@ -123,7 +123,7 @@ func TestBytes32Field(t *testing.T) {
 func TestInt64Field(t *testing.T) {
 
 	fd := &Int64Field{}
-	assert.NotEmpty(t, fd.description())
+	assert.NotEmpty(t, fd.Description())
 	f := int64Field{}
 
 	err := f.Scan("12345")
@@ -143,7 +143,7 @@ func TestInt64Field(t *testing.T) {
 func TestTimeField(t *testing.T) {
 
 	fd := &TimeField{}
-	assert.NotEmpty(t, fd.description())
+	assert.NotEmpty(t, fd.Description())
 	f := timeField{}
 
 	now := time.Now()
@@ -164,7 +164,7 @@ func TestTimeField(t *testing.T) {
 func TestJSONField(t *testing.T) {
 
 	fd := &JSONField{}
-	assert.NotEmpty(t, fd.description())
+	assert.NotEmpty(t, fd.Description())
 	f := jsonField{}
 
 	err := f.Scan("{}")
@@ -187,7 +187,7 @@ func TestJSONField(t *testing.T) {
 func TestBoolField(t *testing.T) {
 
 	fd := &BoolField{}
-	assert.NotEmpty(t, fd.description())
+	assert.NotEmpty(t, fd.Description())
 	f := boolField{}
 
 	err := f.Scan("true")
@@ -207,7 +207,7 @@ func TestBoolField(t *testing.T) {
 func TestFFStringArrayField(t *testing.T) {
 
 	fd := &FFStringArrayField{}
-	assert.NotEmpty(t, fd.description())
+	assert.NotEmpty(t, fd.Description())
 	f := ffNameArrayField{}
 
 	err := f.Scan("a,b")
