@@ -161,9 +161,13 @@ func TestInsertTxOkPreAndPostCommit(t *testing.T) {
 	assert.NoError(t, err)
 
 	preCalled := false
-	tx.AddPreCommitHook(func(ctx context.Context, tx *TXWrapper) error {
-		preCalled = true
-		return nil
+	tx.SetPreCommitAccumulator(&PreCommitAccumulator{
+		State: "my state",
+		PreCommit: func(ctx context.Context, tx *TXWrapper, state interface{}) error {
+			assert.Equal(t, "my state", state)
+			preCalled = true
+			return nil
+		},
 	})
 
 	q := sq.Insert("table1").Columns("c1").Values("v1")
@@ -329,9 +333,12 @@ func TestCommitTxPreCommitFail(t *testing.T) {
 	ctx, tx, autoCommit, err := mp.BeginOrUseTx(context.Background())
 	assert.NoError(t, err)
 
-	tx.AddPreCommitHook(func(ctx context.Context, tx *TXWrapper) error {
-		return fmt.Errorf("pop")
+	tx.SetPreCommitAccumulator(&PreCommitAccumulator{
+		PreCommit: func(ctx context.Context, tx *TXWrapper, state interface{}) error {
+			return fmt.Errorf("pop")
+		},
 	})
+	assert.NotNil(t, tx.PreCommitAccumulator())
 
 	err = mp.CommitTx(ctx, tx, autoCommit)
 	assert.Regexp(t, "pop", err)

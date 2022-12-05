@@ -42,22 +42,31 @@ type Database struct {
 	sequenceColumn string
 }
 
-type PreCommitHook func(ctx context.Context, tx *TXWrapper) error
+// PreCommitAccumulator is a structure that can accumulate state during
+// the transaction, then has a function that is called just before commit.
+type PreCommitAccumulator struct {
+	State     interface{}
+	PreCommit func(ctx context.Context, tx *TXWrapper, state interface{}) error
+}
 
 type txContextKey struct{}
 
 type TXWrapper struct {
-	sqlTX          *sql.Tx
-	preCommitHooks []PreCommitHook
-	postCommit     []func()
+	sqlTX                *sql.Tx
+	preCommitAccumulator *PreCommitAccumulator
+	postCommit           []func()
 }
 
 func (tx *TXWrapper) AddPostCommitHook(fn func()) {
 	tx.postCommit = append(tx.postCommit, fn)
 }
 
-func (tx *TXWrapper) AddPreCommitHook(fn PreCommitHook) {
-	tx.preCommitHooks = append(tx.preCommitHooks, fn)
+func (tx *TXWrapper) PreCommitAccumulator() *PreCommitAccumulator {
+	return tx.preCommitAccumulator
+}
+
+func (tx *TXWrapper) SetPreCommitAccumulator(pca *PreCommitAccumulator) {
+	tx.preCommitAccumulator = pca
 }
 
 func (s *Database) Init(ctx context.Context, provider Provider, config config.Section) (err error) {
@@ -408,8 +417,8 @@ func (s *Database) CommitTx(ctx context.Context, tx *TXWrapper, autoCommit bool)
 	// Only at this stage do we write to the special events Database table, so we know
 	// regardless of the higher level logic, the events are always written at this point
 	// at the end of the transaction
-	for _, pch := range tx.preCommitHooks {
-		if err := pch(ctx, tx); err != nil {
+	if tx.preCommitAccumulator != nil {
+		if err := tx.preCommitAccumulator.PreCommit(ctx, tx, tx.preCommitAccumulator.State); err != nil {
 			s.RollbackTx(ctx, tx, false)
 			return err
 		}
