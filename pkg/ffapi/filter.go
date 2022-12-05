@@ -233,7 +233,7 @@ type FilterResult struct {
 	TotalCount *int64
 }
 
-func valueString(f FieldSerialization) string {
+func ValueString(f FieldSerialization) string {
 	v, _ := f.Value()
 	switch tv := v.(type) {
 	case nil:
@@ -260,11 +260,11 @@ func (f *FilterInfo) filterString() string {
 	case FilterOpIn, FilterOpNotIn:
 		strValues := make([]string, len(f.Values))
 		for i, v := range f.Values {
-			strValues[i] = valueString(v)
+			strValues[i] = ValueString(v)
 		}
 		return fmt.Sprintf("%s %s [%s]", f.Field, f.Op, strings.Join(strValues, ","))
 	default:
-		return fmt.Sprintf("%s %s %s", f.Field, f.Op, valueString(f.Value))
+		return fmt.Sprintf("%s %s %s", f.Field, f.Op, ValueString(f.Value))
 	}
 }
 

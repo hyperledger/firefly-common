@@ -119,7 +119,7 @@ func (u *UpdateInfo) String() string {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		buf.WriteString(fmt.Sprintf("%s=%s", si.Field, valueString(si.Value)))
+		buf.WriteString(fmt.Sprintf("%s=%s", si.Field, ValueString(si.Value)))
 	}
 	return buf.String()
 }
