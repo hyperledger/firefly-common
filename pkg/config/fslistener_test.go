@@ -28,17 +28,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func waitAndDrain(c chan bool) {
-	<-c
-	for {
-		select {
-		case <-c:
-		default:
-			return
-		}
-	}
-}
-
 func TestFileListenerE2E(t *testing.T) {
 
 	logrus.SetLevel(logrus.DebugLevel)
@@ -49,7 +38,7 @@ func TestFileListenerE2E(t *testing.T) {
 
 	// Start listener on empty dir
 	fsListenerDone := make(chan struct{})
-	fsListenerFired := make(chan bool, 5)
+	fsListenerFired := make(chan bool)
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	err := WatchConfig(ctx, func() {
 		err := viper.ReadInConfig()
@@ -62,24 +51,26 @@ func TestFileListenerE2E(t *testing.T) {
 
 	// Create the file
 	os.WriteFile(fmt.Sprintf("%s/test.yaml", tmpDir), []byte(`{"ut_conf": "one"}`), 0664)
-	waitAndDrain(fsListenerFired)
+	<-fsListenerFired
 	assert.Equal(t, "one", viper.Get("ut_conf"))
 
-	// Write an update
+	// Write an update - do it multiple times - we will fail if we get multiple events
 	os.WriteFile(fmt.Sprintf("%s/test.yaml", tmpDir), []byte(`{"ut_conf": "two"}`), 0664)
-	waitAndDrain(fsListenerFired)
+	os.WriteFile(fmt.Sprintf("%s/test.yaml", tmpDir), []byte(`{"ut_conf": "two"}`), 0664)
+	os.WriteFile(fmt.Sprintf("%s/test.yaml", tmpDir), []byte(`{"ut_conf": "two"}`), 0664)
+	<-fsListenerFired
 	assert.Equal(t, "two", viper.Get("ut_conf"))
 
 	// Rename in another file
 	os.WriteFile(fmt.Sprintf("%s/another.yaml", tmpDir), []byte(`{"ut_conf": "three"}`), 0664)
 	os.Rename(fmt.Sprintf("%s/another.yaml", tmpDir), fmt.Sprintf("%s/test.yaml", tmpDir))
-	waitAndDrain(fsListenerFired)
+	<-fsListenerFired
 	assert.Equal(t, "three", viper.Get("ut_conf"))
 
 	// Delete and recreate
 	os.Remove(fmt.Sprintf("%s/test.yaml", tmpDir))
 	os.WriteFile(fmt.Sprintf("%s/test.yaml", tmpDir), []byte(`{"ut_conf": "four"}`), 0664)
-	waitAndDrain(fsListenerFired)
+	<-fsListenerFired
 	assert.Equal(t, "four", viper.Get("ut_conf"))
 
 	defer func() {

@@ -22,6 +22,7 @@ import (
 	"path"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
 	"github.com/spf13/viper"
@@ -31,8 +32,8 @@ import (
 // Note this:
 // - Only ends if the context is closed
 // - Listens at the directory level, for cross OS compatibility
-// - Only fires if the config file has changed, and exists ok
-// - Tries to only fire once if possible
+// - Only fires if the config file has changed, and can be read
+// - Only fires if the data in the file is different to the last notification
 // - Does not reload the config - that's the caller's responsibility
 func WatchConfig(ctx context.Context, onChange, onClose func()) error {
 
@@ -66,6 +67,7 @@ func WatchConfig(ctx context.Context, onChange, onClose func()) error {
 func fsListenerLoop(ctx context.Context, fileName string, onChange, onClose func(), events chan fsnotify.Event, errors chan error) {
 	defer onClose()
 
+	var lastHash *fftypes.Bytes32
 	for {
 		select {
 		case <-ctx.Done():
@@ -75,13 +77,15 @@ func fsListenerLoop(ctx context.Context, fileName string, onChange, onClose func
 		case event := <-events:
 			isUpdate := (event.Op&(fsnotify.Create|fsnotify.Rename|fsnotify.Write) != 0)
 			log.L(ctx).Debugf("FSEvent [%s] update=%t: %s", event.Op, isUpdate, event.Name)
-			if path.Base(event.Name) == fileName {
-				if event.Op&(fsnotify.Create|fsnotify.Rename|fsnotify.Write) != 0 {
-					fi, err := os.Stat(event.Name)
-					if err == nil && !fi.IsDir() {
-						log.L(ctx).Infof("Config file change detected. Event=%s Name=%s Size=%d", event.Op, event.Name, fi.Size())
+			if isUpdate && path.Base(event.Name) == fileName {
+				data, err := os.ReadFile(event.Name)
+				if err == nil {
+					dataHash := fftypes.HashString(string(data))
+					if lastHash == nil || !dataHash.Equals(lastHash) {
+						log.L(ctx).Infof("Config file change detected. Event=%s Name=%s Size=%d Hash=%s", event.Op, event.Name, len(data), dataHash)
 						onChange()
 					}
+					lastHash = dataHash
 				}
 			}
 		case err, ok := <-errors:
