@@ -22,7 +22,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -131,7 +130,10 @@ func RootConfigReset(setServiceDefaults ...func()) {
 	keysMutex.Lock() // must only call viper directly here (as we already hold the lock)
 	defer keysMutex.Unlock()
 
+	// We retain the config file used during a reset, to facility dynamic reload scenarios
+	oldCfgFile := viper.ConfigFileUsed()
 	viper.Reset()
+	viper.SetConfigFile(oldCfgFile)
 
 	viper.SetDefault(string(Lang), "en")
 	viper.SetDefault(string(LogLevel), "info")
@@ -166,18 +168,13 @@ func ReadConfig(cfgSuffix, cfgFile string) error {
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 	viper.SetConfigType("yaml")
-	if cfgFile != "" {
-		f, err := os.Open(cfgFile)
-		if err == nil {
-			defer f.Close()
-			err = viper.ReadConfig(f)
-		}
-		return err
-	}
 	viper.SetConfigName(fmt.Sprintf("firefly.%s", cfgSuffix))
 	viper.AddConfigPath("/etc/firefly/")
 	viper.AddConfigPath("$HOME/.firefly")
 	viper.AddConfigPath(".")
+	if cfgFile != "" {
+		viper.SetConfigFile(cfgFile)
+	}
 	return viper.ReadInConfig()
 }
 
