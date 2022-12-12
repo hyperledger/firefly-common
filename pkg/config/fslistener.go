@@ -49,7 +49,7 @@ func WatchConfig(ctx context.Context, onChange, onClose func()) error {
 
 	watcher, err := fsnotify.NewWatcher()
 	if err == nil {
-		go fsListenerLoop(ctx, fileName, onChange, func() {
+		go fsListenerLoop(ctx, fullConfigFilePath, onChange, func() {
 			_ = watcher.Close()
 			if onClose != nil {
 				onClose()
@@ -64,7 +64,7 @@ func WatchConfig(ctx context.Context, onChange, onClose func()) error {
 	return nil
 }
 
-func fsListenerLoop(ctx context.Context, fileName string, onChange, onClose func(), events chan fsnotify.Event, errors chan error) {
+func fsListenerLoop(ctx context.Context, fullFilePath string, onChange, onClose func(), events chan fsnotify.Event, errors chan error) {
 	defer onClose()
 
 	var lastHash *fftypes.Bytes32
@@ -81,7 +81,7 @@ func fsListenerLoop(ctx context.Context, fileName string, onChange, onClose func
 			// particularly when listening in k8s to the softlink renames that occur for configmap/secret
 			// dynamic updates. So we use a hash of the file in all cases when something in the directory changes.
 			if isUpdate {
-				data, err := os.ReadFile(event.Name)
+				data, err := os.ReadFile(fullFilePath)
 				if err == nil {
 					dataHash := fftypes.HashString(string(data))
 					if lastHash == nil || !dataHash.Equals(lastHash) {
