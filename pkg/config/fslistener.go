@@ -77,7 +77,10 @@ func fsListenerLoop(ctx context.Context, fileName string, onChange, onClose func
 		case event := <-events:
 			isUpdate := (event.Op&(fsnotify.Create|fsnotify.Rename|fsnotify.Write) != 0)
 			log.L(ctx).Debugf("FSEvent [%s] update=%t: %s", event.Op, isUpdate, event.Name)
-			if isUpdate && path.Base(event.Name) == fileName {
+			// Note that we are not guaranteed to get an event that has the target filename in `event.Name`,
+			// particularly when listening in k8s to the softlink renames that occur for configmap/secret
+			// dynamic updates. So we use a hash of the file in all cases when something in the directory changes.
+			if isUpdate {
 				data, err := os.ReadFile(event.Name)
 				if err == nil {
 					dataHash := fftypes.HashString(string(data))

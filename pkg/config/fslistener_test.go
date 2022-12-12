@@ -54,24 +54,12 @@ func TestFileListenerE2E(t *testing.T) {
 	<-fsListenerFired
 	assert.Equal(t, "one", viper.Get("ut_conf"))
 
-	// Write an update - do it multiple times - we will fail if we get multiple events
-	os.WriteFile(fmt.Sprintf("%s/test.yaml", tmpDir), []byte(`{"ut_conf": "two"}`), 0664)
-	os.WriteFile(fmt.Sprintf("%s/test.yaml", tmpDir), []byte(`{"ut_conf": "two"}`), 0664)
-	os.WriteFile(fmt.Sprintf("%s/test.yaml", tmpDir), []byte(`{"ut_conf": "two"}`), 0664)
-	<-fsListenerFired
-	assert.Equal(t, "two", viper.Get("ut_conf"))
-
-	// Rename in another file
-	os.WriteFile(fmt.Sprintf("%s/another.yaml", tmpDir), []byte(`{"ut_conf": "three"}`), 0664)
+	// Delete and rename in another file
+	os.Remove(fmt.Sprintf("%s/test.yaml", tmpDir))
+	os.WriteFile(fmt.Sprintf("%s/another.yaml", tmpDir), []byte(`{"ut_conf": "two"}`), 0664)
 	os.Rename(fmt.Sprintf("%s/another.yaml", tmpDir), fmt.Sprintf("%s/test.yaml", tmpDir))
 	<-fsListenerFired
-	assert.Equal(t, "three", viper.Get("ut_conf"))
-
-	// Delete and recreate
-	os.Remove(fmt.Sprintf("%s/test.yaml", tmpDir))
-	os.WriteFile(fmt.Sprintf("%s/test.yaml", tmpDir), []byte(`{"ut_conf": "four"}`), 0664)
-	<-fsListenerFired
-	assert.Equal(t, "four", viper.Get("ut_conf"))
+	assert.Equal(t, "two", viper.Get("ut_conf"))
 
 	defer func() {
 		cancelCtx()
