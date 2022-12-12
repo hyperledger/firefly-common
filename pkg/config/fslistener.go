@@ -85,7 +85,7 @@ func fsListenerLoop(ctx context.Context, fullFilePath string, onChange, onClose 
 				if err == nil {
 					dataHash := fftypes.HashString(string(data))
 					if lastHash == nil || !dataHash.Equals(lastHash) {
-						log.L(ctx).Infof("Config file change detected. Event=%s Name=%s Size=%d Hash=%s", event.Op, event.Name, len(data), dataHash)
+						log.L(ctx).Infof("Config file change detected. Event=%s Name=%s Size=%d Hash=%s", event.Op, fullFilePath, len(data), dataHash)
 						onChange()
 					}
 					lastHash = dataHash
