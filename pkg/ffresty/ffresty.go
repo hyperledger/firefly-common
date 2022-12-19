@@ -28,6 +28,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-common/pkg/config"
+	"github.com/hyperledger/firefly-common/pkg/ffapi"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
@@ -69,6 +70,8 @@ func OnAfterResponse(c *resty.Client, resp *resty.Response) {
 func New(ctx context.Context, staticConfig config.Section) *resty.Client {
 
 	var client *resty.Client
+
+	passthroughHeadersEnabled := staticConfig.GetBool(HTTPPassthroughHeadersEnabled)
 
 	iHTTPClient := staticConfig.Get(HTTPCustomClient)
 	if iHTTPClient != nil {
@@ -123,6 +126,24 @@ func New(ctx context.Context, staticConfig config.Section) *resty.Client {
 			rCtx = log.WithLogger(rCtx, l)
 			req.SetContext(rCtx)
 		}
+
+		// If passthroughHeaders: true for this rest client, pass any of the allowed headers on the original req
+		if passthroughHeadersEnabled {
+			ctxHeaders := rCtx.Value(ffapi.CtxHeadersKey{})
+			if ctxHeaders != nil {
+				passthroughHeaders := ctxHeaders.(http.Header)
+				for key := range passthroughHeaders {
+					req.Header.Set(key, passthroughHeaders.Get(key))
+				}
+			}
+		}
+
+		// If an X-FireFlyRequestID was set on the context, pass that header on this request too
+		ffRequestID := rCtx.Value(ffapi.CtxFFRequestIDKey{})
+		if ffRequestID != nil {
+			req.Header.Set(ffapi.FFRequestIDHeader, ffRequestID.(string))
+		}
+
 		log.L(rCtx).Debugf("==> %s %s%s", req.Method, url, req.URL)
 		return nil
 	})

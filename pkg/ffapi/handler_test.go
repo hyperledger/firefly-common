@@ -41,6 +41,9 @@ const configDir = "../../test/data/config"
 func newTestHandlerFactory() *HandlerFactory {
 	return &HandlerFactory{
 		DefaultRequestTimeout: 5 * time.Second,
+		PassthroughHeaders: []string{
+			"X-Custom-Header",
+		},
 	}
 }
 
@@ -424,4 +427,36 @@ func TestGetTimeoutMax(t *testing.T) {
 	assert.NoError(t, err)
 	timeout := hf.getTimeout(req)
 	assert.Equal(t, 1*time.Second, timeout)
+}
+
+func TestCustomHeaderPassthrough(t *testing.T) {
+	s, _, done := newTestServer(t, []*Route{{
+		Name:            "testRoute",
+		Path:            "/test/{something}",
+		Method:          "POST",
+		PathParams:      []*PathParam{},
+		QueryParams:     []*QueryParam{},
+		JSONInputValue:  func() interface{} { return make(map[string]interface{}) },
+		JSONOutputValue: func() interface{} { return make(map[string]interface{}) },
+		JSONOutputCodes: []int{201},
+		JSONHandler: func(r *APIRequest) (output interface{}, err error) {
+			ctx := r.Req.Context()
+			headers := ctx.Value(CtxHeadersKey{}).(http.Header)
+			assert.Equal(t, headers.Get("X-Custom-Header"), "custom value")
+			return map[string]interface{}{"output1": "value2"}, nil
+		},
+	}})
+	defer done()
+
+	b, _ := json.Marshal(map[string]interface{}{"input1": "value1"})
+	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s/test/stuff", s.Addr()), bytes.NewReader(b))
+	req.Header.Set("Content-type", "application/json")
+	req.Header.Set("X-Custom-Header", "custom value")
+	assert.NoError(t, err)
+	res, err := http.DefaultClient.Do(req)
+	assert.NoError(t, err)
+	assert.Equal(t, 201, res.StatusCode)
+	var resJSON map[string]interface{}
+	json.NewDecoder(res.Body).Decode(&resJSON)
+	assert.Equal(t, "value2", resJSON["output1"])
 }

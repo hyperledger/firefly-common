@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/hyperledger/firefly-common/pkg/config"
+	"github.com/hyperledger/firefly-common/pkg/ffapi"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
@@ -158,4 +159,44 @@ func TestErrResponse(t *testing.T) {
 
 func TestOnAfterResponseNil(t *testing.T) {
 	OnAfterResponse(nil, nil)
+}
+
+func TestPassthroughHeaders(t *testing.T) {
+	passthroughHeaders := http.Header{}
+	passthroughHeaders.Set("X-Custom-Header", "custom value")
+	ctx := context.WithValue(context.Background(), ffapi.CtxHeadersKey{}, passthroughHeaders)
+	ctx = context.WithValue(ctx, ffapi.CtxFFRequestIDKey{}, "customReqID")
+
+	customClient := &http.Client{}
+
+	resetConf()
+	utConf.Set(HTTPConfigURL, "http://localhost:12345")
+	utConf.Set(HTTPConfigHeaders, map[string]interface{}{
+		"someheader": "headervalue",
+	})
+	utConf.Set(HTTPConfigAuthUsername, "user")
+	utConf.Set(HTTPConfigAuthPassword, "pass")
+	utConf.Set(HTTPConfigRetryEnabled, true)
+	utConf.Set(HTTPCustomClient, customClient)
+	utConf.Set(HTTPPassthroughHeadersEnabled, true)
+
+	c := New(context.Background(), utConf)
+	httpmock.ActivateNonDefault(customClient)
+	defer httpmock.DeactivateAndReset()
+
+	httpmock.RegisterResponder("GET", "http://localhost:12345/test",
+		func(req *http.Request) (*http.Response, error) {
+			assert.Equal(t, "customReqID", req.Header.Get(ffapi.FFRequestIDHeader))
+			assert.Equal(t, "headervalue", req.Header.Get("someheader"))
+			assert.Equal(t, "custom value", req.Header.Get("X-Custom-Header"))
+			assert.Equal(t, "Basic dXNlcjpwYXNz", req.Header.Get("Authorization"))
+			return httpmock.NewStringResponder(200, `{"some": "data"}`)(req)
+		})
+
+	resp, err := c.R().SetContext(ctx).Get("/test")
+	assert.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode())
+	assert.Equal(t, `{"some": "data"}`, resp.String())
+
+	assert.Equal(t, 1, httpmock.GetTotalCallCount())
 }
