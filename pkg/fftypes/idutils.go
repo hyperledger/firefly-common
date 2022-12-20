@@ -21,12 +21,12 @@ import (
 )
 
 const (
-	// ShortIDlphabet is designed for easy double-click select
-	ShortIDlphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
+	// ShortIDalphabet is designed for easy double-click select
+	ShortIDalphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz"
 )
 
 func ShortID() string {
-	return nanoid.Must(nanoid.Generate(ShortIDlphabet, 8))
+	return nanoid.Must(nanoid.Generate(ShortIDalphabet, 8))
 }
 
 func SafeHashCompare(h1 *Bytes32, h2 *Bytes32) bool {
