@@ -62,6 +62,19 @@ func TestValidateFFI(t *testing.T) {
 				},
 			},
 		},
+		Errors: []*FFIError{
+			{
+				FFIErrorDefinition: FFIErrorDefinition{
+					Name: "mathError",
+					Params: []*FFIParam{
+						{
+							Name:   "badOperand",
+							Schema: JSONAnyPtr(`{"type": "integer"}, "details": {"type": "uint256"}`),
+						},
+					},
+				},
+			},
+		},
 	}
 	err := ffi.Validate(context.Background(), true)
 	assert.NoError(t, err)
