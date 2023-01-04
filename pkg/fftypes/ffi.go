@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -46,6 +46,7 @@ type FFI struct {
 	Version     string       `ffstruct:"FFI" json:"version"`
 	Methods     []*FFIMethod `ffstruct:"FFI" json:"methods,omitempty"`
 	Events      []*FFIEvent  `ffstruct:"FFI" json:"events,omitempty"`
+	Errors      []*FFIError  `ffstruct:"FFI" json:"errors,omitempty"`
 }
 
 type FFIMethod struct {
@@ -74,6 +75,21 @@ type FFIEvent struct {
 	Pathname  string `ffstruct:"FFIEvent" json:"pathname,omitempty" ffexcludeinput:"true"`
 	Signature string `ffstruct:"FFIEvent" json:"signature" ffexcludeinput:"true"`
 	FFIEventDefinition
+}
+
+type FFIErrorDefinition struct {
+	Name        string    `ffstruct:"FFIError" json:"name"`
+	Description string    `ffstruct:"FFIError" json:"description"`
+	Params      FFIParams `ffstruct:"FFIError" json:"params"`
+}
+
+type FFIError struct {
+	ID        *UUID  `ffstruct:"FFIError" json:"id,omitempty" ffexcludeinput:"true"`
+	Interface *UUID  `ffstruct:"FFIError" json:"interface,omitempty" ffexcludeinput:"true"`
+	Namespace string `ffstruct:"FFIError" json:"namespace,omitempty" ffexcludeinput:"true"`
+	Pathname  string `ffstruct:"FFIError" json:"pathname,omitempty" ffexcludeinput:"true"`
+	Signature string `ffstruct:"FFIError" json:"signature" ffexcludeinput:"true"`
+	FFIErrorDefinition
 }
 
 type FFIParam struct {
