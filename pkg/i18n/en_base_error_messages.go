@@ -126,4 +126,5 @@ var (
 	MsgMaxFilterSkip               = ffe("FF00191", "You have reached the maximum pagination limit for this query (%d)", 400)
 	MsgMaxFilterLimit              = ffe("FF00192", "Your query exceeds the maximum filter limit (%d)", 400)
 	MsgQueryOpUnsupportedMod       = ffe("FF00193", "Operation '%s' on '%s' does not support modifiers", 400)
+	MsgFailedToStartListener       = ffe("FF00194", "Failed to start filesystem listener: %s")
 )

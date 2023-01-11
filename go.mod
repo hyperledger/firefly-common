@@ -7,6 +7,7 @@ require (
 	github.com/Masterminds/squirrel v1.5.3
 	github.com/aidarkhanov/nanoid v1.0.8
 	github.com/docker/go-units v0.5.0
+	github.com/fsnotify/fsnotify v1.6.0
 	github.com/getkin/kin-openapi v0.107.0
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-resty/resty/v2 v2.7.0
@@ -29,7 +30,6 @@ require (
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect
 	github.com/go-openapi/swag v0.22.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
