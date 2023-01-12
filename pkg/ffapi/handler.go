@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -34,7 +34,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/log"
 )
 
-const FFRequestIDHeader = "X-FireFlyRequestID"
+const FFRequestIDHeader = "X-FireFly-Request-ID"
 
 type (
 	CtxHeadersKey     struct{}
