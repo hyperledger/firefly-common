@@ -34,12 +34,20 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/log"
 )
 
+const FFRequestIDHeader = "X-FireFlyRequestID"
+
+type (
+	CtxHeadersKey     struct{}
+	CtxFFRequestIDKey struct{}
+)
+
 type HandlerFactory struct {
 	DefaultRequestTimeout time.Duration
 	MaxTimeout            time.Duration
 	DefaultFilterLimit    uint64
 	MaxFilterSkip         uint64
 	MaxFilterLimit        uint64
+	PassthroughHeaders    []string
 }
 
 var ffMsgCodeExtractor = regexp.MustCompile(`^(FF\d+):`)
@@ -259,8 +267,14 @@ func (hs *HandlerFactory) APIWrapper(handler func(res http.ResponseWriter, req *
 
 		reqTimeout := hs.getTimeout(req)
 		ctx, cancel := context.WithTimeout(req.Context(), reqTimeout)
-		httpReqID := fftypes.ShortID()
+		httpReqID := req.Header.Get(FFRequestIDHeader)
+		if httpReqID == "" {
+			httpReqID = fftypes.ShortID()
+		}
+		ctx = withRequestID(ctx, httpReqID)
+		ctx = withPassthroughHeaders(ctx, req, hs.PassthroughHeaders)
 		ctx = log.WithLogField(ctx, "httpreq", httpReqID)
+
 		req = req.WithContext(ctx)
 		defer cancel()
 
@@ -306,4 +320,16 @@ func (hs *HandlerFactory) APIWrapper(handler func(res http.ResponseWriter, req *
 			l.Infof("<-- %s %s [%d] (%.2fms)", req.Method, req.URL.Path, status, durationMS)
 		}
 	}
+}
+
+func withPassthroughHeaders(ctx context.Context, req *http.Request, passthroughHeaders []string) context.Context {
+	headers := http.Header{}
+	for _, key := range passthroughHeaders {
+		headers.Set(key, req.Header.Get(key))
+	}
+	return context.WithValue(ctx, CtxHeadersKey{}, headers)
+}
+
+func withRequestID(ctx context.Context, requestID string) context.Context {
+	return context.WithValue(ctx, CtxFFRequestIDKey{}, requestID)
 }

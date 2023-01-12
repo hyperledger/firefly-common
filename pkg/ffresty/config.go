@@ -19,16 +19,17 @@ package ffresty
 import "github.com/hyperledger/firefly-common/pkg/config"
 
 const (
-	defaultRetryEnabled              = false
-	defaultRetryCount                = 5
-	defaultRetryWaitTime             = "250ms"
-	defaultRetryMaxWaitTime          = "30s"
-	defaultRequestTimeout            = "30s"
-	defaultHTTPIdleTimeout           = "475ms" // Node.js default keepAliveTimeout is 5 seconds, so we have to set a base below this
-	defaultHTTPMaxIdleConns          = 100     // match Go's default
-	defaultHTTPConnectionTimeout     = "30s"
-	defaultHTTPTLSHandshakeTimeout   = "10s" // match Go's default
-	defaultHTTPExpectContinueTimeout = "1s"  // match Go's default
+	defaultRetryEnabled                  = false
+	defaultRetryCount                    = 5
+	defaultRetryWaitTime                 = "250ms"
+	defaultRetryMaxWaitTime              = "30s"
+	defaultRequestTimeout                = "30s"
+	defaultHTTPIdleTimeout               = "475ms" // Node.js default keepAliveTimeout is 5 seconds, so we have to set a base below this
+	defaultHTTPMaxIdleConns              = 100     // match Go's default
+	defaultHTTPConnectionTimeout         = "30s"
+	defaultHTTPTLSHandshakeTimeout       = "10s" // match Go's default
+	defaultHTTPExpectContinueTimeout     = "1s"  // match Go's default
+	defaultHTTPPassthroughHeadersEnabled = false
 )
 
 const (
@@ -62,6 +63,8 @@ const (
 	HTTPTLSHandshakeTimeout = "tlsHandshakeTimeout"
 	// HTTPExpectContinueTimeout see ExpectContinueTimeout in Go docs
 	HTTPExpectContinueTimeout = "expectContinueTimeout"
+	// HTTPPassthroughHeadersEnabled will pass through any HTTP headers found on the context
+	HTTPPassthroughHeadersEnabled = "passthroughHeadersEnabled"
 
 	// HTTPCustomClient - unit test only - allows injection of a custom HTTP client to resty
 	HTTPCustomClient = "customClient"
@@ -83,5 +86,6 @@ func InitConfig(conf config.KeySet) {
 	conf.AddKnownKey(HTTPConnectionTimeout, defaultHTTPConnectionTimeout)
 	conf.AddKnownKey(HTTPTLSHandshakeTimeout, defaultHTTPTLSHandshakeTimeout)
 	conf.AddKnownKey(HTTPExpectContinueTimeout, defaultHTTPExpectContinueTimeout)
+	conf.AddKnownKey(HTTPPassthroughHeadersEnabled, defaultHTTPPassthroughHeadersEnabled)
 	conf.AddKnownKey(HTTPCustomClient)
 }
