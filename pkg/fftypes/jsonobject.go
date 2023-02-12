@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -95,8 +95,30 @@ func (jd JSONObject) GetStringOk(key string) (string, bool) {
 		return vt, true
 	case bool:
 		return strconv.FormatBool(vt), true
+	case float32:
+		return strconv.FormatFloat(float64(vt), 'f', -1, 64), true
 	case float64:
 		return strconv.FormatFloat(vt, 'f', -1, 64), true
+	case int:
+		return strconv.FormatInt(int64(vt), 10), true
+	case int8:
+		return strconv.FormatInt(int64(vt), 10), true
+	case int16:
+		return strconv.FormatInt(int64(vt), 10), true
+	case int32:
+		return strconv.FormatInt(int64(vt), 10), true
+	case int64:
+		return strconv.FormatInt(vt, 10), true
+	case uint:
+		return strconv.FormatInt(int64(vt), 10), true
+	case uint8:
+		return strconv.FormatInt(int64(vt), 10), true
+	case uint16:
+		return strconv.FormatInt(int64(vt), 10), true
+	case uint32:
+		return strconv.FormatInt(int64(vt), 10), true
+	case uint64:
+		return strconv.FormatInt(int64(vt), 10), true
 	case nil:
 		return "", false // no need to log for nil
 	default:

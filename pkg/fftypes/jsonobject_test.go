@@ -84,6 +84,40 @@ func TestJSONObject(t *testing.T) {
 	assert.Equal(t, "", v)
 }
 
+func TestGetInt64NumberTypes(t *testing.T) {
+	var numberVals JSONObject = map[string]interface{}{
+		"v0": int(123),
+		"v1": int8(123),
+		"v2": int16(123),
+		"v3": int32(123),
+		"v4": int64(123),
+		"v5": uint(123),
+		"v6": uint8(123),
+		"v7": uint16(123),
+		"v8": uint32(123),
+		"v9": uint64(123),
+	}
+	assert.Equal(t, int64(123), numberVals.GetInt64("v0"))
+	assert.Equal(t, int64(123), numberVals.GetInt64("v1"))
+	assert.Equal(t, int64(123), numberVals.GetInt64("v2"))
+	assert.Equal(t, int64(123), numberVals.GetInt64("v3"))
+	assert.Equal(t, int64(123), numberVals.GetInt64("v4"))
+	assert.Equal(t, int64(123), numberVals.GetInt64("v5"))
+	assert.Equal(t, int64(123), numberVals.GetInt64("v6"))
+	assert.Equal(t, int64(123), numberVals.GetInt64("v7"))
+	assert.Equal(t, int64(123), numberVals.GetInt64("v8"))
+	assert.Equal(t, int64(123), numberVals.GetInt64("v9"))
+}
+
+func TestGetStringFloatNumberTypes(t *testing.T) {
+	var numberVals JSONObject = map[string]interface{}{
+		"v0": float32(123.4),
+		"v1": float64(123.4),
+	}
+	assert.Regexp(t, "123.4.*", numberVals.GetString("v0"))
+	assert.Equal(t, "123.4", numberVals.GetString("v1"))
+}
+
 func TestJSONObjectScan(t *testing.T) {
 
 	data := JSONObject{"some": "data"}
