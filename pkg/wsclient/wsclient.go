@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -20,7 +20,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"sync"
@@ -224,7 +224,7 @@ func (w *wsClient) connect(initial bool) error {
 			var b []byte
 			var status = -1
 			if res != nil {
-				b, _ = ioutil.ReadAll(res.Body)
+				b, _ = io.ReadAll(res.Body)
 				res.Body.Close()
 				status = res.StatusCode
 			}

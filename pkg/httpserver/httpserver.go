@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -21,9 +21,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -114,7 +114,7 @@ func (hs *httpServer) createServer(ctx context.Context, r *mux.Router) (srv *htt
 	if caFile != "" {
 		rootCAs = x509.NewCertPool()
 		var caBytes []byte
-		caBytes, err = ioutil.ReadFile(caFile)
+		caBytes, err = os.ReadFile(caFile)
 		if err == nil {
 			ok := rootCAs.AppendCertsFromPEM(caBytes)
 			if !ok {
