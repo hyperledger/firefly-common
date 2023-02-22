@@ -84,10 +84,10 @@ var prefixValidator = regexp.MustCompile(`[A-Z][A-Z]\d\d`)
 // You cannot use the `FF` prefix characters, as they are reserved for FireFly components
 func RegisterPrefix(prefix, description string) {
 	if !prefixValidator.MatchString(prefix) || strings.HasPrefix(prefix, "FF") {
-		panic("invalid prefix")
+		panic(fmt.Sprintf("invalid prefix %q", prefix))
 	}
 	if _, ok := registeredPrefixes[prefix]; ok {
-		panic("duplicate prefix")
+		panic(fmt.Sprintf("duplicate prefix %q", prefix))
 	}
 	registeredPrefixes[prefix] = description
 }
