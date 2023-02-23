@@ -19,7 +19,6 @@ package config
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -245,7 +244,7 @@ func TestSetupLoggingToFile(t *testing.T) {
 	RootConfigReset()
 	SetupLogging(context.Background())
 
-	b, err := ioutil.ReadFile(fileName)
+	b, err := os.ReadFile(fileName)
 	assert.NoError(t, err)
 	assert.Regexp(t, "Log level", string(b))
 }

@@ -27,7 +27,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math/big"
 	"net"
 	"net/http"
@@ -141,7 +140,7 @@ func TestTLSServerSelfSignedWithClientAuth(t *testing.T) {
 	privatekey, _ := rsa.GenerateKey(rand.Reader, 2048)
 	publickey := &privatekey.PublicKey
 	var privateKeyBytes []byte = x509.MarshalPKCS1PrivateKey(privatekey)
-	privateKeyFile, _ := ioutil.TempFile("", "key.pem")
+	privateKeyFile, _ := os.CreateTemp("", "key.pem")
 	defer os.Remove(privateKeyFile.Name())
 	privateKeyBlock := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: privateKeyBytes}
 	pem.Encode(privateKeyFile, privateKeyBlock)
@@ -159,7 +158,7 @@ func TestTLSServerSelfSignedWithClientAuth(t *testing.T) {
 	}
 	derBytes, err := x509.CreateCertificate(rand.Reader, x509Template, x509Template, publickey, privatekey)
 	assert.NoError(t, err)
-	publicKeyFile, _ := ioutil.TempFile("", "cert.pem")
+	publicKeyFile, _ := os.CreateTemp("", "cert.pem")
 	defer os.Remove(publicKeyFile.Name())
 	pem.Encode(publicKeyFile, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
 
@@ -189,7 +188,7 @@ func TestTLSServerSelfSignedWithClientAuth(t *testing.T) {
 
 	// Attempt a request, with a client certificate
 	rootCAs := x509.NewCertPool()
-	caPEM, _ := ioutil.ReadFile(publicKeyFile.Name())
+	caPEM, _ := os.ReadFile(publicKeyFile.Name())
 	ok := rootCAs.AppendCertsFromPEM(caPEM)
 	assert.True(t, ok)
 	c := http.Client{

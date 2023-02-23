@@ -21,7 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -303,10 +303,10 @@ func TestMultipartBinary(t *testing.T) {
 		JSONOutputCodes: []int{http.StatusCreated},
 		FormUploadHandler: func(r *APIRequest) (output interface{}, err error) {
 			assert.Equal(t, "testing", r.FP["param1"])
-			d, err := ioutil.ReadAll(r.Part.Data)
+			d, err := io.ReadAll(r.Part.Data)
 			assert.NoError(t, err)
 			assert.Equal(t, "some data", string(d))
-			return ioutil.NopCloser(strings.NewReader(`{"ok":true}`)), nil
+			return io.NopCloser(strings.NewReader(`{"ok":true}`)), nil
 		},
 	}})
 	defer done()
@@ -327,7 +327,7 @@ func TestMultipartBinary(t *testing.T) {
 	res, err := http.DefaultClient.Do(req)
 	assert.NoError(t, err)
 	assert.Equal(t, 201, res.StatusCode)
-	bodyBytes, err := ioutil.ReadAll(res.Body)
+	bodyBytes, err := io.ReadAll(res.Body)
 	assert.NoError(t, err)
 	assert.JSONEq(t, `{"ok":true}`, string(bodyBytes))
 }
