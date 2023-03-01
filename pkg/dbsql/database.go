@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -108,6 +108,10 @@ func (s *Database) Init(ctx context.Context, provider Provider, config config.Se
 
 func (s *Database) ConnLimit() int {
 	return s.connLimit
+}
+
+func (s *Database) Features() SQLFeatures {
+	return s.features
 }
 
 func (s *Database) SequenceColumn() string {
