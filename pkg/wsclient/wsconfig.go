@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -25,6 +25,7 @@ const (
 	defaultInitialConnectAttempts = 5
 	defaultBufferSize             = "16Kb"
 	defaultHeartbeatInterval      = "30s" // up to a minute to detect a dead connection
+	defaultDisableTLSVerification = false
 )
 
 const (
@@ -40,6 +41,8 @@ const (
 	WSConfigKeyPath = "ws.path"
 	// WSConfigHeartbeatInterval is the frequency of ping/pong requests, and also used for the timeout to receive a response to the heartbeat
 	WSConfigHeartbeatInterval = "ws.heartbeatInterval"
+	// WSConfigDisableTLSVerification can be set to true to disable strict TLS certificate checking
+	WSConfigDisableTLSVerification = "ws.disableTLSVerification"
 )
 
 // InitConfig ensures the config is initialized for HTTP too, as WS and HTTP
@@ -51,6 +54,7 @@ func InitConfig(conf config.KeySet) {
 	conf.AddKnownKey(WSConfigKeyInitialConnectAttempts, defaultInitialConnectAttempts)
 	conf.AddKnownKey(WSConfigKeyPath)
 	conf.AddKnownKey(WSConfigHeartbeatInterval, defaultHeartbeatInterval)
+	conf.AddKnownKey(WSConfigDisableTLSVerification, defaultDisableTLSVerification)
 }
 
 func GenerateConfig(conf config.Section) *WSConfig {
@@ -66,5 +70,6 @@ func GenerateConfig(conf config.Section) *WSConfig {
 		AuthUsername:           conf.GetString(ffresty.HTTPConfigAuthUsername),
 		AuthPassword:           conf.GetString(ffresty.HTTPConfigAuthPassword),
 		HeartbeatInterval:      conf.GetDuration(WSConfigHeartbeatInterval),
+		DisableTLSVerification: conf.GetBool(WSConfigDisableTLSVerification),
 	}
 }

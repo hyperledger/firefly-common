@@ -18,6 +18,7 @@ package wsclient
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -45,6 +46,7 @@ type WSConfig struct {
 	AuthPassword           string             `json:"authPassword,omitempty"`
 	HTTPHeaders            fftypes.JSONObject `json:"headers,omitempty"`
 	HeartbeatInterval      time.Duration      `json:"heartbeatInterval,omitempty"`
+	DisableTLSVerification bool               `json:"disableTLSVerification,omitempty"`
 }
 
 type WSClient interface {
@@ -96,6 +98,8 @@ func New(ctx context.Context, config *WSConfig, beforeConnect WSPreConnectHandle
 		wsdialer: &websocket.Dialer{
 			ReadBufferSize:  config.ReadBufferSize,
 			WriteBufferSize: config.WriteBufferSize,
+			//nolint:gosec
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: config.DisableTLSVerification},
 		},
 		retry: retry.Retry{
 			InitialDelay: config.InitialDelay,
