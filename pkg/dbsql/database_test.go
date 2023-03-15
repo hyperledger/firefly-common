@@ -1,4 +1,4 @@
-// Copyright © 2021 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -62,6 +62,19 @@ func TestInitDatabaseConnsAndSeqCol(t *testing.T) {
 
 	assert.Equal(t, 10, s.ConnLimit())
 	assert.Equal(t, "seq", s.SequenceColumn())
+}
+
+func TestInitDatabaseFeatures(t *testing.T) {
+	s := &Database{}
+	tp := newMockProvider()
+	s.InitConfig(tp, tp.config)
+	err := s.Init(context.Background(), tp, tp.config)
+	assert.NoError(t, err)
+	assert.NotNil(t, s.DB())
+
+	assert.NotNil(t, s.Features())
+	assert.Equal(t, true, s.Features().UseILIKE)
+	assert.Equal(t, false, s.Features().MultiRowInsert)
 }
 
 func TestInitDatabaseOpenFailed(t *testing.T) {

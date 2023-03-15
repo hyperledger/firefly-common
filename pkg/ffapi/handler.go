@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"reflect"
@@ -74,7 +73,7 @@ func (hs *HandlerFactory) getFilePart(req *http.Request) (*multipartState, error
 			return nil, i18n.WrapError(ctx, err, i18n.MsgMultiPartFormReadError)
 		}
 		if part.FileName() == "" {
-			value, _ := ioutil.ReadAll(part)
+			value, _ := io.ReadAll(part)
 			formParams[part.FormName()] = string(value)
 		} else {
 			l.Debugf("Processing multi-part upload. Field='%s' Filename='%s'", part.FormName(), part.FileName())

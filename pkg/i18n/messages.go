@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -19,6 +19,7 @@ package i18n
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"golang.org/x/text/language"
@@ -68,6 +69,28 @@ var fieldTypes = map[string]string{}
 var msgIDUniq = map[string]bool{}
 
 var fallbackLangPrinter = message.NewPrinter(language.AmericanEnglish)
+
+var prefixValidator = regexp.MustCompile(`[A-Z][A-Z]\d\d`)
+
+// RegisterPrefix allows components to register a message prefix that is not known to the core
+// Hyperledger FireFly codebase. The firefly-common repo does not provide the clash-protection
+// for these prefixes - so if you're writing a new component within the FF OSS community
+// then you should instead submit a PR to update the registeredPrefixes constant.
+//
+// If you're writing a proprietary extension, or just using the Microservice framework for your
+// own purposes, then you can register your own prefix with this function dynamically.
+//
+// It must conform to being two upper case characters, then two numbers.
+// You cannot use the `FF` prefix characters, as they are reserved for FireFly components
+func RegisterPrefix(prefix, description string) {
+	if !prefixValidator.MatchString(prefix) || strings.HasPrefix(prefix, "FF") {
+		panic(fmt.Sprintf("invalid prefix %q", prefix))
+	}
+	if _, ok := registeredPrefixes[prefix]; ok {
+		panic(fmt.Sprintf("duplicate prefix %q", prefix))
+	}
+	registeredPrefixes[prefix] = description
+}
 
 // FFE is the translation helper to register an error message
 func FFE(language language.Tag, key, translation string, statusHint ...int) ErrorMessageKey {

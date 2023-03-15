@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -19,7 +19,6 @@ package config
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"strings"
@@ -28,6 +27,7 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/text/language"
@@ -245,7 +245,7 @@ func TestSetupLoggingToFile(t *testing.T) {
 	RootConfigReset()
 	SetupLogging(context.Background())
 
-	b, err := ioutil.ReadFile(fileName)
+	b, err := os.ReadFile(fileName)
 	assert.NoError(t, err)
 	assert.Regexp(t, "Log level", string(b))
 }
@@ -366,5 +366,48 @@ func TestGenerateConfigMarkdownPanic(t *testing.T) {
 			string(key1),
 		})
 	})
+
+}
+
+func TestConfigWatchE2E(t *testing.T) {
+
+	logrus.SetLevel(logrus.DebugLevel)
+	tmpDir := t.TempDir()
+
+	viper.SetConfigType("yaml")
+	viper.SetConfigFile(fmt.Sprintf("%s/test.yaml", tmpDir))
+
+	// Start listener on empty dir
+	fsListenerDone := make(chan struct{})
+	fsListenerFired := make(chan bool)
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	err := WatchConfig(ctx, func() {
+		err := viper.ReadInConfig()
+		assert.NoError(t, err)
+		fsListenerFired <- true
+	}, func() {
+		close(fsListenerDone)
+	})
+	assert.NoError(t, err)
+
+	// Create the file
+	os.WriteFile(fmt.Sprintf("%s/test.yaml", tmpDir), []byte(`{"ut_conf": "one"}`), 0664)
+	<-fsListenerFired
+	assert.Equal(t, "one", viper.Get("ut_conf"))
+
+	// Delete and rename in another file
+	os.Remove(fmt.Sprintf("%s/test.yaml", tmpDir))
+	os.WriteFile(fmt.Sprintf("%s/another.yaml", tmpDir), []byte(`{"ut_conf": "two"}`), 0664)
+	os.Rename(fmt.Sprintf("%s/another.yaml", tmpDir), fmt.Sprintf("%s/test.yaml", tmpDir))
+	<-fsListenerFired
+	assert.Equal(t, "two", viper.Get("ut_conf"))
+
+	defer func() {
+		cancelCtx()
+		if a := recover(); a != nil {
+			panic(a)
+		}
+		<-fsListenerDone
+	}()
 
 }

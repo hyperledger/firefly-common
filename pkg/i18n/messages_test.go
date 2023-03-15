@@ -127,3 +127,29 @@ func TestDuplicateConfigKey(t *testing.T) {
 		FFC(language.AmericanEnglish, "config.test.2", "test2 dupe", "dupe type")
 	})
 }
+
+func TestRegisterPrefixOK(t *testing.T) {
+	RegisterPrefix("AB12", "my microservice")
+	msgMyMessage := ffe("AB1200000", "Something went pop")
+	err := NewError(context.Background(), msgMyMessage)
+	assert.Regexp(t, "AB1200000", err)
+}
+
+func TestRegisterPrefixInvalid(t *testing.T) {
+	assert.Panics(t, func() {
+		RegisterPrefix("wrong", "my microservice")
+	})
+}
+
+func TestRegisterPrefixFF(t *testing.T) {
+	assert.Panics(t, func() {
+		RegisterPrefix("wrong", "FF01")
+	})
+}
+
+func TestRegisterPrefixDuplicate(t *testing.T) {
+	assert.Panics(t, func() {
+		RegisterPrefix("AB12", "my microservice")
+		RegisterPrefix("AB12", "my microservice")
+	})
+}

@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
+	"github.com/hyperledger/firefly-common/pkg/fswatcher"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
 	"github.com/sirupsen/logrus"
@@ -176,6 +177,18 @@ func ReadConfig(cfgSuffix, cfgFile string) error {
 		viper.SetConfigFile(cfgFile)
 	}
 	return viper.ReadInConfig()
+}
+
+// Listens for changes to the configuration file configured in Viper.
+func WatchConfig(ctx context.Context, onChange, onClose func()) error {
+
+	// Note that while viper.WatchConfig() exists, it doesn't handle various
+	// types of config change. Specifically it doesn't handle the case where the
+	// removed event comes from the filesystem, before the create/update event(s).
+	// The listener just ends in that case, and stops notifying of events :shrug
+
+	fullConfigFilePath := viper.ConfigFileUsed()
+	return fswatcher.Watch(ctx, fullConfigFilePath, onChange, onClose)
 }
 
 func MergeConfig(configRecords []*fftypes.ConfigRecord) error {

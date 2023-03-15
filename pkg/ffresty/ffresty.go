@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -20,7 +20,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -192,7 +192,7 @@ func WrapRestErr(ctx context.Context, res *resty.Response, err error, key i18n.E
 	if res != nil {
 		if res.RawBody() != nil {
 			defer func() { _ = res.RawBody().Close() }()
-			if r, err := ioutil.ReadAll(res.RawBody()); err == nil {
+			if r, err := io.ReadAll(res.RawBody()); err == nil {
 				respData = string(r)
 			}
 		}
