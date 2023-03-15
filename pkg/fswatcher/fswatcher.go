@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package fswatcher
 
 import (
 	"context"
@@ -25,31 +25,23 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
-	"github.com/spf13/viper"
 )
 
-// Listens for changes to the configuration file configured in Viper.
+// Listens for changes to the specified file.
 // Note this:
 // - Only ends if the context is closed
 // - Listens at the directory level, for cross OS compatibility
 // - Only fires if the config file has changed, and can be read
 // - Only fires if the data in the file is different to the last notification
 // - Does not reload the config - that's the caller's responsibility
-func WatchConfig(ctx context.Context, onChange, onClose func()) error {
-
-	// Note that while viper.WatchConfig() exists, it doesn't handle various
-	// types of config change. Specifically it doesn't handle the case where the
-	// removed event comes from the filesystem, before the create/update event(s).
-	// The listener just ends in that case, and stops notifying of events :shrug
-
-	fullConfigFilePath := viper.ConfigFileUsed()
-	filePath := path.Dir(fullConfigFilePath)
-	fileName := path.Base(fullConfigFilePath)
-	log.L(ctx).Debugf("Starting config file listener for '%s' in directory '%s'", fileName, filePath)
+func Watch(ctx context.Context, fullFilePath string, onChange, onClose func()) error {
+	filePath := path.Dir(fullFilePath)
+	fileName := path.Base(fullFilePath)
+	log.L(ctx).Debugf("Starting file listener for '%s' in directory '%s'", fileName, filePath)
 
 	watcher, err := fsnotify.NewWatcher()
 	if err == nil {
-		go fsListenerLoop(ctx, fullConfigFilePath, onChange, func() {
+		go fsListenerLoop(ctx, fullFilePath, onChange, func() {
 			_ = watcher.Close()
 			if onClose != nil {
 				onClose()
