@@ -50,27 +50,32 @@ type MetricsRegistry interface {
 	GetHTTPMetricsInstrumentationsMiddlewareForSubsystem(ctx context.Context, subsystem string) (func(next http.Handler) http.Handler, error)
 }
 
+type FireflyDefaultLabels struct {
+	Namespace string
+}
+
 // MetricsManager is used to defined and emit metrics in a subsystem
+// All functions in this interface should swallow errors as metrics are auxiliary
 type MetricsManager interface {
 	// functions for defining metrics
-	NewCounterMetric(ctx context.Context, metricName string, helpText string)
-	NewCounterMetricWithLabels(ctx context.Context, metricName string, helpText string, labelNames []string)
-	NewGaugeMetric(ctx context.Context, metricName string, helpText string)
-	NewGaugeMetricWithLabels(ctx context.Context, metricName string, helpText string, labelNames []string)
-	NewHistogramMetric(ctx context.Context, metricName string, helpText string, buckets []float64)
-	NewHistogramMetricWithLabels(ctx context.Context, metricName string, helpText string, buckets []float64, labelNames []string)
-	NewSummaryMetric(ctx context.Context, metricName string, helpText string)
-	NewSummaryMetricWithLabels(ctx context.Context, metricName string, helpText string, labelNames []string)
+	NewCounterMetric(ctx context.Context, metricName string, helpText string, withDefaultLabels bool)
+	NewCounterMetricWithLabels(ctx context.Context, metricName string, helpText string, labelNames []string, withDefaultLabels bool)
+	NewGaugeMetric(ctx context.Context, metricName string, helpText string, withDefaultLabels bool)
+	NewGaugeMetricWithLabels(ctx context.Context, metricName string, helpText string, labelNames []string, withDefaultLabels bool)
+	NewHistogramMetric(ctx context.Context, metricName string, helpText string, buckets []float64, withDefaultLabels bool)
+	NewHistogramMetricWithLabels(ctx context.Context, metricName string, helpText string, buckets []float64, labelNames []string, withDefaultLabels bool)
+	NewSummaryMetric(ctx context.Context, metricName string, helpText string, withDefaultLabels bool)
+	NewSummaryMetricWithLabels(ctx context.Context, metricName string, helpText string, labelNames []string, withDefaultLabels bool)
 
 	// functions for emitting metrics
-	SetGaugeMetric(ctx context.Context, metricName string, number float64)
-	SetGaugeMetricWithLabels(ctx context.Context, metricName string, number float64, labels map[string]string)
-	IncCounterMetric(ctx context.Context, metricName string)
-	IncCounterMetricWithLabels(ctx context.Context, metricName string, labels map[string]string)
-	ObserveHistogramMetric(ctx context.Context, metricName string, number float64)
-	ObserveHistogramMetricWithLabels(ctx context.Context, metricName string, number float64, labels map[string]string)
-	ObserveSummaryMetric(ctx context.Context, metricName string, number float64)
-	ObserveSummaryMetricWithLabels(ctx context.Context, metricName string, number float64, labels map[string]string)
+	SetGaugeMetric(ctx context.Context, metricName string, number float64, defaultLabels *FireflyDefaultLabels)
+	SetGaugeMetricWithLabels(ctx context.Context, metricName string, number float64, labels map[string]string, defaultLabels *FireflyDefaultLabels)
+	IncCounterMetric(ctx context.Context, metricName string, defaultLabels *FireflyDefaultLabels)
+	IncCounterMetricWithLabels(ctx context.Context, metricName string, labels map[string]string, defaultLabels *FireflyDefaultLabels)
+	ObserveHistogramMetric(ctx context.Context, metricName string, number float64, defaultLabels *FireflyDefaultLabels)
+	ObserveHistogramMetricWithLabels(ctx context.Context, metricName string, number float64, labels map[string]string, defaultLabels *FireflyDefaultLabels)
+	ObserveSummaryMetric(ctx context.Context, metricName string, number float64, defaultLabels *FireflyDefaultLabels)
+	ObserveSummaryMetricWithLabels(ctx context.Context, metricName string, number float64, labels map[string]string, defaultLabels *FireflyDefaultLabels)
 }
 
 func NewPrometheusMetricsRegistry() MetricsRegistry {
@@ -111,7 +116,7 @@ func (pmr *prometheusMetricsRegistry) NewMetricsManagerForSubsystem(ctx context.
 		namespace:  pmr.namespace,
 		subsystem:  subsystem,
 		registry:   pmr.registry,
-		metricsMap: make(map[string]prometheus.Collector),
+		metricsMap: make(map[string]*prometheusMetric),
 	}
 	return pmr.managerMap[subsystem], nil
 }

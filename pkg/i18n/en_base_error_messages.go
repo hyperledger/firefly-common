@@ -134,4 +134,5 @@ var (
 	MsgMetricsDuplicateName                        = ffe("FF00199", "Metric with name '%s' already exist")
 	MsgMetricsEmptyRegistry                        = ffe("FF00200", "Metrics registry has no subsystem registered")
 	MsgMetricsSubsystemHTTPInstrumentationNotFound = ffe("FF00201", "No HTTP metrics instrumentation found for subsystem %s")
+	MsgMetricsInvalidLabel                         = ffe("FF00202", "Label with name '%s' is invalid due to clashing with system prefix '%s'")
 )
