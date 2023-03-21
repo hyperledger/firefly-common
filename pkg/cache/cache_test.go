@@ -27,13 +27,13 @@ import (
 func TestGetCacheReturnsSameCacheForSameConfig(t *testing.T) {
 	ctx := context.Background()
 	cacheManager := NewCacheManager(ctx, true)
-	cache0, _ := cacheManager.GetCache(ctx, "cacheA", 85, time.Second)
-	cache1, _ := cacheManager.GetCache(ctx, "cacheA", 85, time.Second)
+	cache0, _ := cacheManager.GetCache(ctx, "cacheA", 85, time.Second, true)
+	cache1, _ := cacheManager.GetCache(ctx, "cacheA", 85, time.Second, true)
 
 	assert.Equal(t, cache0, cache1)
 	assert.Equal(t, []string{"cacheA"}, cacheManager.ListCacheNames())
 
-	cache2, _ := cacheManager.GetCache(ctx, "cacheB", 85, time.Second)
+	cache2, _ := cacheManager.GetCache(ctx, "cacheB", 85, time.Second, true)
 	assert.NotEqual(t, cache0, cache2)
 	assert.Equal(t, 2, len(cacheManager.ListCacheNames()))
 }
@@ -41,8 +41,8 @@ func TestGetCacheReturnsSameCacheForSameConfig(t *testing.T) {
 func TestTwoSeparateCacheWorksIndependently(t *testing.T) {
 	ctx := context.Background()
 	cacheManager := NewCacheManager(ctx, true)
-	cache0, _ := cacheManager.GetCache(ctx, "cacheA", 85, time.Second)
-	cache1, _ := cacheManager.GetCache(ctx, "cacheB", 85, time.Second)
+	cache0, _ := cacheManager.GetCache(ctx, "cacheA", 85, time.Second, true)
+	cache1, _ := cacheManager.GetCache(ctx, "cacheB", 85, time.Second, true)
 
 	cache0.SetInt("int0", 100)
 	assert.Equal(t, 100, cache0.GetInt("int0"))
@@ -58,6 +58,42 @@ func TestTwoSeparateCacheWorksIndependently(t *testing.T) {
 	deleted := cache1.Delete("string1")
 	assert.True(t, deleted)
 	assert.Equal(t, nil, cache1.Get("string1"))
+}
+
+func TestCacheEnablement(t *testing.T) {
+	ctx := context.Background()
+	var hundred int64 = 100
+	var zero int64 = 0
+	// test global enablement set to false
+	disabledCacheManager := NewCacheManager(ctx, false)
+	cache0, _ := disabledCacheManager.GetCache(ctx, "cache0", 85, time.Second, false)
+	assert.Equal(t, false, cache0.IsEnabled())
+
+	cache0.SetInt64("int0", hundred)
+	assert.Equal(t, nil, cache0.Get("int0"))
+
+	// check individual cache cannot be turned on when the cache manager is disabled
+	cache1, _ := disabledCacheManager.GetCache(ctx, "cache1", 85, time.Second, true)
+	assert.Equal(t, false, cache1.IsEnabled())
+
+	// test global enablement set to true
+
+	enabledCacheManager := NewCacheManager(ctx, true)
+	// check individual cache can be turned off when the cache manager is enabled
+	cache0, _ = enabledCacheManager.GetCache(ctx, "cache0", 85, time.Second, false)
+	assert.Equal(t, false, cache0.IsEnabled())
+
+	cache0.SetInt64("int0", hundred)
+	assert.Equal(t, zero, cache0.GetInt64("int0"))
+	deleted := cache0.Delete("int0")
+	assert.False(t, deleted)
+
+	cache1, _ = enabledCacheManager.GetCache(ctx, "cache1", 85, time.Second, true)
+	assert.Equal(t, true, cache1.IsEnabled())
+
+	cache1.SetInt64("int0", hundred)
+	assert.Equal(t, hundred, cache1.GetInt64("int0"))
+
 }
 
 func TestUmmanagedCacheInstance(t *testing.T) {
