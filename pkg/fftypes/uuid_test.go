@@ -115,3 +115,27 @@ func TestJSONMarshal(t *testing.T) {
 	}`, string(b))
 
 }
+
+func TestParseNamespacedUUID(t *testing.T) {
+
+	ctx := context.Background()
+	u := NewUUID()
+
+	_, _, err := ParseNamespacedUUID(ctx, "")
+	assert.Regexp(t, "FF00203", err)
+
+	_, _, err = ParseNamespacedUUID(ctx, "a::"+u.String())
+	assert.Regexp(t, "FF00203", err)
+
+	_, _, err = ParseNamespacedUUID(ctx, "bad%namespace:"+u.String())
+	assert.Regexp(t, "FF00140", err)
+
+	_, _, err = ParseNamespacedUUID(ctx, "ns1:Bad UUID")
+	assert.Regexp(t, "FF00138", err)
+
+	ns, u1, err := ParseNamespacedUUID(ctx, NewNamespacedUUIDString(ctx, "ns1", u))
+	assert.NoError(t, err)
+	assert.Equal(t, u, u1)
+	assert.Equal(t, "ns1", ns)
+
+}

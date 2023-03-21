@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -20,6 +20,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/binary"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
@@ -27,6 +28,24 @@ import (
 
 // UUID is a wrapper on a UUID implementation, ensuring Value handles nil
 type UUID uuid.UUID
+
+func NewNamespacedUUIDString(ctx context.Context, namespace string, uuid *UUID) string {
+	return namespace + ":" + uuid.String()
+}
+
+func ParseNamespacedUUID(ctx context.Context, nsIDStr string) (namespace string, uuid *UUID, err error) {
+	idSplit := strings.Split(nsIDStr, ":")
+	if len(idSplit) != 2 {
+		return "", nil, i18n.NewError(ctx, i18n.MsgInvalidNamespaceUUID, nsIDStr)
+	}
+	ns := idSplit[0]
+	uuidStr := idSplit[1]
+	if err := ValidateFFNameField(ctx, ns, "namespace"); err != nil {
+		return "", nil, err
+	}
+	u, err := ParseUUID(ctx, uuidStr)
+	return ns, u, err
+}
 
 func ParseUUID(ctx context.Context, uuidStr string) (*UUID, error) {
 	u, err := uuid.Parse(uuidStr)
