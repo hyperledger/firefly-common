@@ -30,20 +30,21 @@ var supportedTypes = []string{"counterVec", "gaugeVec", "histogramVec", "summary
 
 const fireflySystemLabelsPrefix = "ff_"
 const namespaceLabel = fireflySystemLabelsPrefix + "namespace"
+const componentLabel = fireflySystemLabelsPrefix + "component"
 
 // In prometheus, there is no harm to define labels for future proofing
 // as the number of time series (the ways metrics data are stored)
 // is determined by the number of unique label VALUE combinations, not label name
 // therefore, pre-defining a label but never emitting metrics with that label
 // will not increase the number of time series
-var defaultFireflySystemLabels = []string{namespaceLabel}
+var optionalFireflySystemLabels = []string{namespaceLabel}
 
 func checkAndUpdateLabelNames(ctx context.Context, labelNames []string, withDefaultLabels bool) []string {
-	validLabelNames := []string{}
+	validLabelNames := []string{componentLabel}
 
 	if withDefaultLabels {
 		// with default system labels
-		validLabelNames = defaultFireflySystemLabels
+		validLabelNames = append(validLabelNames, optionalFireflySystemLabels...)
 	}
 
 	// check label names are not clashing with system prefix
@@ -59,9 +60,10 @@ func checkAndUpdateLabelNames(ctx context.Context, labelNames []string, withDefa
 	return validLabelNames
 }
 
-func checkAndUpdateLabels(ctx context.Context, labelNames []string, labels map[string]string, defaultLabels *FireflyDefaultLabels) map[string]string {
+func checkAndUpdateLabels(ctx context.Context, labelNames []string, labels map[string]string, defaultLabels *FireflyDefaultLabels, componentName string) map[string]string {
 	validLabels := make(map[string]string)
 	// set system default label values if provided
+	validLabels[componentLabel] = componentName
 
 	// check label names are not clashing with system prefix
 	for _, labelName := range labelNames {
@@ -84,10 +86,11 @@ func checkAndUpdateLabels(ctx context.Context, labelNames []string, labels map[s
 }
 
 type prometheusMetricsManager struct {
-	namespace  string
-	subsystem  string
-	registry   *prometheus.Registry
-	metricsMap map[string]*prometheusMetric
+	componentName string
+	namespace     string
+	subsystem     string
+	registry      *prometheus.Registry
+	metricsMap    map[string]*prometheusMetric
 }
 
 type prometheusMetric struct {
@@ -230,7 +233,7 @@ func (pmm *prometheusMetricsManager) SetGaugeMetricWithLabels(ctx context.Contex
 		log.L(ctx).Warnf("Transaction handler metric with name: '%s' and type: '%s' is not found", metricName, "gaugeVec")
 	} else {
 		collector := m.Metric
-		collector.(*prometheus.GaugeVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels)).Set(number)
+		collector.(*prometheus.GaugeVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels, pmm.componentName)).Set(number)
 	}
 }
 
@@ -245,7 +248,7 @@ func (pmm *prometheusMetricsManager) IncCounterMetricWithLabels(ctx context.Cont
 		log.L(ctx).Warnf("Transaction handler metric with name: '%s' and type: '%s' is not found", metricName, "counterVec")
 	} else {
 		collector := m.Metric
-		collector.(*prometheus.CounterVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels)).Inc()
+		collector.(*prometheus.CounterVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels, pmm.componentName)).Inc()
 	}
 }
 
@@ -260,7 +263,7 @@ func (pmm *prometheusMetricsManager) ObserveHistogramMetricWithLabels(ctx contex
 		log.L(ctx).Warnf("Transaction handler metric with name: '%s' and type: '%s' is not found", metricName, "histogramVec")
 	} else {
 		collector := m.Metric
-		collector.(*prometheus.HistogramVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels)).Observe(number)
+		collector.(*prometheus.HistogramVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels, pmm.componentName)).Observe(number)
 	}
 }
 
@@ -274,6 +277,6 @@ func (pmm *prometheusMetricsManager) ObserveSummaryMetricWithLabels(ctx context.
 		log.L(ctx).Warnf("Transaction handler metric with name: '%s' and type: '%s' is not found", metricName, "summaryVec")
 	} else {
 		collector := m.Metric
-		collector.(*prometheus.SummaryVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels)).Observe(number)
+		collector.(*prometheus.SummaryVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels, pmm.componentName)).Observe(number)
 	}
 }
