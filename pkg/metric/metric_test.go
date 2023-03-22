@@ -105,7 +105,7 @@ func TestMetricsManagerWithDefaultLabels(t *testing.T) {
 }
 
 func TestMetricsManagerErrors(t *testing.T) {
-	mr := NewPrometheusMetricsRegistry("test")
+	mr := NewPrometheusMetricsRegistry("")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	mm, err := mr.NewMetricsManagerForSubsystem(ctx, "tm")

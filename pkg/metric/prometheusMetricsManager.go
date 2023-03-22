@@ -30,7 +30,6 @@ var supportedTypes = []string{"counterVec", "gaugeVec", "histogramVec", "summary
 
 const fireflySystemLabelsPrefix = "ff_"
 const namespaceLabel = fireflySystemLabelsPrefix + "namespace"
-const componentLabel = fireflySystemLabelsPrefix + "component"
 
 // In prometheus, there is no harm to define labels for future proofing
 // as the number of time series (the ways metrics data are stored)
@@ -40,7 +39,7 @@ const componentLabel = fireflySystemLabelsPrefix + "component"
 var optionalFireflySystemLabels = []string{namespaceLabel}
 
 func checkAndUpdateLabelNames(ctx context.Context, labelNames []string, withDefaultLabels bool) []string {
-	validLabelNames := []string{componentLabel}
+	validLabelNames := []string{}
 
 	if withDefaultLabels {
 		// with default system labels
@@ -60,11 +59,8 @@ func checkAndUpdateLabelNames(ctx context.Context, labelNames []string, withDefa
 	return validLabelNames
 }
 
-func checkAndUpdateLabels(ctx context.Context, labelNames []string, labels map[string]string, defaultLabels *FireflyDefaultLabels, componentName string) map[string]string {
+func checkAndUpdateLabels(ctx context.Context, labelNames []string, labels map[string]string, defaultLabels *FireflyDefaultLabels) map[string]string {
 	validLabels := make(map[string]string)
-	// set system default label values if provided
-	validLabels[componentLabel] = componentName
-
 	// check label names are not clashing with system prefix
 	for _, labelName := range labelNames {
 		if !strings.HasPrefix(labelName, fireflySystemLabelsPrefix) {
@@ -86,11 +82,10 @@ func checkAndUpdateLabels(ctx context.Context, labelNames []string, labels map[s
 }
 
 type prometheusMetricsManager struct {
-	componentName string
-	namespace     string
-	subsystem     string
-	registry      *prometheus.Registry
-	metricsMap    map[string]*prometheusMetric
+	namespace  string
+	subsystem  string
+	registerer prometheus.Registerer
+	metricsMap map[string]*prometheusMetric
 }
 
 type prometheusMetric struct {
@@ -221,7 +216,7 @@ func (pmm *prometheusMetricsManager) registerMetrics(ctx context.Context, mr reg
 		}
 
 	}
-	pmm.registry.MustRegister(pmm.metricsMap[internalMapIndex].Metric)
+	pmm.registerer.MustRegister(pmm.metricsMap[internalMapIndex].Metric)
 }
 
 func (pmm *prometheusMetricsManager) SetGaugeMetric(ctx context.Context, metricName string, number float64, defaultLabels *FireflyDefaultLabels) {
@@ -233,7 +228,7 @@ func (pmm *prometheusMetricsManager) SetGaugeMetricWithLabels(ctx context.Contex
 		log.L(ctx).Warnf("Transaction handler metric with name: '%s' and type: '%s' is not found", metricName, "gaugeVec")
 	} else {
 		collector := m.Metric
-		collector.(*prometheus.GaugeVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels, pmm.componentName)).Set(number)
+		collector.(*prometheus.GaugeVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels)).Set(number)
 	}
 }
 
@@ -248,7 +243,7 @@ func (pmm *prometheusMetricsManager) IncCounterMetricWithLabels(ctx context.Cont
 		log.L(ctx).Warnf("Transaction handler metric with name: '%s' and type: '%s' is not found", metricName, "counterVec")
 	} else {
 		collector := m.Metric
-		collector.(*prometheus.CounterVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels, pmm.componentName)).Inc()
+		collector.(*prometheus.CounterVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels)).Inc()
 	}
 }
 
@@ -263,7 +258,7 @@ func (pmm *prometheusMetricsManager) ObserveHistogramMetricWithLabels(ctx contex
 		log.L(ctx).Warnf("Transaction handler metric with name: '%s' and type: '%s' is not found", metricName, "histogramVec")
 	} else {
 		collector := m.Metric
-		collector.(*prometheus.HistogramVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels, pmm.componentName)).Observe(number)
+		collector.(*prometheus.HistogramVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels)).Observe(number)
 	}
 }
 
@@ -277,6 +272,6 @@ func (pmm *prometheusMetricsManager) ObserveSummaryMetricWithLabels(ctx context.
 		log.L(ctx).Warnf("Transaction handler metric with name: '%s' and type: '%s' is not found", metricName, "summaryVec")
 	} else {
 		collector := m.Metric
-		collector.(*prometheus.SummaryVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels, pmm.componentName)).Observe(number)
+		collector.(*prometheus.SummaryVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels)).Observe(number)
 	}
 }
