@@ -32,6 +32,8 @@ import (
 var allowedNameStringRegex = `^[a-zA-Z]+[a-zA-Z0-9_]*[a-zA-Z0-9]$`
 var ffMetricsPrefix = "ff"
 
+const compulsoryComponentLabel = fireflySystemLabelsPrefix + "component"
+
 /** Metrics names should follow the convention documented in https://prometheus.io/docs/practices/naming/. Below is an example breakdown of the term mapping:
 * Example metric: ff                _  api_server_rest    _ requests         _ total   {ff_component="tm"              , method       =  "Get"          ...}
                   ff                _  token              _ mint_duration    _ seconds {ff_component=""                , status       =  "Success"      ...}
@@ -88,24 +90,25 @@ type MetricsManager interface {
 
 func NewPrometheusMetricsRegistry(fireflyComponentName string /*component name will be added to all metrics as a label*/) MetricsRegistry {
 	registry := prometheus.NewRegistry()
+	registerer := prometheus.WrapRegistererWith(prometheus.Labels{compulsoryComponentLabel: fireflyComponentName}, registry)
 
 	// register default cpu & go metrics by default
-	registry.MustRegister(collectors.NewGoCollector())
-	registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	registerer.MustRegister(collectors.NewGoCollector())
+	registerer.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
 	return &prometheusMetricsRegistry{
-		componentName:                  fireflyComponentName,
 		namespace:                      ffMetricsPrefix,
 		registry:                       registry,
+		registerer:                     registerer,
 		managerMap:                     make(map[string]MetricsManager),
 		httpMetricsInstrumentationsMap: make(map[string]*muxprom.Instrumentation),
 	}
 }
 
 type prometheusMetricsRegistry struct {
-	componentName                  string
 	regMux                         sync.Mutex
 	registry                       *prometheus.Registry
+	registerer                     prometheus.Registerer
 	namespace                      string
 	managerMap                     map[string]MetricsManager
 	httpMetricsInstrumentationsMap map[string]*muxprom.Instrumentation
@@ -129,11 +132,10 @@ func (pmr *prometheusMetricsRegistry) NewMetricsManagerForSubsystem(ctx context.
 	}
 
 	pmr.managerMap[subsystem] = &prometheusMetricsManager{
-		componentName: pmr.componentName,
-		namespace:     pmr.namespace,
-		subsystem:     subsystem,
-		registry:      pmr.registry,
-		metricsMap:    make(map[string]*prometheusMetric),
+		namespace:  pmr.namespace,
+		subsystem:  subsystem,
+		registerer: pmr.registerer,
+		metricsMap: make(map[string]*prometheusMetric),
 	}
 	return pmr.managerMap[subsystem], nil
 }
@@ -145,8 +147,7 @@ func (pmr *prometheusMetricsRegistry) NewHTTPMetricsInstrumentationsForSubsystem
 	if labels == nil {
 		labels = make(map[string]string)
 	}
-	// set the default component label
-	labels[componentLabel] = pmr.componentName
+
 	nameRegex := regexp.MustCompile(allowedNameStringRegex)
 	isValidNameString := nameRegex.MatchString(subsystem)
 	if !isValidNameString {
@@ -164,7 +165,7 @@ func (pmr *prometheusMetricsRegistry) NewHTTPMetricsInstrumentationsForSubsystem
 		subsystem,
 		reqDurationBuckets,
 		labels,
-		pmr.registry,
+		pmr.registerer,
 	)
 	pmr.httpMetricsInstrumentationsMap[subsystem] = httpInstrumentation
 	return nil
@@ -174,7 +175,7 @@ func (pmr *prometheusMetricsRegistry) HTTPHandler(ctx context.Context, handlerOp
 	if len(pmr.managerMap) == 0 && len(pmr.httpMetricsInstrumentationsMap) == 0 {
 		return nil, i18n.NewError(ctx, i18n.MsgMetricsEmptyRegistry)
 	}
-	return promhttp.InstrumentMetricHandler(pmr.registry, promhttp.HandlerFor(pmr.registry, handlerOpts)), nil
+	return promhttp.InstrumentMetricHandler(pmr.registerer, promhttp.HandlerFor(pmr.registry, handlerOpts)), nil
 }
 
 func (pmr *prometheusMetricsRegistry) GetHTTPMetricsInstrumentationsMiddlewareForSubsystem(ctx context.Context, subsystem string) (func(next http.Handler) http.Handler, error) {
