@@ -25,7 +25,7 @@ import (
 )
 
 func TestMetricsRegistry(t *testing.T) {
-	mr := NewPrometheusMetricsRegistry()
+	mr := NewPrometheusMetricsRegistry("test")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	_, err := mr.HTTPHandler(ctx, promhttp.HandlerOpts{})
@@ -40,7 +40,7 @@ func TestMetricsRegistry(t *testing.T) {
 }
 
 func TestMetricsManager(t *testing.T) {
-	mr := NewPrometheusMetricsRegistry()
+	mr := NewPrometheusMetricsRegistry("test")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	mm, err := mr.NewMetricsManagerForSubsystem(ctx, "tm")
@@ -67,7 +67,7 @@ func TestMetricsManager(t *testing.T) {
 }
 
 func TestMetricsManagerWithDefaultLabels(t *testing.T) {
-	mr := NewPrometheusMetricsRegistry()
+	mr := NewPrometheusMetricsRegistry("test")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	mm, err := mr.NewMetricsManagerForSubsystem(ctx, "tm")
@@ -105,7 +105,7 @@ func TestMetricsManagerWithDefaultLabels(t *testing.T) {
 }
 
 func TestMetricsManagerErrors(t *testing.T) {
-	mr := NewPrometheusMetricsRegistry()
+	mr := NewPrometheusMetricsRegistry("")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	mm, err := mr.NewMetricsManagerForSubsystem(ctx, "tm")
@@ -122,7 +122,7 @@ func TestMetricsManagerErrors(t *testing.T) {
 	assert.Regexp(t, "FF00195", err)
 
 	// swallow init errors
-	mm.NewCounterMetric(ctx, "txInvalidName", "Invalid name", false)
+	mm.NewCounterMetric(ctx, "tx Invalid Name", "Invalid name", false)
 	mm.NewGaugeMetric(ctx, "tx_duplicate", "Duplicate registration", false)
 	mm.NewGaugeMetric(ctx, "tx_duplicate", "Duplicate registration", false)
 	mm.NewGaugeMetric(ctx, "tx_no_help_text", "", false)
@@ -141,10 +141,10 @@ func TestMetricsManagerErrors(t *testing.T) {
 }
 
 func TestHTTPMetricsInstrumentations(t *testing.T) {
-	mr := NewPrometheusMetricsRegistry()
+	mr := NewPrometheusMetricsRegistry("test")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	err := mr.NewHTTPMetricsInstrumentationsForSubsystem(ctx, "api_server", true, []float64{}, map[string]string{})
+	err := mr.NewHTTPMetricsInstrumentationsForSubsystem(ctx, "api_server", true, []float64{}, nil)
 	assert.NoError(t, err)
 	err = mr.NewHTTPMetricsInstrumentationsForSubsystem(ctx, "api_server", true, []float64{}, map[string]string{})
 	assert.Error(t, err)

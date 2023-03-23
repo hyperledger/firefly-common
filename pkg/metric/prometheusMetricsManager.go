@@ -36,14 +36,14 @@ const namespaceLabel = fireflySystemLabelsPrefix + "namespace"
 // is determined by the number of unique label VALUE combinations, not label name
 // therefore, pre-defining a label but never emitting metrics with that label
 // will not increase the number of time series
-var defaultFireflySystemLabels = []string{namespaceLabel}
+var optionalFireflySystemLabels = []string{namespaceLabel}
 
 func checkAndUpdateLabelNames(ctx context.Context, labelNames []string, withDefaultLabels bool) []string {
 	validLabelNames := []string{}
 
 	if withDefaultLabels {
 		// with default system labels
-		validLabelNames = defaultFireflySystemLabels
+		validLabelNames = append(validLabelNames, optionalFireflySystemLabels...)
 	}
 
 	// check label names are not clashing with system prefix
@@ -61,8 +61,6 @@ func checkAndUpdateLabelNames(ctx context.Context, labelNames []string, withDefa
 
 func checkAndUpdateLabels(ctx context.Context, labelNames []string, labels map[string]string, defaultLabels *FireflyDefaultLabels) map[string]string {
 	validLabels := make(map[string]string)
-	// set system default label values if provided
-
 	// check label names are not clashing with system prefix
 	for _, labelName := range labelNames {
 		if !strings.HasPrefix(labelName, fireflySystemLabelsPrefix) {
@@ -86,7 +84,7 @@ func checkAndUpdateLabels(ctx context.Context, labelNames []string, labels map[s
 type prometheusMetricsManager struct {
 	namespace  string
 	subsystem  string
-	registry   *prometheus.Registry
+	registerer prometheus.Registerer
 	metricsMap map[string]*prometheusMetric
 }
 
@@ -218,7 +216,7 @@ func (pmm *prometheusMetricsManager) registerMetrics(ctx context.Context, mr reg
 		}
 
 	}
-	pmm.registry.MustRegister(pmm.metricsMap[internalMapIndex].Metric)
+	pmm.registerer.MustRegister(pmm.metricsMap[internalMapIndex].Metric)
 }
 
 func (pmm *prometheusMetricsManager) SetGaugeMetric(ctx context.Context, metricName string, number float64, defaultLabels *FireflyDefaultLabels) {
