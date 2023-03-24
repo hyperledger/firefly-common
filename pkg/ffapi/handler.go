@@ -143,7 +143,7 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 				}
 			case strings.HasPrefix(strings.ToLower(contentType), "plain/text"):
 			default:
-				return 415, i18n.NewError(req.Context(), i18n.MsgInvalidContentType)
+				return 415, i18n.NewError(req.Context(), i18n.MsgInvalidContentType, contentType)
 			}
 		}
 
