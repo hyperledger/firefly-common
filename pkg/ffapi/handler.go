@@ -141,8 +141,9 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 				if jsonInput != nil {
 					err = json.NewDecoder(req.Body).Decode(&jsonInput)
 				}
+			case strings.HasPrefix(strings.ToLower(contentType), "text/plain"):
 			default:
-				return 415, i18n.NewError(req.Context(), i18n.MsgInvalidContentType)
+				return 415, i18n.NewError(req.Context(), i18n.MsgInvalidContentType, contentType)
 			}
 		}
 
