@@ -137,4 +137,5 @@ var (
 	MsgMetricsInvalidLabel                         = ffe("FF00202", "Label with name '%s' is invalid due to clashing with system prefix '%s'")
 	MsgInvalidNamespaceUUID                        = ffe("FF00203", "Expected 'namespace:' prefix on ID '%s'", 400)
 	MsgInvalidOutputOption                         = ffe("FF00204", "Invalid output option '%s'")
+	MsgDBUpdateByIDNotFound                        = ffe("FF00205", "Resource with id '%s' not found for update", 404)
 )

@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS sampletable;
+DROP TABLE IF EXISTS crudables;

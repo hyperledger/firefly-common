@@ -140,6 +140,50 @@ func TestInt64Field(t *testing.T) {
 
 }
 
+func TestBigIntField(t *testing.T) {
+
+	fd := &BigIntField{}
+	assert.NotEmpty(t, fd.Description())
+	f := bigIntField{}
+	assert.NotNil(t, fd.GetSerialization())
+	assert.False(t, fd.FilterAsString())
+	assert.Equal(t, "BigInteger", fd.Description())
+
+	for _, v := range []interface{}{
+		10,
+		int32(10),
+		int64(10),
+		uint(10),
+		uint32(10),
+		uint64(10),
+		"10",
+		fftypes.NewFFBigInt(10),
+		*fftypes.NewFFBigInt(10),
+		fftypes.NewFFBigInt(10).Int(),
+		*fftypes.NewFFBigInt(10).Int(),
+	} {
+		err := f.Scan(v)
+		assert.NoError(t, err)
+		v, err := f.Value()
+		assert.NoError(t, err)
+		assert.Equal(t, "a", v)
+		assert.Equal(t, "10", f.String())
+	}
+
+	err := f.Scan(nil)
+	assert.NoError(t, err)
+	v, err := f.Value()
+	assert.NoError(t, err)
+	assert.Equal(t, "0", v)
+
+	err = f.Scan("lobster")
+	assert.Regexp(t, "FF00105", err)
+
+	err = f.Scan(false)
+	assert.Regexp(t, "FF00105", err)
+
+}
+
 func TestTimeField(t *testing.T) {
 
 	fd := &TimeField{}
