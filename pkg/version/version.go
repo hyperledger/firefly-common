@@ -53,12 +53,12 @@ func (info *Info) LogVersion(ctx context.Context) {
 	log.L(ctx).Infof("Build date: %s", info.Date)
 }
 
-func NewInfo(buildDate string, buildCommit string, buildVersionOverride string) *Info {
+func NewInfo(buildDate, buildCommit, buildVersionOverride, license string) *Info {
 	info := &Info{
 		Date:    BuildDate,
 		Commit:  BuildCommit,
 		Version: BuildVersionOverride,
-		License: "Apache-2.0",
+		License: license,
 	}
 	// Where you are using go install, we will get good version information usefully from Go
 	// When we're in go-releaser in a Github action, we will have the version passed in explicitly

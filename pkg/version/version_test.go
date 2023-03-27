@@ -14,7 +14,7 @@ import (
 
 func testRootCmd() *cobra.Command {
 	cmd := &cobra.Command{}
-	cmd.AddCommand(NewInfo("test-date", "test-commit", "").Command)
+	cmd.AddCommand(NewInfo("test-date", "test-commit", "", "Apache 2.0").Command)
 	return cmd
 }
 
