@@ -221,7 +221,7 @@ func (c *CrudBase[T]) Replace(ctx context.Context, inst T, hooks ...PostCompleti
 	if err != nil {
 		return err
 	} else if rowsAffected < 1 {
-		return i18n.NewError(ctx, i18n.MsgDBUpdateByIDNotFound, inst.GetID())
+		return i18n.NewError(ctx, i18n.MsgDBNoRowsAffected)
 	}
 
 	for _, hook := range hooks {
@@ -296,51 +296,46 @@ func (c *CrudBase[T]) GetMany(ctx context.Context, filter ffapi.Filter) (instanc
 }
 
 func (c *CrudBase[T]) Update(ctx context.Context, id *fftypes.UUID, update ffapi.Update, hooks ...PostCompletionHook) (err error) {
-	updateCount, err := c.attemptUpdate(ctx, func(query sq.UpdateBuilder) (sq.UpdateBuilder, error) {
+	return c.attemptUpdate(ctx, func(query sq.UpdateBuilder) (sq.UpdateBuilder, error) {
 		return query.Where(sq.Eq{"id": id}), nil
-	}, update, hooks...)
-	if err != nil {
-		return err
-	} else if updateCount < 1 {
-		return i18n.NewError(ctx, i18n.MsgDBUpdateByIDNotFound, id)
-	}
-	return nil
+	}, update, true, hooks...)
 }
 
 func (c *CrudBase[T]) UpdateMany(ctx context.Context, filter ffapi.Filter, update ffapi.Update, hooks ...PostCompletionHook) (err error) {
-	_, err = c.attemptUpdate(ctx, func(query sq.UpdateBuilder) (sq.UpdateBuilder, error) {
+	return c.attemptUpdate(ctx, func(query sq.UpdateBuilder) (sq.UpdateBuilder, error) {
 		return c.DB.FilterUpdate(ctx, query, filter, c.FilterFieldMap)
-	}, update, hooks...)
-	return err
+	}, update, false, hooks...)
 }
 
-func (c *CrudBase[T]) attemptUpdate(ctx context.Context, filterFn func(sq.UpdateBuilder) (sq.UpdateBuilder, error), update ffapi.Update, hooks ...PostCompletionHook) (updatedRows int64, err error) {
+func (c *CrudBase[T]) attemptUpdate(ctx context.Context, filterFn func(sq.UpdateBuilder) (sq.UpdateBuilder, error), update ffapi.Update, requireUpdateCount bool, hooks ...PostCompletionHook) (err error) {
 	ctx, tx, autoCommit, err := c.DB.BeginOrUseTx(ctx)
 	if err != nil {
-		return -1, err
+		return err
 	}
 	defer c.DB.RollbackTx(ctx, tx, autoCommit)
 
 	query, err := c.DB.BuildUpdate(sq.Update(c.Table).Where(c.ScopedFilter()), update, c.FilterFieldMap)
-	if err != nil {
-		return -1, err
+	if err == nil {
+		query, err = filterFn(query)
 	}
-
-	query, err = filterFn(query)
 	if err != nil {
-		return -1, err
+		return err
 	}
 
 	updateCount, err := c.DB.UpdateTx(ctx, c.Table, tx, query, nil /* no change events filter based update */)
 	if err != nil {
-		return -1, err
+		return err
+	}
+
+	if requireUpdateCount && updateCount < 1 {
+		return i18n.NewError(ctx, i18n.MsgDBNoRowsAffected)
 	}
 
 	for _, hook := range hooks {
 		tx.AddPostCommitHook(hook)
 	}
 
-	return updateCount, c.DB.CommitTx(ctx, tx, autoCommit)
+	return c.DB.CommitTx(ctx, tx, autoCommit)
 }
 
 func (c *CrudBase[T]) Delete(ctx context.Context, id *fftypes.UUID, hooks ...PostCompletionHook) (err error) {

@@ -18,6 +18,7 @@ package dbsql
 
 import (
 	"context"
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -91,7 +92,7 @@ func newCRUDCollection(db *Database, ns string) *TestCRUD {
 				case "field3":
 					return &inst.Field3
 				}
-				return nil
+				panic(fmt.Sprintf("unknown column: '%s'", col))
 			},
 		},
 	}
@@ -388,4 +389,96 @@ func TestGetByIDSelectFail(t *testing.T) {
 	_, err := tc.GetByID(context.Background(), fftypes.NewUUID())
 	assert.Regexp(t, "FF00176", err)
 	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetByIDScanFail(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectQuery("SELECT.*").WillReturnRows(sqlmock.NewRows([]string{}).AddRow())
+	_, err := tc.GetByID(context.Background(), fftypes.NewUUID())
+	assert.Regexp(t, "FF00182", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetByManySelectFail(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectQuery("SELECT.*").WillReturnError(fmt.Errorf("pop"))
+	_, _, err := tc.GetMany(context.Background(), CRUDableQueryFactory.NewFilter(context.Background()).And())
+	assert.Regexp(t, "FF00176", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetByManyScanFail(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectQuery("SELECT.*").WillReturnRows(sqlmock.NewRows([]string{}).AddRow())
+	_, _, err := tc.GetMany(context.Background(), CRUDableQueryFactory.NewFilter(context.Background()).And())
+	assert.Regexp(t, "FF00182", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetByManyFilterFail(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	_, _, err := tc.GetMany(context.Background(), CRUDableQueryFactory.NewFilter(context.Background()).Eq("wrong", 123))
+	assert.Regexp(t, "FF00142", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUpdateBeginFail(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
+	mock.ExpectExec("UPDATE.*").WillReturnResult(driver.ResultNoRows)
+	err := tc.Update(context.Background(), fftypes.NewUUID(), CRUDableQueryFactory.NewUpdate(context.Background()).Set("f1", "12345"))
+	assert.Regexp(t, "FF00175", err)
+}
+
+func TestUpdateBuildUpdateFail(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	err := tc.UpdateMany(context.Background(),
+		CRUDableQueryFactory.NewFilter(context.Background()).Eq("wrong", 123),
+		CRUDableQueryFactory.NewUpdate(context.Background()).Set("f1", "12345"))
+	assert.Regexp(t, "FF00142", err)
+}
+
+func TestUpdateUpdateFail(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE.*").WillReturnError(fmt.Errorf("pop"))
+	err := tc.Update(context.Background(), fftypes.NewUUID(), CRUDableQueryFactory.NewUpdate(context.Background()).Set("f1", "12345"))
+	assert.Regexp(t, "FF00178", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUpdateNowRows(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE.*").WillReturnResult(driver.ResultNoRows)
+	err := tc.Update(context.Background(), fftypes.NewUUID(), CRUDableQueryFactory.NewUpdate(context.Background()).Set("f1", "12345"))
+	assert.Regexp(t, "FF00205", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDeleteBeginFail(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
+	mock.ExpectExec("UPDATE.*").WillReturnResult(driver.ResultNoRows)
+	err := tc.Delete(context.Background(), fftypes.NewUUID())
+	assert.Regexp(t, "FF00175", err)
+}
+
+func TestDeleteDeleteFail(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectExec("DELETE.*").WillReturnError(fmt.Errorf("pop"))
+	err := tc.Delete(context.Background(), fftypes.NewUUID())
+	assert.Regexp(t, "FF00179", err)
 }
