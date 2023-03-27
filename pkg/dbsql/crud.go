@@ -147,7 +147,7 @@ func (c *CrudBase[T]) Upsert(ctx context.Context, inst T, optimization UpsertOpt
 	return c.DB.CommitTx(ctx, tx, autoCommit)
 }
 
-func (c *CrudBase[T]) InsertBatch(ctx context.Context, instances []T, allowPartialSuccess bool, hooks ...PostCompletionHook) (err error) {
+func (c *CrudBase[T]) InsertMany(ctx context.Context, instances []T, allowPartialSuccess bool, hooks ...PostCompletionHook) (err error) {
 
 	ctx, tx, autoCommit, err := c.DB.BeginOrUseTx(ctx)
 	if err != nil {
@@ -298,7 +298,7 @@ func (c *CrudBase[T]) GetMany(ctx context.Context, filter ffapi.Filter) (instanc
 func (c *CrudBase[T]) Update(ctx context.Context, id *fftypes.UUID, update ffapi.Update, hooks ...PostCompletionHook) (err error) {
 	updateCount, err := c.attemptUpdate(ctx, func(query sq.UpdateBuilder) (sq.UpdateBuilder, error) {
 		return query.Where(sq.Eq{"id": id}), nil
-	}, update)
+	}, update, hooks...)
 	if err != nil {
 		return err
 	} else if updateCount < 1 {
@@ -310,7 +310,7 @@ func (c *CrudBase[T]) Update(ctx context.Context, id *fftypes.UUID, update ffapi
 func (c *CrudBase[T]) UpdateMany(ctx context.Context, filter ffapi.Filter, update ffapi.Update, hooks ...PostCompletionHook) (err error) {
 	_, err = c.attemptUpdate(ctx, func(query sq.UpdateBuilder) (sq.UpdateBuilder, error) {
 		return c.DB.FilterUpdate(ctx, query, filter, c.FilterFieldMap)
-	}, update)
+	}, update, hooks...)
 	return err
 }
 

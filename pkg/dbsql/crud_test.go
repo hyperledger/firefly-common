@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/Masterminds/squirrel"
 	sq "github.com/Masterminds/squirrel"
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
@@ -51,7 +52,9 @@ func (tc *TestCRUDable) GetID() *fftypes.UUID {
 
 type TestCRUD struct {
 	*CrudBase[*TestCRUDable]
-	events []ChangeEventType
+	events      []ChangeEventType
+	postCommit  func()
+	postCommits int
 }
 
 func newCRUDCollection(db *Database, ns string) *TestCRUD {
@@ -95,6 +98,7 @@ func newCRUDCollection(db *Database, ns string) *TestCRUD {
 	tc.CrudBase.EventHandler = func(inst *TestCRUDable, eventType ChangeEventType) {
 		tc.events = append(tc.events, eventType)
 	}
+	tc.postCommit = func() { tc.postCommits++ }
 	return tc
 }
 
@@ -124,7 +128,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	tc := newCRUDCollection(&db.Database, "ns1")
 
 	// Add a row
-	err := tc.Insert(ctx, c1)
+	err := tc.Insert(ctx, c1, tc.postCommit)
 	assert.NoError(t, err)
 	assert.Len(t, tc.events, 1)
 	assert.Equal(t, Created, tc.events[0])
@@ -148,7 +152,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 
 	// Upsert the existing row un-optimized
 	c1copy.Field1 = "hello again - 2"
-	err = tc.Upsert(ctx, c1copy, UpsertOptimizationNew)
+	err = tc.Upsert(ctx, c1copy, UpsertOptimizationNew, tc.postCommit)
 	assert.NoError(t, err)
 	c1copy2, err := tc.GetByID(ctx, c1.ID)
 	assert.NoError(t, err)
@@ -156,7 +160,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 
 	// Explicitly replace it
 	c1copy.Field1 = "hello again - 3"
-	err = tc.Replace(ctx, c1copy)
+	err = tc.Replace(ctx, c1copy, tc.postCommit)
 	assert.NoError(t, err)
 	c1copy3, err := tc.GetByID(ctx, c1.ID)
 	assert.NoError(t, err)
@@ -166,7 +170,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	c1copy.Field1 = "hello again - 4"
 	err = tc.Update(ctx, c1copy.ID, CRUDableQueryFactory.NewUpdate(ctx).Set(
 		"f1", c1copy.Field1,
-	))
+	), tc.postCommit)
 	assert.NoError(t, err)
 	c1copy4, err := tc.GetByID(ctx, c1.ID)
 	assert.NoError(t, err)
@@ -176,7 +180,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	c2 := *c1
 	c2.ID = fftypes.NewUUID()
 	c2.Field1 = "bonjour"
-	err = tc.Replace(ctx, &c2)
+	err = tc.Replace(ctx, &c2, tc.postCommit)
 	assert.Regexp(t, "FF00205", err)
 
 	// Optimized insert of another
@@ -204,7 +208,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 			Field2: *fftypes.NewFFBigInt(919191),
 		}
 	}
-	err = tc.InsertBatch(ctx, bunchOfCRUDables, false)
+	err = tc.InsertMany(ctx, bunchOfCRUDables, false, tc.postCommit)
 	assert.NoError(t, err)
 
 	// Grab one
@@ -217,7 +221,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 		"f2", "919191",
 	), CRUDableQueryFactory.NewUpdate(ctx).Set(
 		"f2", "929292",
-	))
+	), tc.postCommit)
 	assert.NoError(t, err)
 	checkJSONEq(t, bunchOfCRUDables[4], bunch5copy)
 
@@ -228,7 +232,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	}
 
 	// Delete it
-	err = tc.Delete(ctx, bunchOfCRUDables[4].ID)
+	err = tc.Delete(ctx, bunchOfCRUDables[4].ID, tc.postCommit)
 	assert.NoError(t, err)
 
 	// Check it's gone
@@ -236,463 +240,152 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Nil(t, goneOne)
 
+	// Check all the post commits above fired
+	assert.Equal(t, 7, tc.postCommits)
+
 }
 
-// func TestUpsertMessageFailBegin(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
-// 	err := s.UpsertMessage(context.Background(), &core.Message{}, database.UpsertOptimizationSkip)
-// 	assert.Regexp(t, "FF00175", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
+func TestUpsertFailBegin(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
+	err := tc.Upsert(context.Background(), &TestCRUDable{}, UpsertOptimizationSkip)
+	assert.Regexp(t, "FF00175", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
 
-// func TestUpsertMessageFailSelect(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	mock.ExpectBegin()
-// 	mock.ExpectQuery("SELECT .*").WillReturnError(fmt.Errorf("pop"))
-// 	mock.ExpectRollback()
-// 	msgID := fftypes.NewUUID()
-// 	err := s.UpsertMessage(context.Background(), &core.Message{Header: core.MessageHeader{ID: msgID}}, database.UpsertOptimizationSkip)
-// 	assert.Regexp(t, "FF00176", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
+func TestUpsertFailQuery(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT.*").WillReturnError(fmt.Errorf("pop"))
+	err := tc.Upsert(context.Background(), &TestCRUDable{}, UpsertOptimizationSkip)
+	assert.Regexp(t, "FF00176", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
 
-// func TestUpsertMessageFailInsert(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	mock.ExpectBegin()
-// 	mock.ExpectQuery("SELECT .*").WillReturnRows(sqlmock.NewRows([]string{}))
-// 	mock.ExpectExec("INSERT .*").WillReturnError(fmt.Errorf("pop"))
-// 	mock.ExpectRollback()
-// 	msgID := fftypes.NewUUID()
-// 	err := s.UpsertMessage(context.Background(), &core.Message{Header: core.MessageHeader{ID: msgID}}, database.UpsertOptimizationSkip)
-// 	assert.Regexp(t, "FF00177", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
+func TestUpsertFailInsert(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT.*").WillReturnRows(mock.NewRows([]string{db.sequenceColumn}))
+	mock.ExpectExec("INSERT.*").WillReturnError(fmt.Errorf("pop"))
+	err := tc.Upsert(context.Background(), &TestCRUDable{}, UpsertOptimizationSkip)
+	assert.Regexp(t, "FF00177", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
 
-// func TestUpsertMessageFailUpdate(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	msgID := fftypes.NewUUID()
-// 	mock.ExpectBegin()
-// 	mock.ExpectQuery("SELECT .*").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(msgID.String()))
-// 	mock.ExpectExec("UPDATE .*").WillReturnError(fmt.Errorf("pop"))
-// 	mock.ExpectRollback()
-// 	err := s.UpsertMessage(context.Background(), &core.Message{Header: core.MessageHeader{ID: msgID}}, database.UpsertOptimizationSkip)
-// 	assert.Regexp(t, "FF00178", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
+func TestUpsertFailUpdate(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT.*").WillReturnRows(mock.NewRows([]string{db.sequenceColumn}).AddRow(12345))
+	mock.ExpectExec("UPDATE.*").WillReturnError(fmt.Errorf("pop"))
+	err := tc.Upsert(context.Background(), &TestCRUDable{}, UpsertOptimizationSkip)
+	assert.Regexp(t, "FF00178", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
 
-// func TestUpsertMessageFailUpdateRefs(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	msgID := fftypes.NewUUID()
-// 	mock.ExpectBegin()
-// 	mock.ExpectQuery("SELECT .*").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(msgID.String()))
-// 	mock.ExpectExec("UPDATE .*").WillReturnResult(driver.ResultNoRows)
-// 	mock.ExpectExec("DELETE .*").WillReturnError(fmt.Errorf("pop"))
-// 	mock.ExpectRollback()
-// 	err := s.UpsertMessage(context.Background(), &core.Message{Header: core.MessageHeader{ID: msgID}}, database.UpsertOptimizationSkip)
-// 	assert.Regexp(t, "FF00179", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
+func TestInsertManyBeginFail(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
+	err := tc.InsertMany(context.Background(), []*TestCRUDable{{}}, false)
+	assert.Regexp(t, "FF00175", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
 
-// func TestUpsertMessageFailCommit(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	msgID := fftypes.NewUUID()
-// 	mock.ExpectBegin()
-// 	mock.ExpectQuery("SELECT .*").WillReturnRows(sqlmock.NewRows([]string{"id"}))
-// 	mock.ExpectExec("INSERT .*").WillReturnResult(sqlmock.NewResult(1, 1))
-// 	mock.ExpectCommit().WillReturnError(fmt.Errorf("pop"))
-// 	err := s.UpsertMessage(context.Background(), &core.Message{Header: core.MessageHeader{ID: msgID}}, database.UpsertOptimizationSkip)
-// 	assert.Regexp(t, "FF00180", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
+func TestInsertManyMultiRowOK(t *testing.T) {
+	db, mock := newMockProvider().init()
+	db.fakePSQLInsert = true
+	db.features.MultiRowInsert = true
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectQuery(`INSERT INTO crudables.*VALUES \(.*\),\(.*\)`).WillReturnRows(
+		sqlmock.NewRows([]string{db.sequenceColumn}).
+			AddRow(123).
+			AddRow(234),
+	)
+	mock.ExpectCommit()
+	err := tc.InsertMany(context.Background(), []*TestCRUDable{
+		{ID: fftypes.NewUUID()},
+		{ID: fftypes.NewUUID()},
+	}, false)
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
 
-// func TestInsertMessagesBeginFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
-// 	err := s.InsertMessages(context.Background(), []*core.Message{})
-// 	assert.Regexp(t, "FF00175", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// 	s.callbacks.AssertExpectations(t)
-// }
+func TestInsertManyMultiRowFail(t *testing.T) {
+	db, mock := newMockProvider().init()
+	db.fakePSQLInsert = true
+	db.features.MultiRowInsert = true
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectQuery(`INSERT INTO crudables.*VALUES \(.*\),\(.*\)`).WillReturnError(fmt.Errorf("pop"))
+	err := tc.InsertMany(context.Background(), []*TestCRUDable{
+		{ID: fftypes.NewUUID()},
+		{ID: fftypes.NewUUID()},
+	}, false)
+	assert.Regexp(t, "FF00177", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
 
-// func TestInsertMessagesMultiRowOK(t *testing.T) {
-// 	s := newMockProvider()
-// 	s.multiRowInsert = true
-// 	s.fakePSQLInsert = true
-// 	s, mock := s.init()
+func TestInsertManyFallbackSingleRowFail(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectExec(`INSERT INTO crudables.*`).WillReturnError(fmt.Errorf("pop"))
+	err := tc.InsertMany(context.Background(), []*TestCRUDable{
+		{ID: fftypes.NewUUID()},
+		{ID: fftypes.NewUUID()},
+	}, false)
+	assert.Regexp(t, "FF00177", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
 
-// 	msg1 := &core.Message{Header: core.MessageHeader{ID: fftypes.NewUUID(), Namespace: "ns1"}, LocalNamespace: "ns1", Data: core.DataRefs{{ID: fftypes.NewUUID()}}}
-// 	msg2 := &core.Message{Header: core.MessageHeader{ID: fftypes.NewUUID(), Namespace: "ns1"}, LocalNamespace: "ns1", Data: core.DataRefs{{ID: fftypes.NewUUID()}}}
-// 	s.callbacks.On("OrderedUUIDCollectionNSEvent", database.CollectionMessages, core.ChangeEventTypeCreated, "ns1", msg1.Header.ID, int64(1001))
-// 	s.callbacks.On("OrderedUUIDCollectionNSEvent", database.CollectionMessages, core.ChangeEventTypeCreated, "ns1", msg2.Header.ID, int64(1002))
+func TestInsertBeginFail(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
+	err := tc.Insert(context.Background(), &TestCRUDable{})
+	assert.Regexp(t, "FF00175", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
 
-// 	mock.ExpectBegin()
-// 	mock.ExpectQuery("INSERT.*messages").WillReturnRows(sqlmock.NewRows([]string{s.SequenceColumn()}).
-// 		AddRow(int64(1001)).
-// 		AddRow(int64(1002)),
-// 	)
-// 	mock.ExpectQuery("INSERT.*messages_data").WillReturnRows(sqlmock.NewRows([]string{s.SequenceColumn()}).
-// 		AddRow(int64(1003)).
-// 		AddRow(int64(1004)),
-// 	)
-// 	mock.ExpectCommit()
-// 	hookCalled := make(chan struct{}, 1)
-// 	err := s.InsertMessages(context.Background(), []*core.Message{msg1, msg2}, func() {
-// 		close(hookCalled)
-// 	})
-// 	<-hookCalled
-// 	assert.NoError(t, err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// 	s.callbacks.AssertExpectations(t)
-// }
+func TestInsertInsertFail(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectExec("INSERT.*").WillReturnError(fmt.Errorf("pop"))
+	err := tc.Insert(context.Background(), &TestCRUDable{})
+	assert.Regexp(t, "FF00177", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
 
-// func TestInsertMessagesMultiRowDataRefsFail(t *testing.T) {
-// 	s := newMockProvider()
-// 	s.multiRowInsert = true
-// 	s.fakePSQLInsert = true
-// 	s, mock := s.init()
+func TestReplaceBeginFail(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
+	err := tc.Replace(context.Background(), &TestCRUDable{})
+	assert.Regexp(t, "FF00175", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
 
-// 	msg1 := &core.Message{Header: core.MessageHeader{ID: fftypes.NewUUID(), Namespace: "ns1"}, Data: core.DataRefs{{ID: fftypes.NewUUID()}}}
+func TestReplaceUpdateFail(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE.*").WillReturnError(fmt.Errorf("pop"))
+	err := tc.Replace(context.Background(), &TestCRUDable{})
+	assert.Regexp(t, "FF00178", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
 
-// 	mock.ExpectBegin()
-// 	mock.ExpectQuery("INSERT.*messages").WillReturnRows(sqlmock.NewRows([]string{s.SequenceColumn()}).AddRow(int64(1001)))
-// 	mock.ExpectQuery("INSERT.*messages_data").WillReturnError(fmt.Errorf("pop"))
-// 	err := s.InsertMessages(context.Background(), []*core.Message{msg1})
-// 	assert.Regexp(t, "FF00177", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// 	s.callbacks.AssertExpectations(t)
-// }
-
-// func TestInsertMessagesMultiRowFail(t *testing.T) {
-// 	s := newMockProvider()
-// 	s.multiRowInsert = true
-// 	s.fakePSQLInsert = true
-// 	s, mock := s.init()
-// 	msg1 := &core.Message{Header: core.MessageHeader{ID: fftypes.NewUUID(), Namespace: "ns1"}}
-// 	mock.ExpectBegin()
-// 	mock.ExpectQuery("INSERT.*").WillReturnError(fmt.Errorf("pop"))
-// 	err := s.InsertMessages(context.Background(), []*core.Message{msg1})
-// 	assert.Regexp(t, "FF00177", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// 	s.callbacks.AssertExpectations(t)
-// }
-
-// func TestInsertMessagesSingleRowFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	msg1 := &core.Message{Header: core.MessageHeader{ID: fftypes.NewUUID(), Namespace: "ns1"}}
-// 	mock.ExpectBegin()
-// 	mock.ExpectExec("INSERT.*").WillReturnError(fmt.Errorf("pop"))
-// 	err := s.InsertMessages(context.Background(), []*core.Message{msg1})
-// 	assert.Regexp(t, "FF00177", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// 	s.callbacks.AssertExpectations(t)
-// }
-
-// func TestInsertMessagesSingleRowFailDataRefs(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	msg1 := &core.Message{Header: core.MessageHeader{ID: fftypes.NewUUID(), Namespace: "ns1"}, Data: core.DataRefs{{ID: fftypes.NewUUID(), Hash: fftypes.NewRandB32()}}}
-// 	mock.ExpectBegin()
-// 	mock.ExpectExec("INSERT.*messages").WillReturnResult(sqlmock.NewResult(1, 1))
-// 	mock.ExpectExec("INSERT.*messages_data").WillReturnError(fmt.Errorf("pop"))
-// 	err := s.InsertMessages(context.Background(), []*core.Message{msg1})
-// 	assert.Regexp(t, "FF00177", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// 	s.callbacks.AssertExpectations(t)
-// }
-
-// func TestReplaceMessageFailBegin(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
-// 	msgID := fftypes.NewUUID()
-// 	err := s.ReplaceMessage(context.Background(), &core.Message{Header: core.MessageHeader{ID: msgID}})
-// 	assert.Regexp(t, "FF00175", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestReplaceMessageFailDelete(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	mock.ExpectBegin()
-// 	mock.ExpectExec("DELETE .*").WillReturnError(fmt.Errorf("pop"))
-// 	mock.ExpectRollback()
-// 	msgID := fftypes.NewUUID()
-// 	err := s.ReplaceMessage(context.Background(), &core.Message{Header: core.MessageHeader{ID: msgID}})
-// 	assert.Regexp(t, "FF00179", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestReplaceMessageFailInsert(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	mock.ExpectBegin()
-// 	mock.ExpectExec("DELETE .*").WillReturnResult(sqlmock.NewResult(1, 1))
-// 	mock.ExpectExec("INSERT .*").WillReturnError(fmt.Errorf("pop"))
-// 	mock.ExpectRollback()
-// 	msgID := fftypes.NewUUID()
-// 	err := s.ReplaceMessage(context.Background(), &core.Message{Header: core.MessageHeader{ID: msgID}})
-// 	assert.Regexp(t, "FF00177", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestUpdateMessageDataRefsNilID(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	msgID := fftypes.NewUUID()
-// 	mock.ExpectBegin()
-// 	ctx, tx, _, err := s.BeginOrUseTx(context.Background())
-// 	assert.NoError(t, err)
-// 	err = s.updateMessageDataRefs(ctx, tx, &core.Message{
-// 		Header: core.MessageHeader{ID: msgID},
-// 		Data:   []*core.DataRef{{ID: nil}},
-// 	}, false)
-// 	assert.Regexp(t, "FF10123", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestUpdateMessageDataRefsNilHash(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	msgID := fftypes.NewUUID()
-// 	mock.ExpectBegin()
-// 	ctx, tx, _, err := s.BeginOrUseTx(context.Background())
-// 	assert.NoError(t, err)
-// 	err = s.updateMessageDataRefs(ctx, tx, &core.Message{
-// 		Header: core.MessageHeader{ID: msgID},
-// 		Data:   []*core.DataRef{{ID: fftypes.NewUUID()}},
-// 	}, false)
-// 	assert.Regexp(t, "FF10139", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestUpdateMessageDataDeleteFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	msgID := fftypes.NewUUID()
-// 	mock.ExpectBegin()
-// 	ctx, tx, _, err := s.BeginOrUseTx(context.Background())
-// 	assert.NoError(t, err)
-// 	mock.ExpectExec("DELETE .*").WillReturnError(fmt.Errorf("pop"))
-// 	err = s.updateMessageDataRefs(ctx, tx, &core.Message{
-// 		Header: core.MessageHeader{ID: msgID},
-// 	}, true)
-// 	assert.Regexp(t, "FF00179", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestUpdateMessageDataAddFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	msgID := fftypes.NewUUID()
-// 	dataID := fftypes.NewUUID()
-// 	dataHash := fftypes.NewRandB32()
-// 	mock.ExpectBegin()
-// 	ctx, tx, _, err := s.BeginOrUseTx(context.Background())
-// 	assert.NoError(t, err)
-// 	mock.ExpectExec("INSERT .*").WillReturnError(fmt.Errorf("pop"))
-// 	err = s.updateMessageDataRefs(ctx, tx, &core.Message{
-// 		Header: core.MessageHeader{ID: msgID},
-// 		Data:   []*core.DataRef{{ID: dataID, Hash: dataHash}},
-// 	}, false)
-// 	assert.Regexp(t, "FF00177", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestLoadMessageDataRefsQueryFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	msgID := fftypes.NewUUID()
-// 	mock.ExpectQuery("SELECT .*").WillReturnError(fmt.Errorf("pop"))
-// 	err := s.loadDataRefs(context.Background(), "ns1", []*core.Message{
-// 		{
-// 			Header: core.MessageHeader{ID: msgID},
-// 		},
-// 	})
-// 	assert.Regexp(t, "FF00176", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestLoadMessageDataRefsScanFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	msgID := fftypes.NewUUID()
-// 	mock.ExpectQuery("SELECT .*").WillReturnRows(sqlmock.NewRows([]string{"data_id"}).AddRow("only one"))
-// 	err := s.loadDataRefs(context.Background(), "ns1", []*core.Message{
-// 		{
-// 			Header: core.MessageHeader{ID: msgID},
-// 		},
-// 	})
-// 	assert.Regexp(t, "FF10121", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestLoadMessageDataRefsEmpty(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	msgID := fftypes.NewUUID()
-// 	msg := &core.Message{Header: core.MessageHeader{ID: msgID}}
-// 	mock.ExpectQuery("SELECT .*").WillReturnRows(sqlmock.NewRows([]string{"data_id", "data_hash"}))
-// 	err := s.loadDataRefs(context.Background(), "ns1", []*core.Message{msg})
-// 	assert.NoError(t, err)
-// 	assert.Equal(t, core.DataRefs{}, msg.Data)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestGetMessageByIDSelectFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	msgID := fftypes.NewUUID()
-// 	mock.ExpectQuery("SELECT .*").WillReturnError(fmt.Errorf("pop"))
-// 	_, err := s.GetMessageByID(context.Background(), "ns1", msgID)
-// 	assert.Regexp(t, "FF00176", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestGetMessageByIDNotFound(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	msgID := fftypes.NewUUID()
-// 	mock.ExpectQuery("SELECT .*").WillReturnRows(sqlmock.NewRows([]string{"id"}))
-// 	msg, err := s.GetMessageByID(context.Background(), "ns1", msgID)
-// 	assert.NoError(t, err)
-// 	assert.Nil(t, msg)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestGetMessageByIDScanFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	msgID := fftypes.NewUUID()
-// 	mock.ExpectQuery("SELECT .*").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("only one"))
-// 	_, err := s.GetMessageByID(context.Background(), "ns1", msgID)
-// 	assert.Regexp(t, "FF10121", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestGetMessageByIDLoadRefsFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	msgID := fftypes.NewUUID()
-// 	b32 := fftypes.NewRandB32()
-// 	cols := append([]string{}, msgColumns...)
-// 	cols = append(cols, "id()")
-// 	mock.ExpectQuery("SELECT .*").WillReturnRows(sqlmock.NewRows(cols).
-// 		AddRow(msgID.String(), nil, core.MessageTypeBroadcast, "author1", "0x12345", 0, "ns1", "ns1", "t1", "c1", nil, b32.String(), b32.String(), b32.String(), "confirmed", 0, "pin", nil, "", nil, nil, "bob", 0))
-// 	mock.ExpectQuery("SELECT .*").WillReturnError(fmt.Errorf("pop"))
-// 	_, err := s.GetMessageByID(context.Background(), "ns1", msgID)
-// 	assert.Regexp(t, "FF00176", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestGetMessagesBuildQueryFail(t *testing.T) {
-// 	s, _ := newMockProvider().init()
-// 	f := database.MessageQueryFactory.NewFilter(context.Background()).Eq("id", map[bool]bool{true: false})
-// 	_, _, err := s.GetMessages(context.Background(), "ns1", f)
-// 	assert.Regexp(t, "FF00143.*id", err)
-// }
-
-// func TestGetMessagesQueryFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	mock.ExpectQuery("SELECT .*").WillReturnError(fmt.Errorf("pop"))
-// 	f := database.MessageQueryFactory.NewFilter(context.Background()).Eq("id", "")
-// 	_, _, err := s.GetMessages(context.Background(), "ns1", f)
-// 	assert.Regexp(t, "FF00176", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestGetMessagesForDataBadQuery(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	f := database.MessageQueryFactory.NewFilter(context.Background()).Eq("!wrong", "")
-// 	_, _, err := s.GetMessagesForData(context.Background(), "ns1", fftypes.NewUUID(), f)
-// 	assert.Regexp(t, "FF00142", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestGetMessagesReadMessageFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	mock.ExpectQuery("SELECT .*").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("only one"))
-// 	f := database.MessageQueryFactory.NewFilter(context.Background()).Eq("id", "")
-// 	_, _, err := s.GetMessages(context.Background(), "ns1", f)
-// 	assert.Regexp(t, "FF10121", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestGetMessagesLoadRefsFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	msgID := fftypes.NewUUID()
-// 	b32 := fftypes.NewRandB32()
-// 	cols := append([]string{}, msgColumns...)
-// 	cols = append(cols, "id()")
-// 	mock.ExpectQuery("SELECT .*").WillReturnRows(sqlmock.NewRows(cols).
-// 		AddRow(msgID.String(), nil, core.MessageTypeBroadcast, "author1", "0x12345", 0, "ns1", "ns1", "t1", "c1", nil, b32.String(), b32.String(), b32.String(), "confirmed", 0, "pin", nil, "", nil, nil, "bob", 0))
-// 	mock.ExpectQuery("SELECT .*").WillReturnError(fmt.Errorf("pop"))
-// 	f := database.MessageQueryFactory.NewFilter(context.Background()).Gt("confirmed", "0")
-// 	_, _, err := s.GetMessages(context.Background(), "ns1", f)
-// 	assert.Regexp(t, "FF00176", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestMessageUpdateBeginFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
-// 	u := database.MessageQueryFactory.NewUpdate(context.Background()).Set("id", "anything")
-// 	err := s.UpdateMessage(context.Background(), "ns1", fftypes.NewUUID(), u)
-// 	assert.Regexp(t, "FF00175", err)
-// }
-
-// func TestGetMessageIDsQueryFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	mock.ExpectQuery("SELECT .*").WillReturnError(fmt.Errorf("pop"))
-// 	f := database.MessageQueryFactory.NewFilter(context.Background()).Eq("id", "")
-// 	_, err := s.GetMessageIDs(context.Background(), "ns1", f)
-// 	assert.Regexp(t, "FF00176", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestGetMessageIDsReadMessageFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	mock.ExpectQuery("SELECT .*").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("bad id"))
-// 	f := database.MessageQueryFactory.NewFilter(context.Background()).Eq("id", "")
-// 	_, err := s.GetMessageIDs(context.Background(), "ns1", f)
-// 	assert.Regexp(t, "FF10121", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestGetMessageIDsBadQuery(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	f := database.MessageQueryFactory.NewFilter(context.Background()).Eq("!wrong", "")
-// 	_, err := s.GetMessageIDs(context.Background(), "ns1", f)
-// 	assert.Regexp(t, "FF00142", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestMessageUpdateBuildQueryFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	mock.ExpectBegin()
-// 	u := database.MessageQueryFactory.NewUpdate(context.Background()).Set("id", map[bool]bool{true: false})
-// 	err := s.UpdateMessage(context.Background(), "ns1", fftypes.NewUUID(), u)
-// 	assert.Regexp(t, "FF00143.*id", err)
-// }
-
-// func TestMessagesUpdateBuildFilterFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	mock.ExpectBegin()
-// 	f := database.MessageQueryFactory.NewFilter(context.Background()).Eq("id", map[bool]bool{true: false})
-// 	u := database.MessageQueryFactory.NewUpdate(context.Background()).Set("type", core.MessageTypeBroadcast)
-// 	err := s.UpdateMessages(context.Background(), "ns1", f, u)
-// 	assert.Regexp(t, "FF00143.*id", err)
-// }
-
-// func TestMessageUpdateFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	mock.ExpectBegin()
-// 	mock.ExpectExec("UPDATE .*").WillReturnError(fmt.Errorf("pop"))
-// 	mock.ExpectRollback()
-// 	u := database.MessageQueryFactory.NewUpdate(context.Background()).Set("group", fftypes.NewRandB32())
-// 	err := s.UpdateMessage(context.Background(), "ns1", fftypes.NewUUID(), u)
-// 	assert.Regexp(t, "FF00178", err)
-// }
-
-// func TestGetBatchIDsForMessagesSelectFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	msgID := fftypes.NewUUID()
-// 	mock.ExpectQuery("SELECT .*").WillReturnError(fmt.Errorf("pop"))
-// 	_, err := s.GetBatchIDsForMessages(context.Background(), "ns1", []*fftypes.UUID{msgID})
-// 	assert.Regexp(t, "FF00176", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
-
-// func TestGetBatchIDsForMessagesScanFail(t *testing.T) {
-// 	s, mock := newMockProvider().init()
-// 	msgID := fftypes.NewUUID()
-// 	mock.ExpectQuery("SELECT .*").WillReturnRows(sqlmock.NewRows([]string{"batch_id"}).AddRow("not a UUID"))
-// 	_, err := s.GetBatchIDsForMessages(context.Background(), "ns1", []*fftypes.UUID{msgID})
-// 	assert.Regexp(t, "FF10121", err)
-// 	assert.NoError(t, mock.ExpectationsWereMet())
-// }
+func TestGetByIDSelectFail(t *testing.T) {
+	db, mock := newMockProvider().init()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectQuery("SELECT.*").WillReturnError(fmt.Errorf("pop"))
+	_, err := tc.GetByID(context.Background(), fftypes.NewUUID())
+	assert.Regexp(t, "FF00176", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
