@@ -19,6 +19,8 @@ package dbsql
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"strings"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
@@ -58,13 +60,22 @@ type CrudBase[T WithID] struct {
 	NilValue     func() T // nil value typed to T
 	NewInstance  func() T
 	ScopedFilter func() sq.Eq
-	EventHandler func(inst T, eventType ChangeEventType)
+	EventHandler func(id *fftypes.UUID, eventType ChangeEventType)
 	GetFieldPtr  func(inst T, col string) interface{}
+
+	// Optional extensions
+	ReadTableAlias    string
+	ReadOnlyColumns   []string
+	ReadQueryModifier func(sq.SelectBuilder) sq.SelectBuilder
 }
 
 func (c *CrudBase[T]) idFilter(id *fftypes.UUID) sq.Eq {
 	filter := c.ScopedFilter()
-	filter["id"] = id
+	if c.ReadTableAlias != "" {
+		filter[fmt.Sprintf("%s.id", c.ReadTableAlias)] = id
+	} else {
+		filter["id"] = id
+	}
 	return filter
 }
 
@@ -77,7 +88,9 @@ func (c *CrudBase[T]) attemptReplace(ctx context.Context, tx *TXWrapper, inst T)
 	return c.DB.UpdateTx(ctx, c.Table, tx,
 		update,
 		func() {
-			c.EventHandler(inst, Updated)
+			if c.EventHandler != nil {
+				c.EventHandler(inst.GetID(), Updated)
+			}
 		})
 }
 
@@ -90,7 +103,9 @@ func (c *CrudBase[T]) attemptInsert(ctx context.Context, tx *TXWrapper, inst T, 
 	insert = insert.Values(values...)
 	_, err = c.DB.InsertTxExt(ctx, c.Table, tx, insert,
 		func() {
-			c.EventHandler(inst, Created)
+			if c.EventHandler != nil {
+				c.EventHandler(inst.GetID(), Created)
+			}
 		}, requestConflictEmptyResult)
 	return err
 }
@@ -168,7 +183,9 @@ func (c *CrudBase[T]) InsertMany(ctx context.Context, instances []T, allowPartia
 		sequences := make([]int64, len(instances))
 		err := c.DB.InsertTxRows(ctx, c.Table, tx, insert, func() {
 			for _, inst := range instances {
-				c.EventHandler(inst, Created)
+				if c.EventHandler != nil {
+					c.EventHandler(inst.GetID(), Created)
+				}
 			}
 		}, sequences, allowPartialSuccess)
 		if err != nil {
@@ -231,10 +248,10 @@ func (c *CrudBase[T]) Replace(ctx context.Context, inst T, hooks ...PostCompleti
 	return c.DB.CommitTx(ctx, tx, autoCommit)
 }
 
-func (c *CrudBase[T]) scanRow(ctx context.Context, row *sql.Rows) (T, error) {
+func (c *CrudBase[T]) scanRow(ctx context.Context, cols []string, row *sql.Rows) (T, error) {
 	inst := c.NewInstance()
-	fieldPointers := make([]interface{}, len(c.Columns))
-	for i, col := range c.Columns {
+	fieldPointers := make([]interface{}, len(cols))
+	for i, col := range cols {
 		fieldPointers[i] = c.GetFieldPtr(inst, col)
 	}
 	err := row.Scan(fieldPointers...)
@@ -244,14 +261,36 @@ func (c *CrudBase[T]) scanRow(ctx context.Context, row *sql.Rows) (T, error) {
 	return inst, nil
 }
 
-func (c *CrudBase[T]) GetByID(ctx context.Context, id *fftypes.UUID) (inst T, err error) {
+func (c *CrudBase[T]) getReadCols() (tableFrom string, cols, readCols []string) {
+	cols = append([]string{}, c.Columns...)
+	if c.ReadOnlyColumns != nil {
+		cols = append(cols, c.ReadOnlyColumns...)
+	}
+	tableFrom = c.Table
+	readCols = cols
+	if c.ReadTableAlias != "" {
+		tableFrom = fmt.Sprintf("%s AS %s", c.Table, c.ReadTableAlias)
+		readCols = make([]string, len(cols))
+		for i, col := range cols {
+			if strings.Contains(col, ".") {
+				readCols[i] = cols[i]
+			} else {
+				readCols[i] = fmt.Sprintf("%s.%s", c.ReadTableAlias, col)
+			}
+		}
+	}
+	return tableFrom, cols, readCols
+}
 
-	cols := append([]string{}, c.Columns...)
-	rows, _, err := c.DB.Query(ctx, c.Table,
-		sq.Select(cols...).
-			From(c.Table).
-			Where(c.idFilter(id)),
-	)
+func (c *CrudBase[T]) GetByID(ctx context.Context, id *fftypes.UUID) (inst T, err error) {
+	tableFrom, cols, readCols := c.getReadCols()
+	query := sq.Select(readCols...).
+		From(tableFrom).
+		Where(c.idFilter(id))
+	if c.ReadQueryModifier != nil {
+		query = c.ReadQueryModifier(query)
+	}
+	rows, _, err := c.DB.Query(ctx, c.Table, query)
 	if err != nil {
 		return c.NilValue(), err
 	}
@@ -262,7 +301,7 @@ func (c *CrudBase[T]) GetByID(ctx context.Context, id *fftypes.UUID) (inst T, er
 		return c.NilValue(), nil
 	}
 
-	inst, err = c.scanRow(ctx, rows)
+	inst, err = c.scanRow(ctx, cols, rows)
 	if err != nil {
 		return c.NilValue(), err
 	}
@@ -270,12 +309,16 @@ func (c *CrudBase[T]) GetByID(ctx context.Context, id *fftypes.UUID) (inst T, er
 }
 
 func (c *CrudBase[T]) GetMany(ctx context.Context, filter ffapi.Filter) (instances []T, fr *ffapi.FilterResult, err error) {
-	query, fop, fi, err := c.DB.FilterSelect(ctx, "", sq.Select(c.Columns...).From(c.Table), filter, c.FilterFieldMap,
+	tableFrom, cols, readCols := c.getReadCols()
+	query, fop, fi, err := c.DB.FilterSelect(ctx, c.ReadTableAlias, sq.Select(readCols...).From(tableFrom), filter, c.FilterFieldMap,
 		[]interface{}{
 			&ffapi.SortField{Field: c.DB.sequenceColumn, Descending: true},
 		}, c.ScopedFilter())
 	if err != nil {
 		return nil, nil, err
+	}
+	if c.ReadQueryModifier != nil {
+		query = c.ReadQueryModifier(query)
 	}
 
 	rows, tx, err := c.DB.Query(ctx, c.Table, query)
@@ -286,7 +329,7 @@ func (c *CrudBase[T]) GetMany(ctx context.Context, filter ffapi.Filter) (instanc
 
 	instances = []T{}
 	for rows.Next() {
-		inst, err := c.scanRow(ctx, rows)
+		inst, err := c.scanRow(ctx, cols, rows)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -348,7 +391,11 @@ func (c *CrudBase[T]) Delete(ctx context.Context, id *fftypes.UUID, hooks ...Pos
 
 	err = c.DB.DeleteTx(ctx, c.Table, tx, sq.Delete(c.Table).Where(
 		c.idFilter(id),
-	), nil)
+	), func() {
+		if c.EventHandler != nil {
+			c.EventHandler(id, Deleted)
+		}
+	})
 	if err != nil {
 		return err
 	}

@@ -51,6 +51,25 @@ func (tc *TestCRUDable) GetID() *fftypes.UUID {
 	return tc.ID
 }
 
+type TestLinkable struct {
+	ID          *fftypes.UUID    `json:"id"`
+	NS          string           `json:"namespace"`
+	CrudID      *fftypes.UUID    `json:"crudId"`
+	Description string           `json:"description"`
+	Field1      string           `json:"f1"`
+	Field2      fftypes.FFBigInt `json:"f2"`
+	Field3      *fftypes.JSONAny `json:"f3"`
+}
+
+var LinkableQueryFactory = &ffapi.QueryFields{
+	"id":   &ffapi.UUIDField{},
+	"crud": &ffapi.UUIDField{},
+}
+
+func (tc *TestLinkable) GetID() *fftypes.UUID {
+	return tc.ID
+}
+
 type TestCRUD struct {
 	*CrudBase[*TestCRUDable]
 	events      []ChangeEventType
@@ -96,10 +115,60 @@ func newCRUDCollection(db *Database, ns string) *TestCRUD {
 			},
 		},
 	}
-	tc.CrudBase.EventHandler = func(inst *TestCRUDable, eventType ChangeEventType) {
+	tc.CrudBase.EventHandler = func(id *fftypes.UUID, eventType ChangeEventType) {
 		tc.events = append(tc.events, eventType)
 	}
 	tc.postCommit = func() { tc.postCommits++ }
+	return tc
+}
+
+func newLinkableCollection(db *Database, ns string) *CrudBase[*TestLinkable] {
+	tc := &CrudBase[*TestLinkable]{
+		DB:    db,
+		Table: "linkables",
+		Columns: []string{
+			"id",
+			"ns",
+			"desc",
+			"crud_id",
+		},
+		ReadTableAlias: "l",
+		ReadOnlyColumns: []string{
+			"c.field1",
+			"c.field2",
+			"c.field3",
+		},
+		FilterFieldMap: map[string]string{
+			"description": "desc",
+			"crud":        "crud_id",
+		},
+		ReadQueryModifier: func(query sq.SelectBuilder) sq.SelectBuilder {
+			return query.LeftJoin("crudables AS c ON c.id = l.crud_id")
+		},
+		NilValue:     func() *TestLinkable { return nil },
+		NewInstance:  func() *TestLinkable { return &TestLinkable{} },
+		ScopedFilter: func() squirrel.Eq { return sq.Eq{"l.ns": ns} },
+		EventHandler: nil, // set below
+		GetFieldPtr: func(inst *TestLinkable, col string) interface{} {
+			switch col {
+			case "id":
+				return &inst.ID
+			case "ns":
+				return &inst.NS
+			case "desc":
+				return &inst.Description
+			case "crud_id":
+				return &inst.CrudID
+			case "c.field1":
+				return &inst.Field1
+			case "c.field2":
+				return &inst.Field2
+			case "c.field3":
+				return &inst.Field3
+			}
+			panic(fmt.Sprintf("unknown column: '%s'", col))
+		},
+	}
 	return tc
 }
 
@@ -244,6 +313,54 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	// Check all the post commits above fired
 	assert.Equal(t, 7, tc.postCommits)
 
+}
+
+func TestLeftJOINExample(t *testing.T) {
+	log.SetLevel("trace")
+
+	db, done := newSQLiteTestProvider(t)
+	defer done()
+	ctx := context.Background()
+
+	crudables := newCRUDCollection(&db.Database, "ns1")
+	linkables := newLinkableCollection(&db.Database, "ns1")
+
+	c1 := &TestCRUDable{
+		ID:     fftypes.NewUUID(),
+		NS:     "ns1",
+		Field1: "linked1",
+		Field2: *fftypes.NewFFBigInt(11111),
+		Field3: fftypes.JSONAnyPtr(`{"linked":1}`),
+	}
+	l1 := &TestLinkable{
+		ID:          fftypes.NewUUID(),
+		NS:          "ns1",
+		Description: "linked to C1",
+		CrudID:      c1.ID,
+	}
+
+	err := crudables.Insert(ctx, c1)
+	assert.NoError(t, err)
+
+	err = linkables.Insert(ctx, l1)
+	assert.NoError(t, err)
+
+	l1Copy, err := linkables.GetByID(ctx, l1.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, c1.ID, l1Copy.CrudID)
+	assert.Equal(t, "linked to C1", l1Copy.Description)
+	assert.Equal(t, "linked1", l1Copy.Field1 /* from JOIN */)
+	assert.Equal(t, int64(11111), l1Copy.Field2.Int64() /* from JOIN */)
+	assert.Equal(t, int64(1), l1Copy.Field3.JSONObject().GetInt64("linked") /* from JOIN */)
+
+	l1s, _, err := linkables.GetMany(ctx, LinkableQueryFactory.NewFilter(ctx).Eq("crud", c1.ID))
+	assert.NoError(t, err)
+	assert.Len(t, l1s, 1)
+	assert.Equal(t, c1.ID, l1s[0].CrudID)
+	assert.Equal(t, "linked to C1", l1s[0].Description)
+	assert.Equal(t, "linked1", l1s[0].Field1 /* from JOIN */)
+	assert.Equal(t, int64(11111), l1s[0].Field2.Int64() /* from JOIN */)
+	assert.Equal(t, int64(1), l1s[0].Field3.JSONObject().GetInt64("linked") /* from JOIN */)
 }
 
 func TestUpsertFailBegin(t *testing.T) {
