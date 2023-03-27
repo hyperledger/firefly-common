@@ -94,7 +94,7 @@ var (
 	MsgRouteDescriptionMissing                     = ffe("FF00159", "API route description missing for route '%s'")
 	MsgFFStructTagMissing                          = ffe("FF00160", "ffstruct tag is missing for '%s' on route '%s'")
 	MsgMultiPartFormReadError                      = ffe("FF00161", "Error reading multi-part form input", 400)
-	MsgInvalidContentType                          = ffe("FF00162", "Invalid content type", 415)
+	MsgInvalidContentType                          = ffe("FF00162", "Invalid content type '%s'", 415)
 	MsgFieldsAfterFile                             = ffe("FF00163", "Additional form field sent after file in multi-part form (ignored): '%s'", 400)
 	Msg404NoResult                                 = ffe("FF00164", "No result found", 404)
 	MsgResponseMarshalError                        = ffe("FF00165", "Failed to serialize response data", 400)

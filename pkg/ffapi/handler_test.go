@@ -402,6 +402,41 @@ func TestMultipartBadData(t *testing.T) {
 	assert.Regexp(t, "FF00161", resJSON["error"])
 }
 
+func TestTextPlain201(t *testing.T) {
+	s, _, done := newTestServer(t, []*Route{{
+		Name:   "testRoute",
+		Path:   "/test/{something}",
+		Method: "POST",
+		PathParams: []*PathParam{
+			{Name: "something"},
+		},
+		QueryParams: []*QueryParam{
+			{Name: "param1"},
+			{Name: "param2", IsBool: true},
+			{Name: "param3", IsBool: true},
+		},
+		JSONInputValue:  nil,
+		JSONOutputValue: func() interface{} { return make(map[string]interface{}) },
+		JSONOutputCodes: []int{201},
+		JSONHandler: func(r *APIRequest) (output interface{}, err error) {
+			assert.Equal(t, "stuff", r.PP["something"])
+			assert.Equal(t, "thing", r.QP["param1"])
+			assert.Equal(t, "true", r.QP["param2"])
+			assert.Equal(t, "false", r.QP["param3"])
+			return map[string]interface{}{"output1": "value2"}, nil
+		},
+	}})
+	defer done()
+
+	b := []byte("this is some sample text")
+	res, err := http.Post(fmt.Sprintf("http://%s/test/stuff?param1=thing&param2&param3=false", s.Addr()), "text/plain", bytes.NewReader(b))
+	assert.NoError(t, err)
+	assert.Equal(t, 201, res.StatusCode)
+	var resJSON map[string]interface{}
+	json.NewDecoder(res.Body).Decode(&resJSON)
+	assert.Equal(t, "value2", resJSON["output1"])
+}
+
 func TestMultipartBadContentType(t *testing.T) {
 	hf := newTestHandlerFactory()
 	_, err := hf.getFilePart(httptest.NewRequest("GET", "/wrong", nil))
