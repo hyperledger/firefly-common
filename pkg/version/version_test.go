@@ -1,7 +1,7 @@
 // Kaleido, Inc. CONFIDENTIAL
 // Unpublished Copyright © 2023 Kaleido, Inc. All Rights Reserved.
 
-package cmd
+package version
 
 import (
 	"context"
