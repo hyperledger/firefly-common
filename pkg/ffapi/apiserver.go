@@ -66,13 +66,13 @@ type apiServer[T any] struct {
 }
 
 type APIServerOptions[T any] struct {
-	MetricsRegistry  metric.MetricsRegistry
-	Routes           []*Route
-	GetContextObject func(r *APIRequest) T
-	Description      string
-	APIConfig        config.Section
-	MetricsConfig    config.Section
-	CORSConfig       config.Section
+	MetricsRegistry metric.MetricsRegistry
+	Routes          []*Route
+	EnrichRequest   func(r *APIRequest) (T, error)
+	Description     string
+	APIConfig       config.Section
+	MetricsConfig   config.Section
+	CORSConfig      config.Section
 }
 
 type APIServerRouteExt[T any] struct {
@@ -212,7 +212,11 @@ func (as *apiServer[T]) routeHandler(hf *HandlerFactory, apiBaseURL string, rout
 	// We also pass the Orchestrator context through
 	ext := route.Extensions.(*APIServerRouteExt[T])
 	route.JSONHandler = func(r *APIRequest) (output interface{}, err error) {
-		return ext.JSONHandler(r, as.GetContextObject(r))
+		er, err := as.EnrichRequest(r)
+		if err != nil {
+			return nil, err
+		}
+		return ext.JSONHandler(r, er)
 	}
 	return hf.RouteHandler(route)
 }
@@ -241,7 +245,11 @@ func (as *apiServer[T]) createMuxRouter(ctx context.Context, publicURL string) *
 		}
 		if ce.UploadHandler != nil {
 			route.FormUploadHandler = func(r *APIRequest) (output interface{}, err error) {
-				return ce.UploadHandler(r, as.GetContextObject(r))
+				er, err := as.EnrichRequest(r)
+				if err != nil {
+					return nil, err
+				}
+				return ce.UploadHandler(r, er)
 			}
 		}
 		if ce.JSONHandler != nil || ce.UploadHandler != nil {

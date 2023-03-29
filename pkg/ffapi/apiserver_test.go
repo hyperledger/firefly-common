@@ -37,6 +37,7 @@ import (
 type utManager struct {
 	t                   *testing.T
 	mockErr             error
+	mockEnrichErr       error
 	calledJSONHandler   string
 	calledUploadHandler string
 }
@@ -99,11 +100,11 @@ func newTestAPIServer(t *testing.T, start bool) (*utManager, *apiServer[*utManag
 	as := NewAPIServer(ctx, APIServerOptions[*utManager]{
 		MetricsRegistry: metric.NewPrometheusMetricsRegistry("ut"),
 		Routes:          []*Route{utAPIRoute1},
-		GetContextObject: func(r *APIRequest) *utManager {
+		EnrichRequest: func(r *APIRequest) (*utManager, error) {
 			// This could be some dynamic object based on extra processing in the request,
 			// but the most common case is you just have a "manager" that you inject into each
 			// request and that's the "T" on the APIServer
-			return um
+			return um, um.mockEnrichErr
 		},
 		Description:   "unit testing",
 		APIConfig:     apiConfig,
@@ -225,6 +226,36 @@ func TestAPIServerSwaggerUI(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 200, res.StatusCode())
 	assert.Regexp(t, "text/html", res.Header().Get("content-type"))
+}
+
+func TestAPIServerInvokeEnrichFailJSON(t *testing.T) {
+	um, as, done := newTestAPIServer(t, true)
+	defer done()
+
+	um.mockEnrichErr = fmt.Errorf("pop")
+	<-as.Started()
+
+	res, err := resty.New().R().
+		SetBody(&sampleInput{
+			Input1: "test_json_input",
+		}).
+		Post(fmt.Sprintf("%s/api/v1/ut/utresource/id12345/postit", as.APIPublicURL()))
+	assert.NoError(t, err)
+	assert.Equal(t, 500, res.StatusCode())
+}
+
+func TestAPIServerInvokeEnrichFailForm(t *testing.T) {
+	um, as, done := newTestAPIServer(t, true)
+	defer done()
+
+	um.mockEnrichErr = fmt.Errorf("pop")
+	<-as.Started()
+
+	res, err := resty.New().R().
+		SetMultipartField("data", "file1", "text.plain", strings.NewReader("test_form_data")).
+		Post(fmt.Sprintf("%s/api/v1/ut/utresource/id12345/postit", as.APIPublicURL()))
+	assert.NoError(t, err)
+	assert.Equal(t, 500, res.StatusCode())
 }
 
 func TestAPIServer404(t *testing.T) {
