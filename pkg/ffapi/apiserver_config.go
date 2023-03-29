@@ -1,0 +1,48 @@
+// Copyright © 2023 Kaleido, Inc.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package ffapi
+
+import (
+	"github.com/hyperledger/firefly-common/pkg/config"
+	"github.com/hyperledger/firefly-common/pkg/httpserver"
+)
+
+var (
+	ConfMetricsServerEnabled = "enabled"
+	ConfMetricsServerPath    = "/metrics"
+
+	ConfAPIDefaultFilterLimit = "defaultFilterLimit"
+	ConfAPIMaxFilterLimit     = "maxFilterLimit"
+	ConfAPIMaxFilterSkip      = "maxFilterSkip"
+	ConfAPIRequestTimeout     = "requestTimeout"
+	ConfAPIRequestMaxTimeout  = "requestMaxTimeout"
+)
+
+func InitAPIServerConfig(apiConfig, metricsConfig, corsConfig config.Section) {
+	httpserver.InitHTTPConfig(apiConfig, 5000)
+	apiConfig.AddKnownKey(ConfAPIDefaultFilterLimit, 25)
+	apiConfig.AddKnownKey(ConfAPIMaxFilterLimit, 100)
+	apiConfig.AddKnownKey(ConfAPIMaxFilterSkip, 100000)
+	apiConfig.AddKnownKey(ConfAPIRequestTimeout, "30s")
+	apiConfig.AddKnownKey(ConfAPIRequestMaxTimeout, "10m")
+
+	httpserver.InitCORSConfig(corsConfig)
+
+	httpserver.InitHTTPConfig(metricsConfig, 6000)
+	metricsConfig.AddKnownKey(ConfMetricsServerEnabled, true)
+	metricsConfig.AddKnownKey(ConfMetricsServerPath, "/metrics")
+}

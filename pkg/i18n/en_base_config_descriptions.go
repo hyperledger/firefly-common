@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -109,4 +109,13 @@ var (
 	ConfigCorsOrigins = ffc("config.global.cors.origins", "CORS setting to control the allowed origins", ArrayStringType)
 
 	ConfigGlobalAuthBasicPasswordFile = ffc("config.global.basic.passwordfile", "The path to a .htpasswd file to use for authenticating requests. Passwords should be hashed with bcrypt.", StringType)
+
+	ConfigGlobalDebugEnabled = ffc("config.debug.enabled", "Whether the debug HTTP endpoint is enabled", BooleanType)
+
+	ConfigGlobalPort            = ffc("config.port", "Listener port", IntType)
+	ConfigGlobalAddress         = ffc("config.address", "Listener address", IntType)
+	ConfigGlobalPublicURL       = ffc("config.publicURL", "Externally available URL for the HTTP endpoint", StringType)
+	ConfigGlobalReadTimeout     = ffc("config.readTimeout", "HTTP server read timeout", TimeDurationType)
+	ConfigGlobalWriteTimeout    = ffc("config.writeTimeout", "HTTP server write timeout", TimeDurationType)
+	ConfigGlobalShutdownTimeout = ffc("config.shutdownTimeout", "HTTP server shutdown timeout", TimeDurationType)
 )

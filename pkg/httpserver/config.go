@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -95,4 +95,15 @@ func InitHTTPConfig(conf config.Section, defaultPort int) {
 
 	ac := conf.SubSection("auth")
 	authfactory.InitConfig(ac)
+}
+
+const (
+
+	// DebugEnabled is whether to actually run the debug server or not
+	DebugEnabled = "enabled"
+)
+
+func InitDebugConfig(conf config.Section) {
+	InitHTTPConfig(conf, 0 /* auto assign */)
+	conf.AddKnownKey(DebugEnabled, true /* on by default */)
 }

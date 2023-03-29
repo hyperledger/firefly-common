@@ -83,7 +83,7 @@ var (
 	MsgWSConnectFailed                             = ffe("FF00148", "Websocket connect failed")
 	MsgInvalidURL                                  = ffe("FF00149", "Invalid URL: '%s'")
 	MsgWSHeartbeatTimeout                          = ffe("FF00150", "Websocket heartbeat timed out after %.2fms", 500)
-	MsgAPIServerStartFailed                        = ffe("FF00151", "Unable to start listener on %s: %s")
+	MsgAPIServerStartFailed                        = ffe("FF00151", "Unable to start listener on %s")
 	MsgInvalidCAFile                               = ffe("FF00152", "Invalid CA certificates file")
 	MsgTLSConfigFailed                             = ffe("FF00153", "Failed to initialize TLS configuration")
 	MsgContextCanceled                             = ffe("FF00154", "Context canceled")
