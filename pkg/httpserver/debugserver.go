@@ -32,7 +32,8 @@ func RunDebugServer(ctx context.Context, debugServerConf config.Section) {
 	var debugServer *http.Server
 	debugPort := debugServerConf.GetInt(HTTPConfPort)
 	debugAddress := debugServerConf.GetString(HTTPConfAddress)
-	if debugPort >= 0 {
+	debugEnabled := debugServerConf.GetBool(DebugEnabled)
+	if debugEnabled {
 		r := mux.NewRouter()
 		r.PathPrefix("/debug/pprof/cmdline").HandlerFunc(pprof.Cmdline)
 		r.PathPrefix("/debug/pprof/profile").HandlerFunc(pprof.Profile)
@@ -47,5 +48,7 @@ func RunDebugServer(ctx context.Context, debugServerConf config.Section) {
 	}
 
 	<-ctx.Done()
-	_ = debugServer.Close()
+	if debugServer != nil {
+		_ = debugServer.Close()
+	}
 }
