@@ -14,30 +14,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package httpserver
 
 import (
-	"fmt"
+	"context"
+	"testing"
 
-	"github.com/spf13/cobra"
+	"github.com/hyperledger/firefly-common/pkg/config"
 )
 
-func ShowConfigCobraCommand(initConf func() error) *cobra.Command {
-	return &cobra.Command{
-		Use:     "showconfig",
-		Aliases: []string{"showconf"},
-		Short:   "List out the configuration options",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := initConf(); err != nil {
-				return err
-			}
+func TestDebugServer(t *testing.T) {
 
-			fmt.Printf("%-64s %v\n", "Key", "Value")
-			fmt.Print("-----------------------------------------------------------------------------------\n")
-			for _, k := range GetKnownKeys() {
-				fmt.Printf("%-64s %v\n", k, Get(RootKey(k)))
-			}
-			return nil
-		},
-	}
+	ctx, cancelCtx := context.WithCancel(context.Background())
+
+	config.RootConfigReset()
+	utconf := config.RootSection("ut")
+	InitHTTPConfig(utconf, 0)
+
+	done := make(chan struct{})
+	go func() {
+		RunDebugServer(ctx, utconf)
+		close(done)
+	}()
+	cancelCtx()
+	<-done
+
 }

@@ -17,16 +17,27 @@
 package config
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestShowConfigCobraCommand(t *testing.T) {
+func TestShowConfigCobraCommandOk(t *testing.T) {
 
-	err := ShowConfigCobraCommand(func() {
+	err := ShowConfigCobraCommand(func() error {
 		AddRootKey("things")
+		return nil
 	}).Execute()
 	assert.NoError(t, err)
+
+}
+
+func TestShowConfigCobraCommandErrInit(t *testing.T) {
+
+	err := ShowConfigCobraCommand(func() error {
+		return fmt.Errorf("pop")
+	}).Execute()
+	assert.Regexp(t, "pop", err)
 
 }
