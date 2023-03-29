@@ -19,6 +19,7 @@ package httpserver
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"testing"
@@ -28,30 +29,32 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestDebugServer(t *testing.T) {
+func TestDebugServerGoRoutineDump(t *testing.T) {
 
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
-	// Reserve a port we know we can use
-	serverToNabPort, err := net.Listen("tcp4", "127.0.0.1:0")
-	assert.NoError(t, err)
-	_ = serverToNabPort.Close()
-	port := strings.Split(serverToNabPort.Addr().String(), ":")[1]
-
 	config.RootConfigReset()
 	utconf := config.RootSection("ut")
-	InitDebugConfig(utconf, true)
-	utconf.Set(HTTPConfPort, port)
+	InitDebugConfig(utconf)
 
 	done := make(chan struct{})
+	port := make(chan string)
 	go func() {
-		RunDebugServer(ctx, utconf)
+		RunDebugServer(ctx, utconf, func(addr net.Addr) {
+			port <- strings.Split(addr.String(), ":")[1]
+		})
 		close(done)
 	}()
 
-	res, err := resty.New().R().Get(fmt.Sprintf("http://localhost:%s/debug/pprof/goroutine?debug=2", port))
+	res, err := resty.New().R().
+		SetDoNotParseResponse(true).
+		Get(fmt.Sprintf("http://localhost:%s/debug/pprof/goroutine?debug=2", <-port))
 	assert.NoError(t, err)
 	assert.True(t, res.IsSuccess())
+	body, err := io.ReadAll(res.RawBody())
+	assert.NoError(t, err)
+	// We should find ourselves in the output
+	assert.Regexp(t, "TestDebugServerGoRoutineDump", string(body))
 
 	cancelCtx()
 	<-done
@@ -64,7 +67,27 @@ func TestDebugServerDisabled(t *testing.T) {
 
 	config.RootConfigReset()
 	utconf := config.RootSection("ut")
-	InitDebugConfig(utconf, false)
+	InitDebugConfig(utconf)
+
+	done := make(chan struct{})
+	go func() {
+		RunDebugServer(ctx, utconf)
+		close(done)
+	}()
+
+	cancelCtx()
+	<-done
+
+}
+
+func TestDebugServerBadConfig(t *testing.T) {
+
+	ctx, cancelCtx := context.WithCancel(context.Background())
+
+	config.RootConfigReset()
+	utconf := config.RootSection("ut")
+	InitDebugConfig(utconf)
+	utconf.Set(HTTPConfAddress, "-1")
 
 	done := make(chan struct{})
 	go func() {

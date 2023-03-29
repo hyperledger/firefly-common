@@ -19,6 +19,7 @@ package httpserver
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"time"
@@ -28,23 +29,31 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/log"
 )
 
-func RunDebugServer(ctx context.Context, debugServerConf config.Section) {
+func RunDebugServer(ctx context.Context, debugServerConf config.Section, captureAddr ...func(addr net.Addr)) {
 	var debugServer *http.Server
 	debugPort := debugServerConf.GetInt(HTTPConfPort)
 	debugAddress := debugServerConf.GetString(HTTPConfAddress)
 	debugEnabled := debugServerConf.GetBool(DebugEnabled)
 	if debugEnabled {
-		r := mux.NewRouter()
-		r.PathPrefix("/debug/pprof/cmdline").HandlerFunc(pprof.Cmdline)
-		r.PathPrefix("/debug/pprof/profile").HandlerFunc(pprof.Profile)
-		r.PathPrefix("/debug/pprof/symbol").HandlerFunc(pprof.Symbol)
-		r.PathPrefix("/debug/pprof/trace").HandlerFunc(pprof.Trace)
-		r.PathPrefix("/debug/pprof/").HandlerFunc(pprof.Index)
-		debugServer = &http.Server{Addr: fmt.Sprintf("%s:%d", debugAddress, debugPort), Handler: r, ReadHeaderTimeout: 30 * time.Second}
-		go func() {
-			_ = debugServer.ListenAndServe()
-		}()
-		log.L(ctx).Debugf("Debug HTTP endpoint listening on %s:%d", debugAddress, debugPort)
+		l, err := createListener(ctx, "debug", debugServerConf)
+		if err == nil {
+			log.L(ctx).Debugf("Debug HTTP endpoint listening on %s", l.Addr())
+			if len(captureAddr) > 0 {
+				captureAddr[0](l.Addr())
+			}
+			r := mux.NewRouter()
+			r.PathPrefix("/debug/pprof/cmdline").HandlerFunc(pprof.Cmdline)
+			r.PathPrefix("/debug/pprof/profile").HandlerFunc(pprof.Profile)
+			r.PathPrefix("/debug/pprof/symbol").HandlerFunc(pprof.Symbol)
+			r.PathPrefix("/debug/pprof/trace").HandlerFunc(pprof.Trace)
+			r.PathPrefix("/debug/pprof/").HandlerFunc(pprof.Index)
+			debugServer = &http.Server{Addr: fmt.Sprintf("%s:%d", debugAddress, debugPort), Handler: r, ReadHeaderTimeout: 30 * time.Second}
+			go func() {
+				_ = debugServer.Serve(l)
+			}()
+		} else {
+			log.L(ctx).Errorf("Debug server failed to start: %s", err)
+		}
 	}
 
 	<-ctx.Done()

@@ -104,6 +104,6 @@ const (
 )
 
 func InitDebugConfig(conf config.Section) {
-	InitHTTPConfig(conf, 6060)
-	conf.AddKnownKey(DebugEnabled, false)
+	InitHTTPConfig(conf, 0 /* auto assign */)
+	conf.AddKnownKey(DebugEnabled, true /* on by default */)
 }
