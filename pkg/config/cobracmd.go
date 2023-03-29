@@ -22,7 +22,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func ShowConfigCobraCommand(initConf func() error) *cobra.Command {
+func ShowConfigCommand(initConf func() error) *cobra.Command {
 	return &cobra.Command{
 		Use:     "showconfig",
 		Aliases: []string{"showconf"},

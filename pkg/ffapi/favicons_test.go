@@ -28,7 +28,7 @@ import (
 func TestFavIcon16(t *testing.T) {
 	res := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/favicon-16x16.png", nil)
-	var handler http.HandlerFunc = favIcons
+	var handler http.HandlerFunc = favIconsHandler(ffLogo16, ffLogo32)
 	handler(res, req)
 	assert.Equal(t, 200, res.Result().StatusCode)
 	b, err := io.ReadAll(res.Body)
@@ -40,7 +40,7 @@ func TestFavIcon16(t *testing.T) {
 func TestFavIcon32(t *testing.T) {
 	res := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/api/favicon-32x32.png", nil)
-	var handler http.HandlerFunc = favIcons
+	var handler http.HandlerFunc = favIconsHandler(ffLogo16, ffLogo32)
 	handler(res, req)
 	assert.Equal(t, 200, res.Result().StatusCode)
 	b, err := io.ReadAll(res.Body)

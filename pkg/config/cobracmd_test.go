@@ -25,7 +25,7 @@ import (
 
 func TestShowConfigCobraCommandOk(t *testing.T) {
 
-	err := ShowConfigCobraCommand(func() error {
+	err := ShowConfigCommand(func() error {
 		AddRootKey("things")
 		return nil
 	}).Execute()
@@ -35,7 +35,7 @@ func TestShowConfigCobraCommandOk(t *testing.T) {
 
 func TestShowConfigCobraCommandErrInit(t *testing.T) {
 
-	err := ShowConfigCobraCommand(func() error {
+	err := ShowConfigCommand(func() error {
 		return fmt.Errorf("pop")
 	}).Execute()
 	assert.Regexp(t, "pop", err)

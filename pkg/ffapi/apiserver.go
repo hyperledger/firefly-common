@@ -73,6 +73,8 @@ type APIServerOptions[T any] struct {
 	APIConfig       config.Section
 	MetricsConfig   config.Section
 	CORSConfig      config.Section
+	FavIcon16       []byte
+	FavIcon32       []byte
 }
 
 type APIServerRouteExt[T any] struct {
@@ -93,6 +95,12 @@ func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APISe
 		metricsPath:        options.MetricsConfig.GetString(ConfMetricsServerPath),
 		APIServerOptions:   options,
 		started:            make(chan struct{}),
+	}
+	if as.FavIcon16 == nil {
+		as.FavIcon16 = ffLogo16
+	}
+	if as.FavIcon32 == nil {
+		as.FavIcon32 = ffLogo16
 	}
 	_ = as.MetricsRegistry.NewHTTPMetricsInstrumentationsForSubsystem(
 		ctx,
@@ -260,7 +268,7 @@ func (as *apiServer[T]) createMuxRouter(ctx context.Context, publicURL string) *
 
 	r.HandleFunc(`/api/swagger{ext:\.yaml|\.json|}`, hf.APIWrapper(as.swaggerHandler(as.swaggerGenerator(apiBaseURL))))
 	r.HandleFunc(`/api`, hf.APIWrapper(hf.SwaggerUIHandler(publicURL+"/api/swagger.yaml")))
-	r.HandleFunc(`/favicon{any:.*}.png`, favIcons)
+	r.HandleFunc(`/favicon{any:.*}.png`, favIconsHandler(as.FavIcon16, as.FavIcon32))
 
 	r.NotFoundHandler = hf.APIWrapper(as.notFoundHandler)
 	return r
