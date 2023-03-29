@@ -103,7 +103,7 @@ const (
 	DebugEnabled = "enabled"
 )
 
-func InitDebugConfig(conf config.Section, defaultEnabled bool) {
+func InitDebugConfig(conf config.Section) {
 	InitHTTPConfig(conf, 6060)
-	conf.AddKnownKey(DebugEnabled, defaultEnabled)
+	conf.AddKnownKey(DebugEnabled, false)
 }
