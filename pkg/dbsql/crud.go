@@ -51,6 +51,18 @@ type WithID interface {
 	GetID() *fftypes.UUID
 }
 
+type CRUD[T WithID] interface {
+	Upsert(ctx context.Context, inst T, optimization UpsertOptimization, hooks ...PostCompletionHook) (err error)
+	InsertMany(ctx context.Context, instances []T, allowPartialSuccess bool, hooks ...PostCompletionHook) (err error)
+	Insert(ctx context.Context, inst T, hooks ...PostCompletionHook) (err error)
+	Replace(ctx context.Context, inst T, hooks ...PostCompletionHook) (err error)
+	GetByID(ctx context.Context, id *fftypes.UUID) (inst T, err error)
+	GetMany(ctx context.Context, filter ffapi.Filter) (instances []T, fr *ffapi.FilterResult, err error)
+	Update(ctx context.Context, id *fftypes.UUID, update ffapi.Update, hooks ...PostCompletionHook) (err error)
+	UpdateMany(ctx context.Context, filter ffapi.Filter, update ffapi.Update, hooks ...PostCompletionHook) (err error)
+	Delete(ctx context.Context, id *fftypes.UUID, hooks ...PostCompletionHook) (err error)
+}
+
 type CrudBase[T WithID] struct {
 	DB             *Database
 	Table          string

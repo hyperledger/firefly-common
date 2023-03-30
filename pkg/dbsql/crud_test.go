@@ -195,54 +195,55 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 		Field3: fftypes.JSONAnyPtr(`{"some":"stuff"}`),
 	}
 
-	tc := newCRUDCollection(&db.Database, "ns1")
+	collection := newCRUDCollection(&db.Database, "ns1")
+	var iCrud CRUD[*TestCRUDable] = collection.CrudBase
 
 	// Add a row
-	err := tc.Insert(ctx, c1, tc.postCommit)
+	err := iCrud.Insert(ctx, c1, collection.postCommit)
 	assert.NoError(t, err)
-	assert.Len(t, tc.events, 1)
-	assert.Equal(t, Created, tc.events[0])
-	tc.events = nil
+	assert.Len(t, collection.events, 1)
+	assert.Equal(t, Created, collection.events[0])
+	collection.events = nil
 
 	// Check we get it back
-	c1copy, err := tc.GetByID(ctx, c1.ID)
+	c1copy, err := iCrud.GetByID(ctx, c1.ID)
 	assert.NoError(t, err)
 	checkJSONEq(t, c1, c1copy)
 
 	// Upsert the existing row optimized
 	c1copy.Field1 = "hello again - 1"
-	err = tc.Upsert(ctx, c1copy, UpsertOptimizationExisting)
+	err = iCrud.Upsert(ctx, c1copy, UpsertOptimizationExisting)
 	assert.NoError(t, err)
-	c1copy1, err := tc.GetByID(ctx, c1.ID)
+	c1copy1, err := iCrud.GetByID(ctx, c1.ID)
 	assert.NoError(t, err)
 	checkJSONEq(t, c1copy, c1copy1)
-	assert.Len(t, tc.events, 1)
-	assert.Equal(t, Updated, tc.events[0])
-	tc.events = nil
+	assert.Len(t, collection.events, 1)
+	assert.Equal(t, Updated, collection.events[0])
+	collection.events = nil
 
 	// Upsert the existing row un-optimized
 	c1copy.Field1 = "hello again - 2"
-	err = tc.Upsert(ctx, c1copy, UpsertOptimizationNew, tc.postCommit)
+	err = iCrud.Upsert(ctx, c1copy, UpsertOptimizationNew, collection.postCommit)
 	assert.NoError(t, err)
-	c1copy2, err := tc.GetByID(ctx, c1.ID)
+	c1copy2, err := iCrud.GetByID(ctx, c1.ID)
 	assert.NoError(t, err)
 	checkJSONEq(t, c1copy, c1copy2)
 
 	// Explicitly replace it
 	c1copy.Field1 = "hello again - 3"
-	err = tc.Replace(ctx, c1copy, tc.postCommit)
+	err = iCrud.Replace(ctx, c1copy, collection.postCommit)
 	assert.NoError(t, err)
-	c1copy3, err := tc.GetByID(ctx, c1.ID)
+	c1copy3, err := iCrud.GetByID(ctx, c1.ID)
 	assert.NoError(t, err)
 	checkJSONEq(t, c1copy, c1copy3)
 
 	// Explicitly update it
 	c1copy.Field1 = "hello again - 4"
-	err = tc.Update(ctx, c1copy.ID, CRUDableQueryFactory.NewUpdate(ctx).Set(
+	err = iCrud.Update(ctx, c1copy.ID, CRUDableQueryFactory.NewUpdate(ctx).Set(
 		"f1", c1copy.Field1,
-	), tc.postCommit)
+	), collection.postCommit)
 	assert.NoError(t, err)
-	c1copy4, err := tc.GetByID(ctx, c1.ID)
+	c1copy4, err := iCrud.GetByID(ctx, c1.ID)
 	assert.NoError(t, err)
 	checkJSONEq(t, c1copy, c1copy4)
 
@@ -250,18 +251,18 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	c2 := *c1
 	c2.ID = fftypes.NewUUID()
 	c2.Field1 = "bonjour"
-	err = tc.Replace(ctx, &c2, tc.postCommit)
+	err = iCrud.Replace(ctx, &c2, collection.postCommit)
 	assert.Regexp(t, "FF00205", err)
 
 	// Optimized insert of another
-	err = tc.Upsert(ctx, &c2, UpsertOptimizationNew)
+	err = iCrud.Upsert(ctx, &c2, UpsertOptimizationNew)
 	assert.NoError(t, err)
-	c2copy1, err := tc.GetByID(ctx, c1.ID)
+	c2copy1, err := iCrud.GetByID(ctx, c1.ID)
 	assert.NoError(t, err)
 	checkJSONEq(t, c2, c2copy1)
 
 	// Check we can filter it with the new value
-	cs, _, err := tc.GetMany(ctx, CRUDableQueryFactory.NewFilter(ctx).Eq(
+	cs, _, err := iCrud.GetMany(ctx, CRUDableQueryFactory.NewFilter(ctx).Eq(
 		"f1", "bonjour",
 	))
 	assert.NoError(t, err)
@@ -278,40 +279,40 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 			Field2: *fftypes.NewFFBigInt(919191),
 		}
 	}
-	err = tc.InsertMany(ctx, bunchOfCRUDables, false, tc.postCommit)
+	err = iCrud.InsertMany(ctx, bunchOfCRUDables, false, collection.postCommit)
 	assert.NoError(t, err)
 
 	// Grab one
-	bunch5copy, err := tc.GetByID(ctx, bunchOfCRUDables[4].ID)
+	bunch5copy, err := iCrud.GetByID(ctx, bunchOfCRUDables[4].ID)
 	assert.NoError(t, err)
 	checkJSONEq(t, bunchOfCRUDables[4], bunch5copy)
 
 	// Update them all
-	err = tc.UpdateMany(ctx, CRUDableQueryFactory.NewFilter(ctx).Eq(
+	err = iCrud.UpdateMany(ctx, CRUDableQueryFactory.NewFilter(ctx).Eq(
 		"f2", "919191",
 	), CRUDableQueryFactory.NewUpdate(ctx).Set(
 		"f2", "929292",
-	), tc.postCommit)
+	), collection.postCommit)
 	assert.NoError(t, err)
 	checkJSONEq(t, bunchOfCRUDables[4], bunch5copy)
 
 	for i := range bunchOfCRUDables {
-		ci, err := tc.GetByID(ctx, bunchOfCRUDables[i].ID)
+		ci, err := iCrud.GetByID(ctx, bunchOfCRUDables[i].ID)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(929292), ci.Field2.Int64())
 	}
 
 	// Delete it
-	err = tc.Delete(ctx, bunchOfCRUDables[4].ID, tc.postCommit)
+	err = iCrud.Delete(ctx, bunchOfCRUDables[4].ID, collection.postCommit)
 	assert.NoError(t, err)
 
 	// Check it's gone
-	goneOne, err := tc.GetByID(ctx, bunchOfCRUDables[4].ID)
+	goneOne, err := iCrud.GetByID(ctx, bunchOfCRUDables[4].ID)
 	assert.NoError(t, err)
 	assert.Nil(t, goneOne)
 
 	// Check all the post commits above fired
-	assert.Equal(t, 7, tc.postCommits)
+	assert.Equal(t, 7, collection.postCommits)
 
 }
 
