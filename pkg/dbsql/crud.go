@@ -86,7 +86,7 @@ func (r *ResourceBase) SetUpdated(t *fftypes.FFTime) {
 
 type CRUD[T Resource] interface {
 	Validate()
-	Upsert(ctx context.Context, inst T, optimization UpsertOptimization, hooks ...PostCompletionHook) (err error)
+	Upsert(ctx context.Context, inst T, optimization UpsertOptimization, hooks ...PostCompletionHook) (created bool, err error)
 	InsertMany(ctx context.Context, instances []T, allowPartialSuccess bool, hooks ...PostCompletionHook) (err error)
 	Insert(ctx context.Context, inst T, hooks ...PostCompletionHook) (err error)
 	Replace(ctx context.Context, inst T, hooks ...PostCompletionHook) (err error)
@@ -233,10 +233,10 @@ func (c *CrudBase[T]) attemptInsert(ctx context.Context, tx *TXWrapper, inst T, 
 	return err
 }
 
-func (c *CrudBase[T]) Upsert(ctx context.Context, inst T, optimization UpsertOptimization, hooks ...PostCompletionHook) (err error) {
+func (c *CrudBase[T]) Upsert(ctx context.Context, inst T, optimization UpsertOptimization, hooks ...PostCompletionHook) (created bool, err error) {
 	ctx, tx, autoCommit, err := c.DB.BeginOrUseTx(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer c.DB.RollbackTx(ctx, tx, autoCommit)
 
@@ -247,6 +247,7 @@ func (c *CrudBase[T]) Upsert(ctx context.Context, inst T, optimization UpsertOpt
 	if optimization == UpsertOptimizationNew {
 		opErr := c.attemptInsert(ctx, tx, inst, true /* we want a failure here we can progress past */)
 		optimized = opErr == nil
+		created = optimized
 	} else if optimization == UpsertOptimizationExisting {
 		rowsAffected, opErr := c.updateFromInstance(ctx, tx, inst, true /* full replace */)
 		optimized = opErr == nil && rowsAffected == 1
@@ -260,7 +261,7 @@ func (c *CrudBase[T]) Upsert(ctx context.Context, inst T, optimization UpsertOpt
 				Where(c.idFilter(inst.GetID())),
 		)
 		if err != nil {
-			return err
+			return false, err
 		}
 		existing := msgRows.Next()
 		msgRows.Close()
@@ -268,12 +269,13 @@ func (c *CrudBase[T]) Upsert(ctx context.Context, inst T, optimization UpsertOpt
 		if existing {
 			// Replace the existing one
 			if _, err = c.updateFromInstance(ctx, tx, inst, true /* full replace */); err != nil {
-				return err
+				return false, err
 			}
 		} else {
 			// Get a useful error out of an insert attempt
+			created = true
 			if err = c.attemptInsert(ctx, tx, inst, false); err != nil {
-				return err
+				return false, err
 			}
 		}
 	}
@@ -282,7 +284,7 @@ func (c *CrudBase[T]) Upsert(ctx context.Context, inst T, optimization UpsertOpt
 		tx.AddPostCommitHook(hook)
 	}
 
-	return c.DB.CommitTx(ctx, tx, autoCommit)
+	return created, c.DB.CommitTx(ctx, tx, autoCommit)
 }
 
 func (c *CrudBase[T]) InsertMany(ctx context.Context, instances []T, allowPartialSuccess bool, hooks ...PostCompletionHook) (err error) {

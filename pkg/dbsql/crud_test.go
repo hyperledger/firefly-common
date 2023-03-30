@@ -231,8 +231,9 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 
 	// Upsert the existing row optimized
 	c1copy.Field1 = strPtr("hello again - 1")
-	err = iCrud.Upsert(ctx, c1copy, UpsertOptimizationExisting)
+	created, err := iCrud.Upsert(ctx, c1copy, UpsertOptimizationExisting)
 	assert.NoError(t, err)
+	assert.False(t, created)
 	c1copy1, err := iCrud.GetByID(ctx, c1.ID)
 	assert.NoError(t, err)
 	checkEqualExceptTimes(t, *c1copy, *c1copy1)
@@ -242,8 +243,9 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 
 	// Upsert the existing row un-optimized
 	c1copy.Field1 = strPtr("hello again - 2")
-	err = iCrud.Upsert(ctx, c1copy, UpsertOptimizationNew, collection.postCommit)
+	created, err = iCrud.Upsert(ctx, c1copy, UpsertOptimizationNew, collection.postCommit)
 	assert.NoError(t, err)
+	assert.False(t, created)
 	c1copy2, err := iCrud.GetByID(ctx, c1.ID)
 	assert.NoError(t, err)
 	checkEqualExceptTimes(t, *c1copy, *c1copy2)
@@ -288,8 +290,9 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	assert.Regexp(t, "FF00205", err)
 
 	// Optimized insert of another
-	err = iCrud.Upsert(ctx, &c2, UpsertOptimizationNew)
+	created, err = iCrud.Upsert(ctx, &c2, UpsertOptimizationNew)
 	assert.NoError(t, err)
+	assert.True(t, created)
 	c2copy1, err := iCrud.GetByID(ctx, c2.ID)
 	assert.NoError(t, err)
 	checkEqualExceptTimes(t, c2, *c2copy1)
@@ -407,7 +410,7 @@ func TestUpsertFailBegin(t *testing.T) {
 	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
-	err := tc.Upsert(context.Background(), &TestCRUDable{}, UpsertOptimizationSkip)
+	_, err := tc.Upsert(context.Background(), &TestCRUDable{}, UpsertOptimizationSkip)
 	assert.Regexp(t, "FF00175", err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -417,7 +420,7 @@ func TestUpsertFailQuery(t *testing.T) {
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT.*").WillReturnError(fmt.Errorf("pop"))
-	err := tc.Upsert(context.Background(), &TestCRUDable{}, UpsertOptimizationSkip)
+	_, err := tc.Upsert(context.Background(), &TestCRUDable{}, UpsertOptimizationSkip)
 	assert.Regexp(t, "FF00176", err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -428,7 +431,7 @@ func TestUpsertFailInsert(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT.*").WillReturnRows(mock.NewRows([]string{db.sequenceColumn}))
 	mock.ExpectExec("INSERT.*").WillReturnError(fmt.Errorf("pop"))
-	err := tc.Upsert(context.Background(), &TestCRUDable{}, UpsertOptimizationSkip)
+	_, err := tc.Upsert(context.Background(), &TestCRUDable{}, UpsertOptimizationSkip)
 	assert.Regexp(t, "FF00177", err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -439,7 +442,7 @@ func TestUpsertFailUpdate(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT.*").WillReturnRows(mock.NewRows([]string{db.sequenceColumn}).AddRow(12345))
 	mock.ExpectExec("UPDATE.*").WillReturnError(fmt.Errorf("pop"))
-	err := tc.Upsert(context.Background(), &TestCRUDable{}, UpsertOptimizationSkip)
+	_, err := tc.Upsert(context.Background(), &TestCRUDable{}, UpsertOptimizationSkip)
 	assert.Regexp(t, "FF00178", err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
