@@ -66,15 +66,16 @@ type apiServer[T any] struct {
 }
 
 type APIServerOptions[T any] struct {
-	MetricsRegistry metric.MetricsRegistry
-	Routes          []*Route
-	EnrichRequest   func(r *APIRequest) (T, error)
-	Description     string
-	APIConfig       config.Section
-	MetricsConfig   config.Section
-	CORSConfig      config.Section
-	FavIcon16       []byte
-	FavIcon32       []byte
+	MetricsRegistry           metric.MetricsRegistry
+	Routes                    []*Route
+	EnrichRequest             func(r *APIRequest) (T, error)
+	Description               string
+	APIConfig                 config.Section
+	MetricsConfig             config.Section
+	CORSConfig                config.Section
+	FavIcon16                 []byte
+	FavIcon32                 []byte
+	PanicOnMissingDescription bool
 }
 
 type APIServerRouteExt[T any] struct {
@@ -184,7 +185,7 @@ func (as *apiServer[T]) swaggerGenConf(apiBaseURL string) *Options {
 		BaseURL:                   apiBaseURL,
 		Title:                     as.Description,
 		Version:                   "1.0",
-		PanicOnMissingDescription: false,
+		PanicOnMissingDescription: as.PanicOnMissingDescription,
 		DefaultRequestTimeout:     as.requestTimeout,
 	}
 }

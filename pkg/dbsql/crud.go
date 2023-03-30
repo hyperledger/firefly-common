@@ -67,9 +67,9 @@ type Resource interface {
 }
 
 type ResourceBase struct {
-	ID      *fftypes.UUID   `json:"id"`
-	Created *fftypes.FFTime `json:"created"`
-	Updated *fftypes.FFTime `json:"updated"`
+	ID      *fftypes.UUID   `ffstruct:"ResourceBase" json:"id"`
+	Created *fftypes.FFTime `ffstruct:"ResourceBase" json:"created"`
+	Updated *fftypes.FFTime `ffstruct:"ResourceBase" json:"updated"`
 }
 
 func (r *ResourceBase) GetID() *fftypes.UUID {
