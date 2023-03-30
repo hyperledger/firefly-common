@@ -33,26 +33,24 @@ import (
 )
 
 type TestCRUDable struct {
-	ID     *fftypes.UUID    `json:"id"`
-	NS     string           `json:"namespace"`
-	Field1 string           `json:"f1"`
-	Field2 fftypes.FFBigInt `json:"f2"`
-	Field3 *fftypes.JSONAny `json:"f3"`
+	ResourceBase
+	NS     *string           `json:"namespace"`
+	Field1 *string           `json:"f1"`
+	Field2 *fftypes.FFBigInt `json:"f2"`
+	Field3 *fftypes.JSONAny  `json:"f3"`
 }
 
 var CRUDableQueryFactory = &ffapi.QueryFields{
-	"id": &ffapi.UUIDField{},
-	"f1": &ffapi.StringField{},
-	"f2": &ffapi.BigIntField{},
-	"f3": &ffapi.JSONField{},
-}
-
-func (tc *TestCRUDable) GetID() *fftypes.UUID {
-	return tc.ID
+	"id":      &ffapi.UUIDField{},
+	"created": &ffapi.TimeField{},
+	"updated": &ffapi.TimeField{},
+	"f1":      &ffapi.StringField{},
+	"f2":      &ffapi.BigIntField{},
+	"f3":      &ffapi.JSONField{},
 }
 
 type TestLinkable struct {
-	ID          *fftypes.UUID    `json:"id"`
+	ResourceBase
 	NS          string           `json:"namespace"`
 	CrudID      *fftypes.UUID    `json:"crudId"`
 	Description string           `json:"description"`
@@ -62,12 +60,10 @@ type TestLinkable struct {
 }
 
 var LinkableQueryFactory = &ffapi.QueryFields{
-	"id":   &ffapi.UUIDField{},
-	"crud": &ffapi.UUIDField{},
-}
-
-func (tc *TestLinkable) GetID() *fftypes.UUID {
-	return tc.ID
+	"id":      &ffapi.UUIDField{},
+	"created": &ffapi.TimeField{},
+	"updated": &ffapi.TimeField{},
+	"crud":    &ffapi.UUIDField{},
 }
 
 type TestCRUD struct {
@@ -83,7 +79,9 @@ func newCRUDCollection(db *Database, ns string) *TestCRUD {
 			DB:    db,
 			Table: "crudables",
 			Columns: []string{
-				"id",
+				ColumnID,
+				ColumnCreated,
+				ColumnUpdated,
 				"ns",
 				"field1",
 				"field2",
@@ -100,8 +98,12 @@ func newCRUDCollection(db *Database, ns string) *TestCRUD {
 			EventHandler: nil, // set below
 			GetFieldPtr: func(inst *TestCRUDable, col string) interface{} {
 				switch col {
-				case "id":
+				case ColumnID:
 					return &inst.ID
+				case ColumnCreated:
+					return &inst.Created
+				case ColumnUpdated:
+					return &inst.Updated
 				case "ns":
 					return &inst.NS
 				case "field1":
@@ -111,7 +113,7 @@ func newCRUDCollection(db *Database, ns string) *TestCRUD {
 				case "field3":
 					return &inst.Field3
 				}
-				panic(fmt.Sprintf("unknown column: '%s'", col))
+				return nil
 			},
 		},
 	}
@@ -127,7 +129,9 @@ func newLinkableCollection(db *Database, ns string) *CrudBase[*TestLinkable] {
 		DB:    db,
 		Table: "linkables",
 		Columns: []string{
-			"id",
+			ColumnID,
+			ColumnCreated,
+			ColumnUpdated,
 			"ns",
 			"desc",
 			"crud_id",
@@ -151,8 +155,12 @@ func newLinkableCollection(db *Database, ns string) *CrudBase[*TestLinkable] {
 		EventHandler: nil, // set below
 		GetFieldPtr: func(inst *TestLinkable, col string) interface{} {
 			switch col {
-			case "id":
+			case ColumnID:
 				return &inst.ID
+			case ColumnCreated:
+				return &inst.Created
+			case ColumnUpdated:
+				return &inst.Updated
 			case "ns":
 				return &inst.NS
 			case "desc":
@@ -172,12 +180,20 @@ func newLinkableCollection(db *Database, ns string) *CrudBase[*TestLinkable] {
 	return tc
 }
 
-func checkJSONEq(t *testing.T, o1, o2 interface{}) {
+func checkEqualExceptTimes(t *testing.T, o1, o2 TestCRUDable) {
+	o1.Updated = nil
+	o1.Created = nil
 	j1, err := json.Marshal(o1)
 	assert.NoError(t, err)
-	j2, err := json.Marshal(o1)
+	o2.Updated = nil
+	o2.Created = nil
+	j2, err := json.Marshal(o2)
 	assert.NoError(t, err)
 	assert.JSONEq(t, string(j1), string(j2))
+}
+
+func strPtr(s string) *string {
+	return &s
 }
 
 func TestCRUDWithDBEnd2End(t *testing.T) {
@@ -188,15 +204,18 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	ctx := context.Background()
 
 	c1 := &TestCRUDable{
-		ID:     fftypes.NewUUID(),
-		NS:     "ns1",
-		Field1: "hello1",
-		Field2: *fftypes.NewFFBigInt(12345),
+		ResourceBase: ResourceBase{
+			ID: fftypes.NewUUID(),
+		},
+		NS:     strPtr("ns1"),
+		Field1: strPtr("hello1"),
+		Field2: fftypes.NewFFBigInt(12345),
 		Field3: fftypes.JSONAnyPtr(`{"some":"stuff"}`),
 	}
 
 	collection := newCRUDCollection(&db.Database, "ns1")
 	var iCrud CRUD[*TestCRUDable] = collection.CrudBase
+	iCrud.Validate()
 
 	// Add a row
 	err := iCrud.Insert(ctx, c1, collection.postCommit)
@@ -208,58 +227,72 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	// Check we get it back
 	c1copy, err := iCrud.GetByID(ctx, c1.ID)
 	assert.NoError(t, err)
-	checkJSONEq(t, c1, c1copy)
+	checkEqualExceptTimes(t, *c1, *c1copy)
 
 	// Upsert the existing row optimized
-	c1copy.Field1 = "hello again - 1"
+	c1copy.Field1 = strPtr("hello again - 1")
 	err = iCrud.Upsert(ctx, c1copy, UpsertOptimizationExisting)
 	assert.NoError(t, err)
 	c1copy1, err := iCrud.GetByID(ctx, c1.ID)
 	assert.NoError(t, err)
-	checkJSONEq(t, c1copy, c1copy1)
+	checkEqualExceptTimes(t, *c1copy, *c1copy1)
 	assert.Len(t, collection.events, 1)
 	assert.Equal(t, Updated, collection.events[0])
 	collection.events = nil
 
 	// Upsert the existing row un-optimized
-	c1copy.Field1 = "hello again - 2"
+	c1copy.Field1 = strPtr("hello again - 2")
 	err = iCrud.Upsert(ctx, c1copy, UpsertOptimizationNew, collection.postCommit)
 	assert.NoError(t, err)
 	c1copy2, err := iCrud.GetByID(ctx, c1.ID)
 	assert.NoError(t, err)
-	checkJSONEq(t, c1copy, c1copy2)
+	checkEqualExceptTimes(t, *c1copy, *c1copy2)
 
 	// Explicitly replace it
-	c1copy.Field1 = "hello again - 3"
+	c1copy.Field1 = strPtr("hello again - 3")
 	err = iCrud.Replace(ctx, c1copy, collection.postCommit)
 	assert.NoError(t, err)
 	c1copy3, err := iCrud.GetByID(ctx, c1.ID)
 	assert.NoError(t, err)
-	checkJSONEq(t, c1copy, c1copy3)
+	checkEqualExceptTimes(t, *c1copy, *c1copy3)
 
 	// Explicitly update it
-	c1copy.Field1 = "hello again - 4"
+	c1copy.Field1 = strPtr("hello again - 4")
 	err = iCrud.Update(ctx, c1copy.ID, CRUDableQueryFactory.NewUpdate(ctx).Set(
-		"f1", c1copy.Field1,
+		"f1", *c1copy.Field1,
 	), collection.postCommit)
 	assert.NoError(t, err)
 	c1copy4, err := iCrud.GetByID(ctx, c1.ID)
 	assert.NoError(t, err)
-	checkJSONEq(t, c1copy, c1copy4)
+	checkEqualExceptTimes(t, *c1copy, *c1copy4)
+
+	// Use simple PATCH semantics to updated it
+	c1copy.Field1 = strPtr("hello again - 5")
+	sparseUpdate := &TestCRUDable{
+		ResourceBase: ResourceBase{
+			ID: c1copy.ID,
+		},
+		Field1: strPtr("hello again - 5"),
+	}
+	err = iCrud.UpdateSparse(ctx, sparseUpdate, collection.postCommit)
+	assert.NoError(t, err)
+	c1copy5, err := iCrud.GetByID(ctx, c1.ID)
+	assert.NoError(t, err)
+	checkEqualExceptTimes(t, *c1copy, *c1copy5)
 
 	// Cannot replace something that doesn't exist
 	c2 := *c1
 	c2.ID = fftypes.NewUUID()
-	c2.Field1 = "bonjour"
+	c2.Field1 = strPtr("bonjour")
 	err = iCrud.Replace(ctx, &c2, collection.postCommit)
 	assert.Regexp(t, "FF00205", err)
 
 	// Optimized insert of another
 	err = iCrud.Upsert(ctx, &c2, UpsertOptimizationNew)
 	assert.NoError(t, err)
-	c2copy1, err := iCrud.GetByID(ctx, c1.ID)
+	c2copy1, err := iCrud.GetByID(ctx, c2.ID)
 	assert.NoError(t, err)
-	checkJSONEq(t, c2, c2copy1)
+	checkEqualExceptTimes(t, c2, *c2copy1)
 
 	// Check we can filter it with the new value
 	cs, _, err := iCrud.GetMany(ctx, CRUDableQueryFactory.NewFilter(ctx).Eq(
@@ -267,16 +300,18 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	))
 	assert.NoError(t, err)
 	assert.Len(t, cs, 1)
-	checkJSONEq(t, c2, cs[0])
+	checkEqualExceptTimes(t, c2, *cs[0])
 
 	// Insert a bunch in a batch
 	bunchOfCRUDables := make([]*TestCRUDable, 10)
 	for i := range bunchOfCRUDables {
 		bunchOfCRUDables[i] = &TestCRUDable{
-			ID:     fftypes.NewUUID(),
-			NS:     "ns1",
-			Field1: fmt.Sprintf("crudable[%.5d]", i),
-			Field2: *fftypes.NewFFBigInt(919191),
+			ResourceBase: ResourceBase{
+				ID: fftypes.NewUUID(),
+			},
+			NS:     strPtr("ns1"),
+			Field1: strPtr(fmt.Sprintf("crudable[%.5d]", i)),
+			Field2: fftypes.NewFFBigInt(919191),
 		}
 	}
 	err = iCrud.InsertMany(ctx, bunchOfCRUDables, false, collection.postCommit)
@@ -285,7 +320,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	// Grab one
 	bunch5copy, err := iCrud.GetByID(ctx, bunchOfCRUDables[4].ID)
 	assert.NoError(t, err)
-	checkJSONEq(t, bunchOfCRUDables[4], bunch5copy)
+	checkEqualExceptTimes(t, *bunchOfCRUDables[4], *bunch5copy)
 
 	// Update them all
 	err = iCrud.UpdateMany(ctx, CRUDableQueryFactory.NewFilter(ctx).Eq(
@@ -294,7 +329,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 		"f2", "929292",
 	), collection.postCommit)
 	assert.NoError(t, err)
-	checkJSONEq(t, bunchOfCRUDables[4], bunch5copy)
+	checkEqualExceptTimes(t, *bunchOfCRUDables[4], *bunch5copy)
 
 	for i := range bunchOfCRUDables {
 		ci, err := iCrud.GetByID(ctx, bunchOfCRUDables[i].ID)
@@ -312,7 +347,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	assert.Nil(t, goneOne)
 
 	// Check all the post commits above fired
-	assert.Equal(t, 7, collection.postCommits)
+	assert.Equal(t, 8, collection.postCommits)
 
 }
 
@@ -327,14 +362,18 @@ func TestLeftJOINExample(t *testing.T) {
 	linkables := newLinkableCollection(&db.Database, "ns1")
 
 	c1 := &TestCRUDable{
-		ID:     fftypes.NewUUID(),
-		NS:     "ns1",
-		Field1: "linked1",
-		Field2: *fftypes.NewFFBigInt(11111),
+		ResourceBase: ResourceBase{
+			ID: fftypes.NewUUID(),
+		},
+		NS:     strPtr("ns1"),
+		Field1: strPtr("linked1"),
+		Field2: fftypes.NewFFBigInt(11111),
 		Field3: fftypes.JSONAnyPtr(`{"linked":1}`),
 	}
 	l1 := &TestLinkable{
-		ID:          fftypes.NewUUID(),
+		ResourceBase: ResourceBase{
+			ID: fftypes.NewUUID(),
+		},
 		NS:          "ns1",
 		Description: "linked to C1",
 		CrudID:      c1.ID,
@@ -427,8 +466,8 @@ func TestInsertManyMultiRowOK(t *testing.T) {
 	)
 	mock.ExpectCommit()
 	err := tc.InsertMany(context.Background(), []*TestCRUDable{
-		{ID: fftypes.NewUUID()},
-		{ID: fftypes.NewUUID()},
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
 	}, false)
 	assert.NoError(t, err)
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -442,8 +481,8 @@ func TestInsertManyMultiRowFail(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectQuery(`INSERT INTO crudables.*VALUES \(.*\),\(.*\)`).WillReturnError(fmt.Errorf("pop"))
 	err := tc.InsertMany(context.Background(), []*TestCRUDable{
-		{ID: fftypes.NewUUID()},
-		{ID: fftypes.NewUUID()},
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
 	}, false)
 	assert.Regexp(t, "FF00177", err)
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -455,8 +494,8 @@ func TestInsertManyFallbackSingleRowFail(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectExec(`INSERT INTO crudables.*`).WillReturnError(fmt.Errorf("pop"))
 	err := tc.InsertMany(context.Background(), []*TestCRUDable{
-		{ID: fftypes.NewUUID()},
-		{ID: fftypes.NewUUID()},
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
 	}, false)
 	assert.Regexp(t, "FF00177", err)
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -615,4 +654,158 @@ func TestDeleteDeleteFail(t *testing.T) {
 	mock.ExpectExec("DELETE.*").WillReturnError(fmt.Errorf("pop"))
 	err := tc.Delete(context.Background(), fftypes.NewUUID())
 	assert.Regexp(t, "FF00179", err)
+}
+
+func TestIsNilNonPtrType(t *testing.T) {
+	assert.False(t, isNil(0))
+}
+
+func TestUpdateSparseFailBegin(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
+	err := tc.UpdateSparse(context.Background(), &TestCRUDable{})
+	assert.Regexp(t, "FF00175", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUpdateSparseFailUpdate(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE.*").WillReturnError(fmt.Errorf("pop"))
+	err := tc.UpdateSparse(context.Background(), &TestCRUDable{})
+	assert.Regexp(t, "FF00178", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUpdateSparseFailNoResult(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE.*").WillReturnResult(sqlmock.NewResult(0, 0))
+	err := tc.UpdateSparse(context.Background(), &TestCRUDable{})
+	assert.Regexp(t, "FF00205", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestValidateNewInstanceNil(t *testing.T) {
+	tc := &CrudBase[*TestCRUDable]{
+		NewInstance: func() *TestCRUDable { return nil },
+	}
+	assert.PanicsWithValue(t, "NewInstance() value must not be nil", func() {
+		tc.Validate()
+	})
+}
+
+func TestValidateDupSeqColumn(t *testing.T) {
+	db, _ := NewMockProvider().UTInit()
+	tc := &CrudBase[*TestCRUDable]{
+		DB:          &db.Database,
+		NewInstance: func() *TestCRUDable { return &TestCRUDable{} },
+		Columns:     []string{"seq"},
+	}
+	assert.PanicsWithValue(t, "cannot have column named 'seq'", func() {
+		tc.Validate()
+	})
+}
+
+func TestValidateNonPtr(t *testing.T) {
+	db, _ := NewMockProvider().UTInit()
+	tc := &CrudBase[*TestCRUDable]{
+		DB:          &db.Database,
+		NewInstance: func() *TestCRUDable { return &TestCRUDable{} },
+		Columns:     []string{"test1"},
+		GetFieldPtr: func(inst *TestCRUDable, col string) interface{} {
+			return "not a pointer"
+		},
+	}
+	assert.PanicsWithValue(t, "field test1 does not seem to be a pointer type - prevents null-check for PATCH semantics functioning", func() {
+		tc.Validate()
+	})
+}
+
+func TestValidateDupColumn(t *testing.T) {
+	db, _ := NewMockProvider().UTInit()
+	tc := &CrudBase[*TestCRUDable]{
+		DB:          &db.Database,
+		NewInstance: func() *TestCRUDable { return &TestCRUDable{} },
+		Columns:     []string{"test1", "test1"},
+		GetFieldPtr: func(inst *TestCRUDable, col string) interface{} {
+			var t *string
+			return &t
+		},
+	}
+	assert.PanicsWithValue(t, "test1 is a duplicated column", func() {
+		tc.Validate()
+	})
+}
+
+func TestValidateMissingID(t *testing.T) {
+	db, _ := NewMockProvider().UTInit()
+	tc := &CrudBase[*TestCRUDable]{
+		DB:          &db.Database,
+		NewInstance: func() *TestCRUDable { return &TestCRUDable{} },
+		Columns:     []string{"test1"},
+		GetFieldPtr: func(inst *TestCRUDable, col string) interface{} {
+			var t *string
+			return &t
+		},
+	}
+	assert.Panics(t, func() {
+		tc.Validate()
+	})
+}
+
+func TestValidateNilValueNonNil(t *testing.T) {
+	db, _ := NewMockProvider().UTInit()
+	tc := &CrudBase[*TestCRUDable]{
+		DB:          &db.Database,
+		NewInstance: func() *TestCRUDable { return &TestCRUDable{} },
+		Columns:     []string{ColumnID, ColumnCreated, ColumnUpdated},
+		GetFieldPtr: func(inst *TestCRUDable, col string) interface{} {
+			var t *string
+			return &t
+		},
+		NilValue: func() *TestCRUDable { return &TestCRUDable{} },
+	}
+	assert.PanicsWithValue(t, "NilValue() value must be nil", func() {
+		tc.Validate()
+	})
+}
+
+func TestValidateScopedFilterNil(t *testing.T) {
+	db, _ := NewMockProvider().UTInit()
+	tc := &CrudBase[*TestCRUDable]{
+		DB:          &db.Database,
+		NewInstance: func() *TestCRUDable { return &TestCRUDable{} },
+		Columns:     []string{ColumnID, ColumnCreated, ColumnUpdated},
+		GetFieldPtr: func(inst *TestCRUDable, col string) interface{} {
+			var t *string
+			return &t
+		},
+		NilValue:     func() *TestCRUDable { return nil },
+		ScopedFilter: func() sq.Eq { return nil },
+	}
+	assert.PanicsWithValue(t, "ScopedFilter() value must not be nil", func() {
+		tc.Validate()
+	})
+}
+
+func TestValidateGetFieldPtrNotNilForUnknown(t *testing.T) {
+	db, _ := NewMockProvider().UTInit()
+	tc := &CrudBase[*TestCRUDable]{
+		DB:          &db.Database,
+		NewInstance: func() *TestCRUDable { return &TestCRUDable{} },
+		Columns:     []string{ColumnID, ColumnCreated, ColumnUpdated},
+		GetFieldPtr: func(inst *TestCRUDable, col string) interface{} {
+			var t *string
+			return &t
+		},
+		NilValue:     func() *TestCRUDable { return nil },
+		ScopedFilter: func() sq.Eq { return sq.Eq{} },
+	}
+	assert.PanicsWithValue(t, "GetFieldPtr() must return nil for unknown column", func() {
+		tc.Validate()
+	})
 }
