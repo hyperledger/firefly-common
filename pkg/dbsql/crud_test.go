@@ -364,7 +364,7 @@ func TestLeftJOINExample(t *testing.T) {
 }
 
 func TestUpsertFailBegin(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
 	err := tc.Upsert(context.Background(), &TestCRUDable{}, UpsertOptimizationSkip)
@@ -373,7 +373,7 @@ func TestUpsertFailBegin(t *testing.T) {
 }
 
 func TestUpsertFailQuery(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT.*").WillReturnError(fmt.Errorf("pop"))
@@ -383,7 +383,7 @@ func TestUpsertFailQuery(t *testing.T) {
 }
 
 func TestUpsertFailInsert(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT.*").WillReturnRows(mock.NewRows([]string{db.sequenceColumn}))
@@ -394,7 +394,7 @@ func TestUpsertFailInsert(t *testing.T) {
 }
 
 func TestUpsertFailUpdate(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT.*").WillReturnRows(mock.NewRows([]string{db.sequenceColumn}).AddRow(12345))
@@ -405,7 +405,7 @@ func TestUpsertFailUpdate(t *testing.T) {
 }
 
 func TestInsertManyBeginFail(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
 	err := tc.InsertMany(context.Background(), []*TestCRUDable{{}}, false)
@@ -414,8 +414,8 @@ func TestInsertManyBeginFail(t *testing.T) {
 }
 
 func TestInsertManyMultiRowOK(t *testing.T) {
-	db, mock := newMockProvider().init()
-	db.fakePSQLInsert = true
+	db, mock := NewMockProvider().UTInit()
+	db.FakePSQLInsert = true
 	db.features.MultiRowInsert = true
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
@@ -434,8 +434,8 @@ func TestInsertManyMultiRowOK(t *testing.T) {
 }
 
 func TestInsertManyMultiRowFail(t *testing.T) {
-	db, mock := newMockProvider().init()
-	db.fakePSQLInsert = true
+	db, mock := NewMockProvider().UTInit()
+	db.FakePSQLInsert = true
 	db.features.MultiRowInsert = true
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
@@ -449,7 +449,7 @@ func TestInsertManyMultiRowFail(t *testing.T) {
 }
 
 func TestInsertManyFallbackSingleRowFail(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
 	mock.ExpectExec(`INSERT INTO crudables.*`).WillReturnError(fmt.Errorf("pop"))
@@ -462,7 +462,7 @@ func TestInsertManyFallbackSingleRowFail(t *testing.T) {
 }
 
 func TestInsertBeginFail(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
 	err := tc.Insert(context.Background(), &TestCRUDable{})
@@ -471,7 +471,7 @@ func TestInsertBeginFail(t *testing.T) {
 }
 
 func TestInsertInsertFail(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
 	mock.ExpectExec("INSERT.*").WillReturnError(fmt.Errorf("pop"))
@@ -481,7 +481,7 @@ func TestInsertInsertFail(t *testing.T) {
 }
 
 func TestReplaceBeginFail(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
 	err := tc.Replace(context.Background(), &TestCRUDable{})
@@ -490,7 +490,7 @@ func TestReplaceBeginFail(t *testing.T) {
 }
 
 func TestReplaceUpdateFail(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE.*").WillReturnError(fmt.Errorf("pop"))
@@ -500,7 +500,7 @@ func TestReplaceUpdateFail(t *testing.T) {
 }
 
 func TestGetByIDSelectFail(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectQuery("SELECT.*").WillReturnError(fmt.Errorf("pop"))
 	_, err := tc.GetByID(context.Background(), fftypes.NewUUID())
@@ -509,7 +509,7 @@ func TestGetByIDSelectFail(t *testing.T) {
 }
 
 func TestGetByIDScanFail(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectQuery("SELECT.*").WillReturnRows(sqlmock.NewRows([]string{}).AddRow())
 	_, err := tc.GetByID(context.Background(), fftypes.NewUUID())
@@ -518,7 +518,7 @@ func TestGetByIDScanFail(t *testing.T) {
 }
 
 func TestGetByManySelectFail(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectQuery("SELECT.*").WillReturnError(fmt.Errorf("pop"))
 	_, _, err := tc.GetMany(context.Background(), CRUDableQueryFactory.NewFilter(context.Background()).And())
@@ -527,7 +527,7 @@ func TestGetByManySelectFail(t *testing.T) {
 }
 
 func TestGetByManyScanFail(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectQuery("SELECT.*").WillReturnRows(sqlmock.NewRows([]string{}).AddRow())
 	_, _, err := tc.GetMany(context.Background(), CRUDableQueryFactory.NewFilter(context.Background()).And())
@@ -536,7 +536,7 @@ func TestGetByManyScanFail(t *testing.T) {
 }
 
 func TestGetByManyFilterFail(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	_, _, err := tc.GetMany(context.Background(), CRUDableQueryFactory.NewFilter(context.Background()).Eq("wrong", 123))
 	assert.Regexp(t, "FF00142", err)
@@ -544,7 +544,7 @@ func TestGetByManyFilterFail(t *testing.T) {
 }
 
 func TestUpdateBeginFail(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
 	mock.ExpectExec("UPDATE.*").WillReturnResult(driver.ResultNoRows)
@@ -553,7 +553,7 @@ func TestUpdateBeginFail(t *testing.T) {
 }
 
 func TestUpdateBuildUpdateFail(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
 	err := tc.UpdateMany(context.Background(),
@@ -563,7 +563,7 @@ func TestUpdateBuildUpdateFail(t *testing.T) {
 }
 
 func TestUpdateUpdateFail(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE.*").WillReturnError(fmt.Errorf("pop"))
@@ -573,7 +573,7 @@ func TestUpdateUpdateFail(t *testing.T) {
 }
 
 func TestUpdateNowRows(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE.*").WillReturnResult(driver.ResultNoRows)
@@ -583,7 +583,7 @@ func TestUpdateNowRows(t *testing.T) {
 }
 
 func TestDeleteBeginFail(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
 	mock.ExpectExec("UPDATE.*").WillReturnResult(driver.ResultNoRows)
@@ -592,7 +592,7 @@ func TestDeleteBeginFail(t *testing.T) {
 }
 
 func TestDeleteDeleteFail(t *testing.T) {
-	db, mock := newMockProvider().init()
+	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
 	mock.ExpectExec("DELETE.*").WillReturnError(fmt.Errorf("pop"))

@@ -42,8 +42,8 @@ var TestQueryFactory = &ffapi.QueryFields{
 }
 
 func TestSQLQueryFactory(t *testing.T) {
-	s, _ := newMockProvider().init()
-	s.individualSort = true
+	s, _ := NewMockProvider().UTInit()
+	s.IndividualSort = true
 	fb := TestQueryFactory.NewFilter(context.Background())
 	f := fb.And(
 		fb.Eq("tag", "tag1"),
@@ -77,7 +77,7 @@ func TestSQLQueryFactory(t *testing.T) {
 
 func TestSQLQueryFactoryExtraOps(t *testing.T) {
 
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 	fb := TestQueryFactory.NewFilter(context.Background())
 	u := fftypes.MustParseUUID("4066ABDC-8BBD-4472-9D29-1A55B467F9B9")
 	f := fb.And(
@@ -109,7 +109,7 @@ func TestSQLQueryFactoryExtraOps(t *testing.T) {
 
 func TestSQLQueryFactoryEvenMoreOps(t *testing.T) {
 
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 	fb := TestQueryFactory.NewFilter(context.Background())
 	u := fftypes.MustParseUUID("4066ABDC-8BBD-4472-9D29-1A55B467F9B9")
 	f := fb.And(
@@ -136,7 +136,7 @@ func TestSQLQueryFactoryEvenMoreOps(t *testing.T) {
 }
 
 func TestSQLQueryFactoryFinalizeFail(t *testing.T) {
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 	fb := TestQueryFactory.NewFilter(context.Background())
 	sel := squirrel.Select("*").From("mytable")
 	_, _, _, err := s.FilterSelect(context.Background(), "ns", sel, fb.Eq("tag", map[bool]bool{true: false}), nil, []interface{}{"sequence"})
@@ -145,7 +145,7 @@ func TestSQLQueryFactoryFinalizeFail(t *testing.T) {
 
 func TestSQLQueryFactoryBadOp(t *testing.T) {
 
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 	_, err := s.filterSelectFinalized(context.Background(), "", &ffapi.FilterInfo{
 		Op: ffapi.FilterOp("wrong"),
 	}, nil)
@@ -154,7 +154,7 @@ func TestSQLQueryFactoryBadOp(t *testing.T) {
 
 func TestSQLQueryFactoryBadOpInOr(t *testing.T) {
 
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 	_, err := s.filterSelectFinalized(context.Background(), "", &ffapi.FilterInfo{
 		Op: ffapi.FilterOpOr,
 		Children: []*ffapi.FilterInfo{
@@ -166,7 +166,7 @@ func TestSQLQueryFactoryBadOpInOr(t *testing.T) {
 
 func TestSQLQueryFactoryBadOpInAnd(t *testing.T) {
 
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 	_, err := s.filterSelectFinalized(context.Background(), "", &ffapi.FilterInfo{
 		Op: ffapi.FilterOpAnd,
 		Children: []*ffapi.FilterInfo{
@@ -178,7 +178,7 @@ func TestSQLQueryFactoryBadOpInAnd(t *testing.T) {
 
 func TestSQLQueryFactoryDefaultSort(t *testing.T) {
 
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 	sel := squirrel.Select("*").From("mytable")
 	fb := TestQueryFactory.NewFilter(context.Background())
 	f := fb.And(
@@ -201,7 +201,7 @@ func TestSQLQueryFactoryDefaultSort(t *testing.T) {
 
 func TestSQLQueryFactoryNullsLastPreconditions(t *testing.T) {
 
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 	sel := squirrel.Select("*").From("mytable")
 	fb := TestQueryFactory.NewFilter(context.Background())
 	f := fb.And(
@@ -227,7 +227,7 @@ func TestSQLQueryFactoryNullsLastPreconditions(t *testing.T) {
 
 func TestSQLQueryFactoryDefaultSortBadType(t *testing.T) {
 
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 	sel := squirrel.Select("*").From("mytable")
 	fb := TestQueryFactory.NewFilter(context.Background())
 	f := fb.And(
@@ -239,7 +239,7 @@ func TestSQLQueryFactoryDefaultSortBadType(t *testing.T) {
 }
 
 func TestILIKE(t *testing.T) {
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 
 	s.features.UseILIKE = true
 	q := s.newILike("test", "value")
@@ -253,7 +253,7 @@ func TestILIKE(t *testing.T) {
 }
 
 func TestNotILIKE(t *testing.T) {
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 
 	s.features.UseILIKE = true
 	q := s.newNotILike("test", "value")
@@ -268,7 +268,7 @@ func TestNotILIKE(t *testing.T) {
 
 func TestBuildUpdateExampleFail(t *testing.T) {
 
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 	ub := TestQueryFactory.NewUpdate(context.Background())
 	q := squirrel.Update("table1")
 	_, err := s.BuildUpdate(q, ub.Set("wrong", "1"), nil)
@@ -277,7 +277,7 @@ func TestBuildUpdateExampleFail(t *testing.T) {
 
 func TestBuildUpdateExample(t *testing.T) {
 
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 	ub := TestQueryFactory.NewUpdate(context.Background())
 	q := squirrel.Update("table1")
 	updateQuery, err := s.BuildUpdate(q, ub.Set("tag", "tag1"), nil)
@@ -293,7 +293,7 @@ func TestBuildUpdateExample(t *testing.T) {
 
 func TestFilterUpdateOk(t *testing.T) {
 
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 	q := squirrel.Update("table1").Set("name", "bob")
 
 	fb := TestQueryFactory.NewFilter(context.Background())
@@ -311,7 +311,7 @@ func TestFilterUpdateOk(t *testing.T) {
 
 func TestFilterUpdateErr(t *testing.T) {
 
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 	q := squirrel.Update("table1").Set("name", "bob")
 
 	fb := TestQueryFactory.NewFilter(context.Background())

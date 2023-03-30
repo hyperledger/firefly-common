@@ -45,7 +45,7 @@ func TestInitDatabaseMissingProvider(t *testing.T) {
 
 func TestInitDatabaseMissingURL(t *testing.T) {
 	s := &Database{}
-	tp := newMockProvider()
+	tp := NewMockProvider()
 	s.InitConfig(tp, tp.config)
 	tp.config.Set("url", "")
 	err := s.Init(context.Background(), tp, tp.config)
@@ -54,7 +54,7 @@ func TestInitDatabaseMissingURL(t *testing.T) {
 
 func TestInitDatabaseConnsAndSeqCol(t *testing.T) {
 	s := &Database{}
-	tp := newMockProvider()
+	tp := NewMockProvider()
 	s.InitConfig(tp, tp.config)
 	err := s.Init(context.Background(), tp, tp.config)
 	assert.NoError(t, err)
@@ -66,7 +66,7 @@ func TestInitDatabaseConnsAndSeqCol(t *testing.T) {
 
 func TestInitDatabaseFeatures(t *testing.T) {
 	s := &Database{}
-	tp := newMockProvider()
+	tp := NewMockProvider()
 	s.InitConfig(tp, tp.config)
 	err := s.Init(context.Background(), tp, tp.config)
 	assert.NoError(t, err)
@@ -78,22 +78,22 @@ func TestInitDatabaseFeatures(t *testing.T) {
 }
 
 func TestInitDatabaseOpenFailed(t *testing.T) {
-	mp := newMockProvider()
-	mp.openError = fmt.Errorf("pop")
+	mp := NewMockProvider()
+	mp.OpenError = fmt.Errorf("pop")
 	err := mp.Database.Init(context.Background(), mp, mp.config)
 	assert.Regexp(t, "FF00173.*pop", err)
 }
 
 func TestInitDatabaseMigrationOpenFailed(t *testing.T) {
-	mp := newMockProvider()
+	mp := NewMockProvider()
 	mp.config.Set(SQLConfMigrationsAuto, true)
-	mp.getMigrationDriverError = fmt.Errorf("pop")
+	mp.GetMigrationDriverError = fmt.Errorf("pop")
 	err := mp.Database.Init(context.Background(), mp, mp.config)
 	assert.Regexp(t, "FF00184.*pop", err)
 }
 
 func TestInitDatabaseMigrationFailed(t *testing.T) {
-	mp := newMockProvider()
+	mp := NewMockProvider()
 	mp.mmg.On("Lock").Return(nil)
 	mp.mmg.On("Version").Return(-1, false, nil)
 	mp.mmg.On("SetVersion", 1, true).Return(nil)
@@ -109,7 +109,7 @@ func TestInitDatabaseMigrationFailed(t *testing.T) {
 }
 
 func TestInitDatabaseMigrationOk(t *testing.T) {
-	mp := newMockProvider()
+	mp := NewMockProvider()
 	defer mp.Close()
 	mp.mmg.On("Lock").Return(nil)
 	mp.mmg.On("Version").Return(-1, false, nil)
@@ -124,13 +124,13 @@ func TestInitDatabaseMigrationOk(t *testing.T) {
 }
 
 func TestQueryTxBadSQL(t *testing.T) {
-	tp := newMockProvider()
+	tp := NewMockProvider()
 	_, _, err := tp.QueryTx(context.Background(), "table1", nil, sq.SelectBuilder{})
 	assert.Regexp(t, "FF00174", err)
 }
 
 func TestQueryNoTxOk(t *testing.T) {
-	mp, mdb := newMockProvider().init()
+	mp, mdb := NewMockProvider().UTInit()
 	mdb.ExpectQuery("SELECT.*").WillReturnRows(sqlmock.NewRows([]string{"seq"}).AddRow(12345))
 	f := TestQueryFactory.NewFilter(context.Background()).Eq("id", "12345")
 	sel, _, _, err := mp.FilterSelect(context.Background(), "table1", sq.Select("*").From("table1"), f, map[string]string{}, nil)
@@ -140,7 +140,7 @@ func TestQueryNoTxOk(t *testing.T) {
 }
 
 func TestQueryNoTxErr(t *testing.T) {
-	mp, mdb := newMockProvider().init()
+	mp, mdb := NewMockProvider().UTInit()
 	mdb.ExpectQuery("SELECT.*").WillReturnError(fmt.Errorf("pop"))
 	f := TestQueryFactory.NewFilter(context.Background()).Eq("id", "12345")
 	sel, _, _, err := mp.FilterSelect(context.Background(), "table1", sq.Select("*").From("table1"), f, map[string]string{}, nil)
@@ -150,12 +150,12 @@ func TestQueryNoTxErr(t *testing.T) {
 }
 
 func TestInsertTxPostgreSQLReturnedSyntax(t *testing.T) {
-	s, mdb := newMockProvider().init()
+	s, mdb := NewMockProvider().UTInit()
 	mdb.ExpectBegin()
 	mdb.ExpectQuery("INSERT.*").WillReturnRows(sqlmock.NewRows([]string{s.SequenceColumn()}).AddRow(12345))
 	ctx, tx, _, err := s.BeginOrUseTx(context.Background())
 	assert.NoError(t, err)
-	s.fakePSQLInsert = true
+	s.FakePSQLInsert = true
 	sb := sq.Insert("table").Columns("col1").Values(("val1"))
 	sequence, err := s.InsertTx(ctx, "table1", tx, sb, nil)
 	assert.NoError(t, err)
@@ -163,19 +163,19 @@ func TestInsertTxPostgreSQLReturnedSyntax(t *testing.T) {
 }
 
 func TestInsertTxPostgreSQLReturnedSyntaxFail(t *testing.T) {
-	s, mdb := newMockProvider().init()
+	s, mdb := NewMockProvider().UTInit()
 	mdb.ExpectBegin()
 	mdb.ExpectQuery("INSERT.*").WillReturnError(fmt.Errorf("pop"))
 	ctx, tx, _, err := s.BeginOrUseTx(context.Background())
 	assert.NoError(t, err)
-	s.fakePSQLInsert = true
+	s.FakePSQLInsert = true
 	sb := sq.Insert("table").Columns("col1").Values(("val1"))
 	_, err = s.InsertTx(ctx, "table1", tx, sb, nil)
 	assert.Regexp(t, "FF00177", err)
 }
 
 func TestInsertTxOkPreAndPostCommit(t *testing.T) {
-	mp, mdb := newMockProvider().init()
+	mp, mdb := NewMockProvider().UTInit()
 	mdb.ExpectBegin()
 	mdb.ExpectExec("INSERT.*").WillReturnResult(sqlmock.NewResult(12345, 1))
 	mdb.ExpectCommit()
@@ -208,7 +208,7 @@ func TestInsertTxOkPreAndPostCommit(t *testing.T) {
 }
 
 func TestInsertTxFail(t *testing.T) {
-	mp, mdb := newMockProvider().init()
+	mp, mdb := NewMockProvider().UTInit()
 	mdb.ExpectBegin()
 	mdb.ExpectExec("INSERT.*").WillReturnError(fmt.Errorf("pop"))
 
@@ -231,37 +231,37 @@ func TestInsertTxFail(t *testing.T) {
 }
 
 func TestInsertTxBadSQL(t *testing.T) {
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 	_, err := s.InsertTx(context.Background(), "table1", nil, sq.InsertBuilder{}, nil)
 	assert.Regexp(t, "FF00174", err)
 }
 
 func TestUpdateTxBadSQL(t *testing.T) {
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 	_, err := s.UpdateTx(context.Background(), "table1", nil, sq.UpdateBuilder{}, nil)
 	assert.Regexp(t, "FF00174", err)
 }
 
 func TestDeleteTxBadSQL(t *testing.T) {
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 	err := s.DeleteTx(context.Background(), "table1", nil, sq.DeleteBuilder{}, nil)
 	assert.Regexp(t, "FF00174", err)
 }
 
 func TestDeleteTxZeroRowsAffected(t *testing.T) {
-	s, mdb := newMockProvider().init()
+	s, mdb := NewMockProvider().UTInit()
 	mdb.ExpectBegin()
 	mdb.ExpectExec("DELETE.*").WillReturnResult(driver.ResultNoRows)
 	ctx, tx, _, err := s.BeginOrUseTx(context.Background())
 	assert.NoError(t, err)
-	s.fakePSQLInsert = true
+	s.FakePSQLInsert = true
 	sb := sq.Delete("table")
 	err = s.DeleteTx(ctx, "table1", tx, sb, nil)
 	assert.Regexp(t, "FF00167", err)
 }
 
 func TestDeleteTxFail(t *testing.T) {
-	mp, mdb := newMockProvider().init()
+	mp, mdb := NewMockProvider().UTInit()
 	mdb.ExpectBegin()
 	mdb.ExpectExec("DELETE.*").WillReturnError(fmt.Errorf("pop"))
 
@@ -278,7 +278,7 @@ func TestDeleteTxFail(t *testing.T) {
 }
 
 func TestDeleteTxPostCommitOk(t *testing.T) {
-	mp, mdb := newMockProvider().init()
+	mp, mdb := NewMockProvider().UTInit()
 	mdb.ExpectBegin()
 	mdb.ExpectExec("DELETE.*").WillReturnResult(sqlmock.NewResult(-1, 1))
 	mdb.ExpectCommit()
@@ -301,7 +301,7 @@ func TestDeleteTxPostCommitOk(t *testing.T) {
 }
 
 func TestUpdateTxPostCommitOk(t *testing.T) {
-	mp, mdb := newMockProvider().init()
+	mp, mdb := NewMockProvider().UTInit()
 	mdb.ExpectBegin()
 	mdb.ExpectExec("UPDATE.*").WillReturnResult(sqlmock.NewResult(12345, 1))
 	mdb.ExpectCommit()
@@ -325,7 +325,7 @@ func TestUpdateTxPostCommitOk(t *testing.T) {
 }
 
 func TestUpdateTxPostCommitErr(t *testing.T) {
-	mp, mdb := newMockProvider().init()
+	mp, mdb := NewMockProvider().UTInit()
 	mdb.ExpectBegin()
 	mdb.ExpectExec("UPDATE.*").WillReturnError(fmt.Errorf("pop"))
 	mdb.ExpectCommit()
@@ -347,7 +347,7 @@ func TestUpdateTxPostCommitErr(t *testing.T) {
 }
 
 func TestCommitTxPreCommitFail(t *testing.T) {
-	mp, mdb := newMockProvider().init()
+	mp, mdb := NewMockProvider().UTInit()
 	mdb.ExpectBegin()
 	mdb.ExpectCommit()
 
@@ -369,7 +369,7 @@ func TestCommitTxPreCommitFail(t *testing.T) {
 }
 
 func TestAquireLockTx(t *testing.T) {
-	mp, mdb := newMockProvider().init()
+	mp, mdb := NewMockProvider().UTInit()
 	mdb.ExpectBegin()
 	mdb.ExpectExec("acquire lock table1").WillReturnResult(sqlmock.NewResult(12345, 1))
 	mdb.ExpectCommit()
@@ -388,7 +388,7 @@ func TestAquireLockTx(t *testing.T) {
 }
 
 func TestAquireLockTxFail(t *testing.T) {
-	mp, mdb := newMockProvider().init()
+	mp, mdb := NewMockProvider().UTInit()
 	mdb.ExpectBegin()
 	mdb.ExpectExec("acquire lock table1").WillReturnError(fmt.Errorf("pop"))
 	mdb.ExpectCommit()
@@ -404,7 +404,7 @@ func TestAquireLockTxFail(t *testing.T) {
 }
 
 func TestRunAsGroup(t *testing.T) {
-	s, mock := newMockProvider().init()
+	s, mock := NewMockProvider().UTInit()
 	mock.ExpectBegin()
 	mock.ExpectExec("INSERT.*").WillReturnResult(driver.ResultNoRows)
 	mock.ExpectExec("INSERT.*").WillReturnResult(driver.ResultNoRows)
@@ -447,7 +447,7 @@ func TestRunAsGroup(t *testing.T) {
 }
 
 func TestRunAsGroupBeginFail(t *testing.T) {
-	s, mock := newMockProvider().init()
+	s, mock := NewMockProvider().UTInit()
 	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
 	err := s.RunAsGroup(context.Background(), func(ctx context.Context) (err error) {
 		return
@@ -457,7 +457,7 @@ func TestRunAsGroupBeginFail(t *testing.T) {
 }
 
 func TestRunAsGroupFunctionFails(t *testing.T) {
-	s, mock := newMockProvider().init()
+	s, mock := NewMockProvider().UTInit()
 	mock.ExpectBegin()
 	mock.ExpectExec("INSERT.*").WillReturnResult(driver.ResultNoRows)
 	mock.ExpectRollback()
@@ -476,7 +476,7 @@ func TestRunAsGroupFunctionFails(t *testing.T) {
 }
 
 func TestRunAsGroupCommitFail(t *testing.T) {
-	s, mock := newMockProvider().init()
+	s, mock := NewMockProvider().UTInit()
 	mock.ExpectBegin()
 	mock.ExpectCommit().WillReturnError(fmt.Errorf("pop"))
 	err := s.RunAsGroup(context.Background(), func(ctx context.Context) (err error) {
@@ -487,7 +487,7 @@ func TestRunAsGroupCommitFail(t *testing.T) {
 }
 
 func TestRollbackFail(t *testing.T) {
-	s, mock := newMockProvider().init()
+	s, mock := NewMockProvider().UTInit()
 	mock.ExpectBegin()
 	tx, _ := s.db.Begin()
 	mock.ExpectRollback().WillReturnError(fmt.Errorf("pop"))
@@ -496,20 +496,20 @@ func TestRollbackFail(t *testing.T) {
 }
 
 func TestCountQueryBadSQL(t *testing.T) {
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 	_, err := s.CountQuery(context.Background(), "table1", nil, sq.Insert("wrong"), "")
 	assert.Regexp(t, "FF00174", err)
 }
 
 func TestCountQueryQueryFailed(t *testing.T) {
-	s, mdb := newMockProvider().init()
+	s, mdb := NewMockProvider().UTInit()
 	mdb.ExpectQuery("^SELECT COUNT\\(\\*\\)").WillReturnError(fmt.Errorf("pop"))
 	_, err := s.CountQuery(context.Background(), "table1", nil, sq.Eq{"col1": "val1"}, "")
 	assert.Regexp(t, "FF00176.*pop", err)
 }
 
 func TestCountQueryScanFailTx(t *testing.T) {
-	s, mdb := newMockProvider().init()
+	s, mdb := NewMockProvider().UTInit()
 	mdb.ExpectBegin()
 	mdb.ExpectQuery("^SELECT COUNT\\(\\*\\)").WillReturnRows(sqlmock.NewRows([]string{"col1"}).AddRow("not a number"))
 	ctx, tx, _, err := s.BeginOrUseTx(context.Background())
@@ -519,7 +519,7 @@ func TestCountQueryScanFailTx(t *testing.T) {
 }
 
 func TestCountQueryWithExpr(t *testing.T) {
-	s, mdb := newMockProvider().init()
+	s, mdb := NewMockProvider().UTInit()
 	mdb.ExpectQuery("^SELECT COUNT\\(DISTINCT key\\)").WillReturnRows(sqlmock.NewRows([]string{"col1"}).AddRow(10))
 	_, err := s.CountQuery(context.Background(), "table1", nil, sq.Eq{"col1": "val1"}, "DISTINCT key")
 	assert.NoError(t, err)
@@ -527,7 +527,7 @@ func TestCountQueryWithExpr(t *testing.T) {
 }
 
 func TestQueryResSwallowError(t *testing.T) {
-	s, _ := newMockProvider().init()
+	s, _ := NewMockProvider().UTInit()
 	res := s.QueryRes(context.Background(), "table1", nil, sq.Insert("wrong"), &ffapi.FilterInfo{
 		Count: true,
 	})
@@ -535,23 +535,23 @@ func TestQueryResSwallowError(t *testing.T) {
 }
 
 func TestInsertTxRowsBadConfig(t *testing.T) {
-	s, mdb := newMockProvider().init()
+	s, mdb := NewMockProvider().UTInit()
 	mdb.ExpectBegin()
 	ctx, tx, _, err := s.BeginOrUseTx(context.Background())
 	assert.NoError(t, err)
-	s.fakePSQLInsert = false
+	s.FakePSQLInsert = false
 	sb := sq.Insert("table").Columns("col1").Values(("val1"))
 	err = s.InsertTxRows(ctx, "table1", tx, sb, nil, []int64{1, 2}, false)
 	assert.Regexp(t, "FF00186", err)
 }
 
 func TestInsertTxRowsIncompleteReturn(t *testing.T) {
-	s, mdb := newMockProvider().init()
+	s, mdb := NewMockProvider().UTInit()
 	mdb.ExpectBegin()
 	mdb.ExpectQuery("INSERT.*").WillReturnRows(sqlmock.NewRows([]string{s.SequenceColumn()}).AddRow(int64(1001)))
 	ctx, tx, _, err := s.BeginOrUseTx(context.Background())
 	assert.NoError(t, err)
-	s.fakePSQLInsert = true
+	s.FakePSQLInsert = true
 	sb := sq.Insert("table").Columns("col1").Values(("val1"))
 	err = s.InsertTxRows(ctx, "table1", tx, sb, nil, []int64{1, 2}, false)
 	assert.Regexp(t, "FF00177", err)
