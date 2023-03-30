@@ -45,6 +45,12 @@ const (
 	UpsertOptimizationExisting
 )
 
+type GetOption int
+
+const (
+	FailIfNotFound GetOption = iota
+)
+
 type PostCompletionHook func()
 
 type WithID interface {
@@ -56,7 +62,7 @@ type CRUD[T WithID] interface {
 	InsertMany(ctx context.Context, instances []T, allowPartialSuccess bool, hooks ...PostCompletionHook) (err error)
 	Insert(ctx context.Context, inst T, hooks ...PostCompletionHook) (err error)
 	Replace(ctx context.Context, inst T, hooks ...PostCompletionHook) (err error)
-	GetByID(ctx context.Context, id *fftypes.UUID) (inst T, err error)
+	GetByID(ctx context.Context, id *fftypes.UUID, getOpts ...GetOption) (inst T, err error)
 	GetMany(ctx context.Context, filter ffapi.Filter) (instances []T, fr *ffapi.FilterResult, err error)
 	Update(ctx context.Context, id *fftypes.UUID, update ffapi.Update, hooks ...PostCompletionHook) (err error)
 	UpdateMany(ctx context.Context, filter ffapi.Filter, update ffapi.Update, hooks ...PostCompletionHook) (err error)
@@ -294,7 +300,18 @@ func (c *CrudBase[T]) getReadCols() (tableFrom string, cols, readCols []string) 
 	return tableFrom, cols, readCols
 }
 
-func (c *CrudBase[T]) GetByID(ctx context.Context, id *fftypes.UUID) (inst T, err error) {
+func (c *CrudBase[T]) GetByID(ctx context.Context, id *fftypes.UUID, getOpts ...GetOption) (inst T, err error) {
+
+	failNotFound := false
+	for _, o := range getOpts {
+		switch o {
+		case FailIfNotFound:
+			failNotFound = true
+		default:
+			return c.NilValue(), i18n.NewError(ctx, i18n.MsgDBUnknownGetOption, o)
+		}
+	}
+
 	tableFrom, cols, readCols := c.getReadCols()
 	query := sq.Select(readCols...).
 		From(tableFrom).
@@ -302,6 +319,7 @@ func (c *CrudBase[T]) GetByID(ctx context.Context, id *fftypes.UUID) (inst T, er
 	if c.ReadQueryModifier != nil {
 		query = c.ReadQueryModifier(query)
 	}
+
 	rows, _, err := c.DB.Query(ctx, c.Table, query)
 	if err != nil {
 		return c.NilValue(), err
@@ -310,6 +328,9 @@ func (c *CrudBase[T]) GetByID(ctx context.Context, id *fftypes.UUID) (inst T, er
 
 	if !rows.Next() {
 		log.L(ctx).Debugf("%s '%s' not found", c.Table, id)
+		if failNotFound {
+			return c.NilValue(), i18n.NewError(ctx, i18n.Msg404NoResult)
+		}
 		return c.NilValue(), nil
 	}
 

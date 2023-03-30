@@ -500,6 +500,22 @@ func TestReplaceUpdateFail(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestGetByIDNotFound(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectQuery("SELECT.*").WillReturnRows(sqlmock.NewRows([]string{}))
+	_, err := tc.GetByID(context.Background(), fftypes.NewUUID(), FailIfNotFound)
+	assert.Regexp(t, "FF00164", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetByIDBadOpts(t *testing.T) {
+	db, _ := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	_, err := tc.GetByID(context.Background(), fftypes.NewUUID(), GetOption(999))
+	assert.Regexp(t, "FF00206", err)
+}
+
 func TestGetByIDSelectFail(t *testing.T) {
 	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
