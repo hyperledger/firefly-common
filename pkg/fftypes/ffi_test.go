@@ -100,6 +100,17 @@ func TestValidateFFIBadName(t *testing.T) {
 	assert.Regexp(t, "FF00140", err)
 }
 
+func TestValidateFFIBadNetworkName(t *testing.T) {
+	ffi := &FFI{
+		Name:        "math",
+		NetworkName: "(*%&#%)",
+		Namespace:   "default",
+		Version:     "v1.0.0",
+	}
+	err := ffi.Validate(context.Background(), true)
+	assert.Regexp(t, "FF00140", err)
+}
+
 func TestFFIParamsScan(t *testing.T) {
 	params := &FFIParams{}
 	err := params.Scan([]byte(`[{"name": "x", "type": "integer", "internalType": "uint256"}]`))
