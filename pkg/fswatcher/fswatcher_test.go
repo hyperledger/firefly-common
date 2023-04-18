@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/sirupsen/logrus"
@@ -62,6 +63,47 @@ func TestFileListenerE2E(t *testing.T) {
 	os.Rename(fmt.Sprintf("%s/another.yaml", tmpDir), fmt.Sprintf("%s/test.yaml", tmpDir))
 	<-fsListenerFired
 	assert.Equal(t, "two", viper.Get("ut_conf"))
+
+	defer func() {
+		cancelCtx()
+		if a := recover(); a != nil {
+			panic(a)
+		}
+		<-fsListenerDone
+	}()
+
+}
+
+func TestFileListenerIgnoredZeroLenChange(t *testing.T) {
+
+	logrus.SetLevel(logrus.DebugLevel)
+	tmpDir := t.TempDir()
+
+	filePath := fmt.Sprintf(fmt.Sprintf("%s/test.yaml", tmpDir))
+
+	viper.SetConfigType("yaml")
+	viper.SetConfigFile(filePath)
+
+	// Start listener on empty dir
+	fsListenerDone := make(chan struct{})
+	fsListenerFired := make(chan struct{})
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	err := Watch(ctx, filePath, func() {
+		err := viper.ReadInConfig()
+		assert.NoError(t, err)
+		close(fsListenerFired) // must only happen once
+	}, func() {
+		close(fsListenerDone)
+	})
+	assert.NoError(t, err)
+
+	// Create the file
+	os.WriteFile(fmt.Sprintf("%s/test.yaml", tmpDir), []byte(`{"ut_conf": "one"}`), 0664)
+	<-fsListenerFired
+
+	// Overwrite it with a zero length file
+	os.WriteFile(fmt.Sprintf("%s/test.yaml", tmpDir), []byte(``), 0664)
+	time.Sleep(10 * time.Millisecond) // no event to wait on, and want to make sure we trigger
 
 	defer func() {
 		cancelCtx()

@@ -75,12 +75,17 @@ func fsListenerLoop(ctx context.Context, fullFilePath string, onChange, onClose 
 			if isUpdate {
 				data, err := os.ReadFile(fullFilePath)
 				if err == nil {
-					dataHash := fftypes.HashString(string(data))
-					if lastHash == nil || !dataHash.Equals(lastHash) {
-						log.L(ctx).Infof("Config file change detected. Event=%s Name=%s Size=%d Hash=%s", event.Op, fullFilePath, len(data), dataHash)
-						onChange()
+					dataSize := len(data)
+					if dataSize > 0 {
+						dataHash := fftypes.HashString(string(data))
+						if lastHash == nil || !dataHash.Equals(lastHash) {
+							log.L(ctx).Infof("Config file change detected. Event=%s Name=%s Size=%d Hash=%s", event.Op, fullFilePath, dataSize, dataHash)
+							onChange()
+						}
+						lastHash = dataHash
+					} else {
+						log.L(ctx).Debugf("Config file change detected with zero size (ignored). Event=%s Name=%s", event.Op, fullFilePath)
 					}
-					lastHash = dataHash
 				}
 			}
 		case err, ok := <-errors:
