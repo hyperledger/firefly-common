@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -30,6 +30,7 @@ const (
 	defaultHTTPTLSHandshakeTimeout       = "10s" // match Go's default
 	defaultHTTPExpectContinueTimeout     = "1s"  // match Go's default
 	defaultHTTPPassthroughHeadersEnabled = false
+	defaultHTTPTLSEnabled                = false
 )
 
 const (
@@ -61,6 +62,14 @@ const (
 	HTTPConnectionTimeout = "connectionTimeout"
 	// HTTPTLSHandshakeTimeout the TLS handshake connection timeout
 	HTTPTLSHandshakeTimeout = "tlsHandshakeTimeout"
+	// HTTPTLSEnabled enabling TLS on the client
+	HTTPTLSEnabled = "tls.enabled"
+	// HTTPConfTLSCAFile the TLS certificate authority file to trust as the client
+	HTTPTLSCAFile = "tls.caFile"
+	// HTTPConfTLSCertFile the TLS certificate file for the client to perform mTLS
+	HTTPTLSCertFile = "tls.certFile"
+	// HTTPConfTLSKeyFile the private key file for the client to perform mTLS
+	HTTPTLSKeyFile = "tls.keyFile"
 	// HTTPExpectContinueTimeout see ExpectContinueTimeout in Go docs
 	HTTPExpectContinueTimeout = "expectContinueTimeout"
 	// HTTPPassthroughHeadersEnabled will pass through any HTTP headers found on the context
@@ -88,4 +97,8 @@ func InitConfig(conf config.KeySet) {
 	conf.AddKnownKey(HTTPExpectContinueTimeout, defaultHTTPExpectContinueTimeout)
 	conf.AddKnownKey(HTTPPassthroughHeadersEnabled, defaultHTTPPassthroughHeadersEnabled)
 	conf.AddKnownKey(HTTPCustomClient)
+	conf.AddKnownKey(HTTPTLSEnabled, defaultHTTPTLSEnabled)
+	conf.AddKnownKey(HTTPTLSCAFile)
+	conf.AddKnownKey(HTTPTLSCertFile)
+	conf.AddKnownKey(HTTPTLSKeyFile)
 }

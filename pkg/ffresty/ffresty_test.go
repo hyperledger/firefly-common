@@ -51,7 +51,8 @@ func TestRequestOK(t *testing.T) {
 	utConf.Set(HTTPConfigRetryEnabled, true)
 	utConf.Set(HTTPCustomClient, customClient)
 
-	c := New(context.Background(), utConf)
+	c, err := New(context.Background(), utConf)
+	assert.Nil(t, err)
 	httpmock.ActivateNonDefault(customClient)
 	defer httpmock.DeactivateAndReset()
 
@@ -79,7 +80,8 @@ func TestRequestRetry(t *testing.T) {
 	utConf.Set(HTTPConfigRetryEnabled, true)
 	utConf.Set(HTTPConfigRetryInitDelay, 1)
 
-	c := New(ctx, utConf)
+	c, err := New(ctx, utConf)
+	assert.Nil(t, err)
 	httpmock.ActivateNonDefault(c.GetClient())
 	defer httpmock.DeactivateAndReset()
 
@@ -105,7 +107,8 @@ func TestConfWithProxy(t *testing.T) {
 	utConf.Set(HTTPConfigProxyURL, "http://myproxy.example.com:12345")
 	utConf.Set(HTTPConfigRetryEnabled, false)
 
-	c := New(ctx, utConf)
+	c, err := New(ctx, utConf)
+	assert.Nil(t, err)
 	assert.True(t, c.IsProxySet())
 }
 
@@ -117,7 +120,8 @@ func TestLongResponse(t *testing.T) {
 	utConf.Set(HTTPConfigURL, "http://localhost:12345")
 	utConf.Set(HTTPConfigRetryEnabled, false)
 
-	c := New(ctx, utConf)
+	c, err := New(ctx, utConf)
+	assert.Nil(t, err)
 	httpmock.ActivateNonDefault(c.GetClient())
 	defer httpmock.DeactivateAndReset()
 
@@ -141,7 +145,8 @@ func TestErrResponse(t *testing.T) {
 	utConf.Set(HTTPConfigURL, "http://localhost:12345")
 	utConf.Set(HTTPConfigRetryEnabled, false)
 
-	c := New(ctx, utConf)
+	c, err := New(ctx, utConf)
+	assert.Nil(t, err)
 	httpmock.ActivateNonDefault(c.GetClient())
 	defer httpmock.DeactivateAndReset()
 
@@ -180,7 +185,8 @@ func TestPassthroughHeaders(t *testing.T) {
 	utConf.Set(HTTPCustomClient, customClient)
 	utConf.Set(HTTPPassthroughHeadersEnabled, true)
 
-	c := New(context.Background(), utConf)
+	c, err := New(context.Background(), utConf)
+	assert.Nil(t, err)
 	httpmock.ActivateNonDefault(customClient)
 	defer httpmock.DeactivateAndReset()
 
@@ -199,4 +205,54 @@ func TestPassthroughHeaders(t *testing.T) {
 	assert.Equal(t, `{"some": "data"}`, resp.String())
 
 	assert.Equal(t, 1, httpmock.GetTotalCallCount())
+}
+
+func TestMissingCAFile(t *testing.T) {
+	resetConf()
+	utConf.Set(HTTPConfigURL, "https://localhost:12345")
+	utConf.Set(HTTPTLSEnabled, true)
+	utConf.Set(HTTPTLSCAFile, "non-existent.pem")
+
+	_, err := New(context.Background(), utConf)
+	assert.Regexp(t, "FF00153", err)
+}
+
+func TestBadCAFile(t *testing.T) {
+	resetConf()
+	utConf.Set(HTTPConfigURL, "https://localhost:12345")
+	utConf.Set(HTTPTLSEnabled, true)
+	utConf.Set(HTTPTLSCAFile, "../../test/certs/ca-invalid.pem")
+
+	_, err := New(context.Background(), utConf)
+	assert.Regexp(t, "FF00152", err)
+}
+
+func TestBadKeyPair(t *testing.T) {
+	resetConf()
+	utConf.Set(HTTPConfigURL, "https://localhost:12345")
+	utConf.Set(HTTPTLSEnabled, true)
+	utConf.Set(HTTPTLSCAFile, "../../test/certs/ca-crt.pem")
+	utConf.Set(HTTPTLSCertFile, "../../test/certs/client-invalid.pem")
+	utConf.Set(HTTPTLSKeyFile, "../../test/certs/client-key.pem")
+
+	_, err := New(context.Background(), utConf)
+	assert.Regexp(t, "FF00204", err)
+}
+
+func TestTLSConfig(t *testing.T) {
+	resetConf()
+	utConf.Set(HTTPConfigURL, "https://localhost:12345")
+	utConf.Set(HTTPTLSEnabled, true)
+	utConf.Set(HTTPTLSCAFile, "../../test/certs/ca-crt.pem")
+	utConf.Set(HTTPTLSCertFile, "../../test/certs/client-crt.pem")
+	utConf.Set(HTTPTLSKeyFile, "../../test/certs/client-key.pem")
+
+	c, err := New(context.Background(), utConf)
+	assert.Nil(t, err)
+
+	if transport, ok := c.GetClient().Transport.(*http.Transport); ok {
+		assert.NotNil(t, transport.TLSClientConfig)
+		assert.Equal(t, 1, len(transport.TLSClientConfig.Certificates))
+		assert.NotNil(t, transport.TLSClientConfig.RootCAs)
+	}
 }

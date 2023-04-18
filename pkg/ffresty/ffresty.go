@@ -18,11 +18,14 @@ package ffresty
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -67,10 +70,7 @@ func OnAfterResponse(c *resty.Client, resp *resty.Response) {
 //
 // You can use the normal Resty builder pattern, to set per-instance configuration
 // as required.
-func New(ctx context.Context, staticConfig config.Section) *resty.Client {
-
-	var client *resty.Client
-
+func New(ctx context.Context, staticConfig config.Section) (client *resty.Client, err error) {
 	passthroughHeadersEnabled := staticConfig.GetBool(HTTPPassthroughHeadersEnabled)
 
 	iHTTPClient := staticConfig.Get(HTTPCustomClient)
@@ -80,6 +80,7 @@ func New(ctx context.Context, staticConfig config.Section) *resty.Client {
 		}
 	}
 	if client == nil {
+
 		httpTransport := &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			DialContext: (&net.Dialer{
@@ -92,6 +93,54 @@ func New(ctx context.Context, staticConfig config.Section) *resty.Client {
 			TLSHandshakeTimeout:   staticConfig.GetDuration(HTTPTLSHandshakeTimeout),
 			ExpectContinueTimeout: staticConfig.GetDuration(HTTPExpectContinueTimeout),
 		}
+
+		// Check for TLS is enabled
+		if staticConfig.GetBool(HTTPTLSEnabled) {
+			tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
+
+			// Support a custom CA file
+			// or default to system CAs
+			var certPool *x509.CertPool
+			caFile := staticConfig.GetString(HTTPTLSCAFile)
+			if caFile != "" {
+				certPool = x509.NewCertPool()
+				var caBytes []byte
+				caBytes, err = os.ReadFile(caFile)
+				if err == nil {
+					ok := certPool.AppendCertsFromPEM(caBytes)
+					if !ok {
+						return nil, i18n.NewError(ctx, i18n.MsgInvalidCAFile)
+					}
+				}
+			} else {
+				// Looking at the underlining code this never throws an error
+				// but just in case it changes we catch it and return it later
+				certPool, err = x509.SystemCertPool()
+			}
+
+			// Make sure to check if the above steps threw an error
+			if err != nil {
+				return nil, i18n.WrapError(ctx, err, i18n.MsgTLSConfigFailed)
+			}
+
+			tlsConfig.RootCAs = certPool
+
+			// For mTLS we need both the cert and key
+			certFile := staticConfig.GetString(HTTPTLSCertFile)
+			keyFile := staticConfig.GetString(HTTPTLSKeyFile)
+			if certFile != "" && keyFile != "" {
+				// Read the key pair to create certificate
+				cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+				if err != nil {
+					return nil, i18n.WrapError(ctx, err, i18n.MsgInvalidKeyPairFiles)
+				}
+
+				tlsConfig.Certificates = []tls.Certificate{cert}
+			}
+
+			httpTransport.TLSClientConfig = tlsConfig
+		}
+
 		httpClient := &http.Client{
 			Transport: httpTransport,
 		}
@@ -184,7 +233,7 @@ func New(ctx context.Context, staticConfig config.Section) *resty.Client {
 			})
 	}
 
-	return client
+	return client, nil
 }
 
 func WrapRestErr(ctx context.Context, res *resty.Response, err error, key i18n.ErrorMessageKey) error {
