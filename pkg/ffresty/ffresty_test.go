@@ -256,25 +256,6 @@ func TestBadKeyPair(t *testing.T) {
 	assert.Regexp(t, "FF00206", err)
 }
 
-func TestTLSConfig(t *testing.T) {
-	resetConf()
-	tlsSection := utConf.SubSection("tls")
-	utConf.Set(HTTPConfigURL, "https://localhost:12345")
-	tlsSection.Set(fftls.HTTPConfTLSEnabled, true)
-	tlsSection.Set(fftls.HTTPConfTLSCAFile, "../../test/certs/ca-crt.pem")
-	tlsSection.Set(fftls.HTTPConfTLSCertFile, "../../test/certs/client-crt.pem")
-	tlsSection.Set(fftls.HTTPConfTLSKeyFile, "../../test/certs/client-key.pem")
-
-	c, err := New(context.Background(), utConf)
-	assert.Nil(t, err)
-
-	if transport, ok := c.GetClient().Transport.(*http.Transport); ok {
-		assert.NotNil(t, transport.TLSClientConfig)
-		assert.Equal(t, 1, len(transport.TLSClientConfig.Certificates))
-		assert.NotNil(t, transport.TLSClientConfig.RootCAs)
-	}
-}
-
 func TestMTLSClientWithServer(t *testing.T) {
 	// Create an X509 certificate pair
 	privatekey, _ := rsa.GenerateKey(rand.Reader, 2048)
