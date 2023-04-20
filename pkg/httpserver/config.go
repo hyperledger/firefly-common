@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -21,6 +21,7 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/auth/authfactory"
 	"github.com/hyperledger/firefly-common/pkg/config"
+	"github.com/hyperledger/firefly-common/pkg/fftls"
 )
 
 const (
@@ -65,16 +66,6 @@ const (
 	HTTPConfWriteTimeout = "writeTimeout"
 	// HTTPConfShutdownTimeout The maximum amount of time to wait for any open HTTP requests to finish before shutting down the HTTP server
 	HTTPConfShutdownTimeout = "shutdownTimeout"
-	// HTTPConfTLSCAFile the TLS certificate authority file for the HTTP server
-	HTTPConfTLSCAFile = "tls.caFile"
-	// HTTPConfTLSCertFile the TLS certificate file for the HTTP server
-	HTTPConfTLSCertFile = "tls.certFile"
-	// HTTPConfTLSClientAuth whether the HTTP server requires a mutual TLS connection
-	HTTPConfTLSClientAuth = "tls.clientAuth"
-	// HTTPConfTLSEnabled whether TLS is enabled for the HTTP server
-	HTTPConfTLSEnabled = "tls.enabled"
-	// HTTPConfTLSKeyFile the private key file for TLS on the server
-	HTTPConfTLSKeyFile = "tls.keyFile"
 	// HTTPAuthType the auth plugin to use for the HTTP server
 	HTTPAuthType = "auth.type"
 )
@@ -85,14 +76,12 @@ func InitHTTPConfig(conf config.Section, defaultPort int) {
 	conf.AddKnownKey(HTTPConfPort, defaultPort)
 	conf.AddKnownKey(HTTPConfReadTimeout, "15s")
 	conf.AddKnownKey(HTTPConfWriteTimeout, "15s")
-	conf.AddKnownKey(HTTPConfTLSCAFile)
-	conf.AddKnownKey(HTTPConfTLSCertFile)
-	conf.AddKnownKey(HTTPConfTLSClientAuth)
-	conf.AddKnownKey(HTTPConfTLSEnabled, false)
-	conf.AddKnownKey(HTTPConfTLSKeyFile)
 	conf.AddKnownKey(HTTPConfShutdownTimeout, "10s")
 	conf.AddKnownKey(HTTPAuthType)
 
 	ac := conf.SubSection("auth")
 	authfactory.InitConfig(ac)
+
+	tlsConfig := conf.SubSection("tls")
+	fftls.InitTLSConfig(tlsConfig)
 }

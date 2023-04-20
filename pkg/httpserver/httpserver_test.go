@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/json"
@@ -38,6 +37,8 @@ import (
 	"github.com/hyperledger/firefly-common/mocks/httpservermocks"
 	"github.com/hyperledger/firefly-common/pkg/auth/basic"
 	"github.com/hyperledger/firefly-common/pkg/config"
+	"github.com/hyperledger/firefly-common/pkg/ffresty"
+	"github.com/hyperledger/firefly-common/pkg/fftls"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -117,9 +118,11 @@ func TestShutdownError(t *testing.T) {
 func TestMissingCAFile(t *testing.T) {
 	cp := config.RootSection("ut")
 	InitHTTPConfig(cp, 0)
+	tlsSection := cp.SubSection("tls")
+	tlsSection.Set(fftls.HTTPConfTLSEnabled, true)
+	tlsSection.Set(fftls.HTTPConfTLSCAFile, "badness")
 	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
-	cp.Set(HTTPConfTLSCAFile, "badness")
 	_, err := NewHTTPServer(context.Background(), "ut", mux.NewRouter(), make(chan error), cp, cc)
 	assert.Regexp(t, "FF00153", err)
 }
@@ -129,7 +132,9 @@ func TestBadCAFile(t *testing.T) {
 	InitHTTPConfig(cp, 0)
 	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
-	cp.Set(HTTPConfTLSCAFile, configDir+"/firefly.common.yaml")
+	tlsSection := cp.SubSection("tls")
+	tlsSection.Set(fftls.HTTPConfTLSEnabled, true)
+	tlsSection.Set(fftls.HTTPConfTLSCAFile, configDir+"/firefly.common.yaml")
 	_, err := NewHTTPServer(context.Background(), "ut", mux.NewRouter(), make(chan error), cp, cc)
 	assert.Regexp(t, "FF00152", err)
 }
@@ -168,12 +173,13 @@ func TestTLSServerSelfSignedWithClientAuth(t *testing.T) {
 	InitHTTPConfig(cp, 0)
 	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
+	tlsSection := cp.SubSection("tls")
 	cp.Set(HTTPConfAddress, "127.0.0.1")
-	cp.Set(HTTPConfTLSEnabled, true)
-	cp.Set(HTTPConfTLSClientAuth, true)
-	cp.Set(HTTPConfTLSKeyFile, privateKeyFile.Name())
-	cp.Set(HTTPConfTLSCertFile, publicKeyFile.Name())
-	cp.Set(HTTPConfTLSCAFile, publicKeyFile.Name())
+	tlsSection.Set(fftls.HTTPConfTLSEnabled, true)
+	tlsSection.Set(fftls.HTTPConfTLSClientAuth, true)
+	tlsSection.Set(fftls.HTTPConfTLSKeyFile, privateKeyFile.Name())
+	tlsSection.Set(fftls.HTTPConfTLSCertFile, publicKeyFile.Name())
+	tlsSection.Set(fftls.HTTPConfTLSCAFile, publicKeyFile.Name())
 	cp.Set(HTTPConfPort, 0)
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	r := mux.NewRouter()
@@ -186,29 +192,29 @@ func TestTLSServerSelfSignedWithClientAuth(t *testing.T) {
 	assert.NoError(t, err)
 	go hs.ServeHTTP(ctx)
 
-	// Attempt a request, with a client certificate
-	rootCAs := x509.NewCertPool()
-	caPEM, _ := os.ReadFile(publicKeyFile.Name())
-	ok := rootCAs.AppendCertsFromPEM(caPEM)
-	assert.True(t, ok)
-	c := http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
-					clientKeyPair, err := tls.LoadX509KeyPair(publicKeyFile.Name(), privateKeyFile.Name())
-					return &clientKeyPair, err
-				},
-				RootCAs: rootCAs,
-			},
-		},
-	}
+	// Use ffresty to test the mTLS client as well
+	var restyConfig = config.RootSection("resty")
+	ffresty.InitConfig(restyConfig)
+	clientTLSSection := restyConfig.SubSection("tls")
+	restyConfig.Set(ffresty.HTTPConfigURL, "https://127.0.0.1")
+	clientTLSSection.Set(fftls.HTTPConfTLSEnabled, true)
+	clientTLSSection.Set(fftls.HTTPConfTLSKeyFile, privateKeyFile.Name())
+	clientTLSSection.Set(fftls.HTTPConfTLSCertFile, publicKeyFile.Name())
+	clientTLSSection.Set(fftls.HTTPConfTLSCAFile, publicKeyFile.Name())
+
+	c, err := ffresty.New(context.Background(), restyConfig)
+	assert.Nil(t, err)
+
 	httpsAddr := fmt.Sprintf("https://%s/test", hs.(*httpServer).l.Addr().String())
-	res, err := c.Get(httpsAddr)
+	res, err := c.R().Get(httpsAddr)
+	assert.NoError(t, err)
+
 	assert.NoError(t, err)
 	if res != nil {
-		assert.Equal(t, 200, res.StatusCode)
+		assert.Equal(t, 200, res.StatusCode())
 		var resBody map[string]interface{}
-		json.NewDecoder(res.Body).Decode(&resBody)
+		err = json.Unmarshal(res.Body(), &resBody)
+		assert.NoError(t, err)
 		assert.Equal(t, "world", resBody["hello"])
 	}
 

@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -44,7 +44,7 @@ const (
 
 // InitConfig ensures the config is initialized for HTTP too, as WS and HTTP
 // can share the same tree of configuration (and all the HTTP options apply to the initial upgrade)
-func InitConfig(conf config.KeySet) {
+func InitConfig(conf config.Section) {
 	ffresty.InitConfig(conf)
 	conf.AddKnownKey(WSConfigKeyWriteBufferSize, defaultBufferSize)
 	conf.AddKnownKey(WSConfigKeyReadBufferSize, defaultBufferSize)

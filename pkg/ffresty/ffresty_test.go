@@ -25,10 +25,13 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
+	"github.com/hyperledger/firefly-common/pkg/fftls"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 )
+
+const configDir = "../../test/data/config"
 
 var utConf = config.RootSection("http_unit_tests")
 
@@ -210,8 +213,9 @@ func TestPassthroughHeaders(t *testing.T) {
 func TestMissingCAFile(t *testing.T) {
 	resetConf()
 	utConf.Set(HTTPConfigURL, "https://localhost:12345")
-	utConf.Set(HTTPTLSEnabled, true)
-	utConf.Set(HTTPTLSCAFile, "non-existent.pem")
+	tlsSection := utConf.SubSection("tls")
+	tlsSection.Set(fftls.HTTPConfTLSEnabled, true)
+	tlsSection.Set(fftls.HTTPConfTLSCAFile, "non-existent.pem")
 
 	_, err := New(context.Background(), utConf)
 	assert.Regexp(t, "FF00153", err)
@@ -220,8 +224,9 @@ func TestMissingCAFile(t *testing.T) {
 func TestBadCAFile(t *testing.T) {
 	resetConf()
 	utConf.Set(HTTPConfigURL, "https://localhost:12345")
-	utConf.Set(HTTPTLSEnabled, true)
-	utConf.Set(HTTPTLSCAFile, "../../test/certs/ca-invalid.pem")
+	tlsSection := utConf.SubSection("tls")
+	tlsSection.Set(fftls.HTTPConfTLSEnabled, true)
+	tlsSection.Set(fftls.HTTPConfTLSCAFile, configDir+"/firefly.common.yaml")
 
 	_, err := New(context.Background(), utConf)
 	assert.Regexp(t, "FF00152", err)
@@ -230,10 +235,10 @@ func TestBadCAFile(t *testing.T) {
 func TestBadKeyPair(t *testing.T) {
 	resetConf()
 	utConf.Set(HTTPConfigURL, "https://localhost:12345")
-	utConf.Set(HTTPTLSEnabled, true)
-	utConf.Set(HTTPTLSCAFile, "../../test/certs/ca-crt.pem")
-	utConf.Set(HTTPTLSCertFile, "../../test/certs/client-invalid.pem")
-	utConf.Set(HTTPTLSKeyFile, "../../test/certs/client-key.pem")
+	tlsSection := utConf.SubSection("tls")
+	tlsSection.Set(fftls.HTTPConfTLSEnabled, true)
+	tlsSection.Set(fftls.HTTPConfTLSCertFile, configDir+"/firefly.common.yaml")
+	tlsSection.Set(fftls.HTTPConfTLSKeyFile, configDir+"/firefly.common.yaml")
 
 	_, err := New(context.Background(), utConf)
 	assert.Regexp(t, "FF00204", err)
@@ -241,11 +246,12 @@ func TestBadKeyPair(t *testing.T) {
 
 func TestTLSConfig(t *testing.T) {
 	resetConf()
+	tlsSection := utConf.SubSection("tls")
 	utConf.Set(HTTPConfigURL, "https://localhost:12345")
-	utConf.Set(HTTPTLSEnabled, true)
-	utConf.Set(HTTPTLSCAFile, "../../test/certs/ca-crt.pem")
-	utConf.Set(HTTPTLSCertFile, "../../test/certs/client-crt.pem")
-	utConf.Set(HTTPTLSKeyFile, "../../test/certs/client-key.pem")
+	tlsSection.Set(fftls.HTTPConfTLSEnabled, true)
+	tlsSection.Set(fftls.HTTPConfTLSCAFile, "../../test/certs/ca-crt.pem")
+	tlsSection.Set(fftls.HTTPConfTLSCertFile, "../../test/certs/client-crt.pem")
+	tlsSection.Set(fftls.HTTPConfTLSKeyFile, "../../test/certs/client-key.pem")
 
 	c, err := New(context.Background(), utConf)
 	assert.Nil(t, err)

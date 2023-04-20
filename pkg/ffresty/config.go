@@ -16,7 +16,10 @@
 
 package ffresty
 
-import "github.com/hyperledger/firefly-common/pkg/config"
+import (
+	"github.com/hyperledger/firefly-common/pkg/config"
+	"github.com/hyperledger/firefly-common/pkg/fftls"
+)
 
 const (
 	defaultRetryEnabled                  = false
@@ -30,7 +33,6 @@ const (
 	defaultHTTPTLSHandshakeTimeout       = "10s" // match Go's default
 	defaultHTTPExpectContinueTimeout     = "1s"  // match Go's default
 	defaultHTTPPassthroughHeadersEnabled = false
-	defaultHTTPTLSEnabled                = false
 )
 
 const (
@@ -62,14 +64,6 @@ const (
 	HTTPConnectionTimeout = "connectionTimeout"
 	// HTTPTLSHandshakeTimeout the TLS handshake connection timeout
 	HTTPTLSHandshakeTimeout = "tlsHandshakeTimeout"
-	// HTTPTLSEnabled enabling TLS on the client
-	HTTPTLSEnabled = "tls.enabled"
-	// HTTPConfTLSCAFile the TLS certificate authority file to trust as the client
-	HTTPTLSCAFile = "tls.caFile"
-	// HTTPConfTLSCertFile the TLS certificate file for the client to perform mTLS
-	HTTPTLSCertFile = "tls.certFile"
-	// HTTPConfTLSKeyFile the private key file for the client to perform mTLS
-	HTTPTLSKeyFile = "tls.keyFile"
 	// HTTPExpectContinueTimeout see ExpectContinueTimeout in Go docs
 	HTTPExpectContinueTimeout = "expectContinueTimeout"
 	// HTTPPassthroughHeadersEnabled will pass through any HTTP headers found on the context
@@ -79,7 +73,7 @@ const (
 	HTTPCustomClient = "customClient"
 )
 
-func InitConfig(conf config.KeySet) {
+func InitConfig(conf config.Section) {
 	conf.AddKnownKey(HTTPConfigURL)
 	conf.AddKnownKey(HTTPConfigProxyURL)
 	conf.AddKnownKey(HTTPConfigHeaders)
@@ -97,8 +91,7 @@ func InitConfig(conf config.KeySet) {
 	conf.AddKnownKey(HTTPExpectContinueTimeout, defaultHTTPExpectContinueTimeout)
 	conf.AddKnownKey(HTTPPassthroughHeadersEnabled, defaultHTTPPassthroughHeadersEnabled)
 	conf.AddKnownKey(HTTPCustomClient)
-	conf.AddKnownKey(HTTPTLSEnabled, defaultHTTPTLSEnabled)
-	conf.AddKnownKey(HTTPTLSCAFile)
-	conf.AddKnownKey(HTTPTLSCertFile)
-	conf.AddKnownKey(HTTPTLSKeyFile)
+
+	tlsConfig := conf.SubSection("tls")
+	fftls.InitTLSConfig(tlsConfig)
 }

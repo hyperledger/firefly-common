@@ -18,16 +18,14 @@ package httpserver
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"net"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/hyperledger/firefly-common/pkg/config"
+	"github.com/hyperledger/firefly-common/pkg/fftls"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
@@ -66,16 +64,19 @@ type ServerOptions struct {
 }
 
 func NewHTTPServer(ctx context.Context, name string, r *mux.Router, onClose chan error, conf config.Section, corsConf config.Section, opts ...*ServerOptions) (is HTTPServer, err error) {
+	tlsSubSection := conf.SubSection("tls")
+
 	hs := &httpServer{
 		name:            name,
 		onClose:         onClose,
 		conf:            conf,
 		corsConf:        corsConf,
-		tlsEnabled:      conf.GetBool(HTTPConfTLSEnabled),
-		tlsCertFile:     conf.GetString(HTTPConfTLSCertFile),
-		tlsKeyFile:      conf.GetString(HTTPConfTLSKeyFile),
+		tlsEnabled:      tlsSubSection.GetBool(fftls.HTTPConfTLSEnabled),
+		tlsCertFile:     tlsSubSection.GetString(fftls.HTTPConfTLSCertFile),
+		tlsKeyFile:      tlsSubSection.GetString(fftls.HTTPConfTLSKeyFile),
 		shutdownTimeout: conf.GetDuration(HTTPConfShutdownTimeout),
 	}
+
 	for _, o := range opts {
 		hs.options = *o
 	}
@@ -101,32 +102,9 @@ func (hs *httpServer) createListener(ctx context.Context) (net.Listener, error) 
 }
 
 func (hs *httpServer) createServer(ctx context.Context, r *mux.Router) (srv *http.Server, err error) {
-
-	// Support client auth
-	clientAuth := tls.NoClientCert
-	if hs.conf.GetBool(HTTPConfTLSClientAuth) {
-		clientAuth = tls.RequireAndVerifyClientCert
-	}
-
-	// Support custom CA file
-	var rootCAs *x509.CertPool
-	caFile := hs.conf.GetString(HTTPConfTLSCAFile)
-	if caFile != "" {
-		rootCAs = x509.NewCertPool()
-		var caBytes []byte
-		caBytes, err = os.ReadFile(caFile)
-		if err == nil {
-			ok := rootCAs.AppendCertsFromPEM(caBytes)
-			if !ok {
-				err = i18n.NewError(ctx, i18n.MsgInvalidCAFile)
-			}
-		}
-	} else {
-		rootCAs, err = x509.SystemCertPool()
-	}
-
+	tlsConfig, err := fftls.ConstructTLSConfig(ctx, hs.conf.SubSection("tls"), "server")
 	if err != nil {
-		return nil, i18n.WrapError(ctx, err, i18n.MsgTLSConfigFailed)
+		return nil, err
 	}
 
 	authConfig := hs.conf.SubSection("auth")
@@ -155,17 +133,7 @@ func (hs *httpServer) createServer(ctx context.Context, r *mux.Router) (srv *htt
 		WriteTimeout:      writeTimeout,
 		ReadTimeout:       readTimeout,
 		ReadHeaderTimeout: hs.conf.GetDuration(HTTPConfReadTimeout), // safe for this to always be the read timeout - should be short
-		TLSConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
-			ClientAuth: clientAuth,
-			ClientCAs:  rootCAs,
-			RootCAs:    rootCAs,
-			VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-				cert := verifiedChains[0][0]
-				log.L(ctx).Debugf("Client certificate provided Subject=%s Issuer=%s Expiry=%s", cert.Subject, cert.Issuer, cert.NotAfter)
-				return nil
-			},
-		},
+		TLSConfig:         tlsConfig,
 		ConnContext: func(newCtx context.Context, c net.Conn) context.Context {
 			l := log.L(ctx).WithField("req", fftypes.ShortID())
 			newCtx = log.WithLogger(newCtx, l)

@@ -18,20 +18,18 @@ package ffresty
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/base64"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
+	"github.com/hyperledger/firefly-common/pkg/fftls"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
@@ -94,52 +92,12 @@ func New(ctx context.Context, staticConfig config.Section) (client *resty.Client
 			ExpectContinueTimeout: staticConfig.GetDuration(HTTPExpectContinueTimeout),
 		}
 
-		// Check for TLS is enabled
-		if staticConfig.GetBool(HTTPTLSEnabled) {
-			tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}
-
-			// Support a custom CA file
-			// or default to system CAs
-			var certPool *x509.CertPool
-			caFile := staticConfig.GetString(HTTPTLSCAFile)
-			if caFile != "" {
-				certPool = x509.NewCertPool()
-				var caBytes []byte
-				caBytes, err = os.ReadFile(caFile)
-				if err == nil {
-					ok := certPool.AppendCertsFromPEM(caBytes)
-					if !ok {
-						return nil, i18n.NewError(ctx, i18n.MsgInvalidCAFile)
-					}
-				}
-			} else {
-				// Looking at the underlining code this never throws an error
-				// but just in case it changes we catch it and return it later
-				certPool, err = x509.SystemCertPool()
-			}
-
-			// Make sure to check if the above steps threw an error
-			if err != nil {
-				return nil, i18n.WrapError(ctx, err, i18n.MsgTLSConfigFailed)
-			}
-
-			tlsConfig.RootCAs = certPool
-
-			// For mTLS we need both the cert and key
-			certFile := staticConfig.GetString(HTTPTLSCertFile)
-			keyFile := staticConfig.GetString(HTTPTLSKeyFile)
-			if certFile != "" && keyFile != "" {
-				// Read the key pair to create certificate
-				cert, err := tls.LoadX509KeyPair(certFile, keyFile)
-				if err != nil {
-					return nil, i18n.WrapError(ctx, err, i18n.MsgInvalidKeyPairFiles)
-				}
-
-				tlsConfig.Certificates = []tls.Certificate{cert}
-			}
-
-			httpTransport.TLSClientConfig = tlsConfig
+		tlsConfig, err := fftls.ConstructTLSConfig(ctx, staticConfig.SubSection("tls"), "client")
+		if err != nil {
+			return nil, err
 		}
+
+		httpTransport.TLSClientConfig = tlsConfig
 
 		httpClient := &http.Client{
 			Transport: httpTransport,
