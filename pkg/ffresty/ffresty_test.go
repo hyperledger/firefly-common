@@ -18,10 +18,22 @@ package ffresty
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/json"
+	"encoding/pem"
 	"fmt"
+	"log"
+	"math/big"
+	"net"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
@@ -241,7 +253,7 @@ func TestBadKeyPair(t *testing.T) {
 	tlsSection.Set(fftls.HTTPConfTLSKeyFile, configDir+"/firefly.common.yaml")
 
 	_, err := New(context.Background(), utConf)
-	assert.Regexp(t, "FF00204", err)
+	assert.Regexp(t, "FF00206", err)
 }
 
 func TestTLSConfig(t *testing.T) {
@@ -261,4 +273,99 @@ func TestTLSConfig(t *testing.T) {
 		assert.Equal(t, 1, len(transport.TLSClientConfig.Certificates))
 		assert.NotNil(t, transport.TLSClientConfig.RootCAs)
 	}
+}
+
+func TestMTLSClientWithServer(t *testing.T) {
+	// Create an X509 certificate pair
+	privatekey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	publickey := &privatekey.PublicKey
+	var privateKeyBytes []byte = x509.MarshalPKCS1PrivateKey(privatekey)
+	privateKeyFile, _ := os.CreateTemp("", "key.pem")
+	defer os.Remove(privateKeyFile.Name())
+	privateKeyBlock := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: privateKeyBytes}
+	pem.Encode(privateKeyFile, privateKeyBlock)
+	serialNumber, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	x509Template := &x509.Certificate{
+		SerialNumber: serialNumber,
+		Subject: pkix.Name{
+			Organization: []string{"Unit Tests"},
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(100 * time.Second),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+		IPAddresses:           []net.IP{net.IPv4(127, 0, 0, 1)},
+	}
+	derBytes, err := x509.CreateCertificate(rand.Reader, x509Template, x509Template, publickey, privatekey)
+	assert.NoError(t, err)
+	publicKeyFile, _ := os.CreateTemp("", "cert.pem")
+	defer os.Remove(publicKeyFile.Name())
+	pem.Encode(publicKeyFile, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
+
+	http.HandleFunc("/hello", func(res http.ResponseWriter, req *http.Request) {
+		res.WriteHeader(200)
+		json.NewEncoder(res).Encode(map[string]interface{}{"hello": "world"})
+	})
+
+	// Create a CA certificate pool and add cert.pem to it
+	caCert, err := os.ReadFile(publicKeyFile.Name())
+	if err != nil {
+		log.Fatal(err)
+	}
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(caCert)
+
+	// Create the TLS Config with the CA pool and enable Client certificate validation
+	tlsConfig := &tls.Config{
+		ClientCAs:  caCertPool,
+		ClientAuth: tls.RequireAndVerifyClientCert,
+	}
+	tlsConfig.BuildNameToCertificate()
+
+	// Create a Server instance to listen on port 8443 with the TLS config
+	server := &http.Server{
+		Addr:      "127.0.0.1:8443",
+		TLSConfig: tlsConfig,
+	}
+
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	go func() {
+		select {
+		case <-ctx.Done():
+			shutdownContext, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if err := server.Shutdown(shutdownContext); err != nil {
+				return
+			}
+		}
+	}()
+
+	go server.ListenAndServeTLS(publicKeyFile.Name(), privateKeyFile.Name())
+
+	// Use ffresty to test the mTLS client as well
+	var restyConfig = config.RootSection("resty")
+	InitConfig(restyConfig)
+	clientTLSSection := restyConfig.SubSection("tls")
+	restyConfig.Set(HTTPConfigURL, "https://127.0.0.1")
+	clientTLSSection.Set(fftls.HTTPConfTLSEnabled, true)
+	clientTLSSection.Set(fftls.HTTPConfTLSKeyFile, privateKeyFile.Name())
+	clientTLSSection.Set(fftls.HTTPConfTLSCertFile, publicKeyFile.Name())
+	clientTLSSection.Set(fftls.HTTPConfTLSCAFile, publicKeyFile.Name())
+
+	c, err := New(context.Background(), restyConfig)
+	assert.Nil(t, err)
+
+	//httpsAddr := fmt.Sprintf("https://localhost:8443/hello", server.Addr)
+	res, err := c.R().Get("https://127.0.0.1:8443/hello")
+	assert.NoError(t, err)
+
+	assert.NoError(t, err)
+	if res != nil {
+		assert.Equal(t, 200, res.StatusCode())
+		var resBody map[string]interface{}
+		err = json.Unmarshal(res.Body(), &resBody)
+		assert.NoError(t, err)
+		assert.Equal(t, "world", resBody["hello"])
+	}
+	cancelCtx()
 }

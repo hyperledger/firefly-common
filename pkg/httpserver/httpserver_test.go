@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/json"
@@ -37,7 +38,6 @@ import (
 	"github.com/hyperledger/firefly-common/mocks/httpservermocks"
 	"github.com/hyperledger/firefly-common/pkg/auth/basic"
 	"github.com/hyperledger/firefly-common/pkg/config"
-	"github.com/hyperledger/firefly-common/pkg/ffresty"
 	"github.com/hyperledger/firefly-common/pkg/fftls"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -192,29 +192,29 @@ func TestTLSServerSelfSignedWithClientAuth(t *testing.T) {
 	assert.NoError(t, err)
 	go hs.ServeHTTP(ctx)
 
-	// Use ffresty to test the mTLS client as well
-	var restyConfig = config.RootSection("resty")
-	ffresty.InitConfig(restyConfig)
-	clientTLSSection := restyConfig.SubSection("tls")
-	restyConfig.Set(ffresty.HTTPConfigURL, "https://127.0.0.1")
-	clientTLSSection.Set(fftls.HTTPConfTLSEnabled, true)
-	clientTLSSection.Set(fftls.HTTPConfTLSKeyFile, privateKeyFile.Name())
-	clientTLSSection.Set(fftls.HTTPConfTLSCertFile, publicKeyFile.Name())
-	clientTLSSection.Set(fftls.HTTPConfTLSCAFile, publicKeyFile.Name())
-
-	c, err := ffresty.New(context.Background(), restyConfig)
-	assert.Nil(t, err)
-
+	// Attempt a request, with a client certificate
+	rootCAs := x509.NewCertPool()
+	caPEM, _ := os.ReadFile(publicKeyFile.Name())
+	ok := rootCAs.AppendCertsFromPEM(caPEM)
+	assert.True(t, ok)
+	c := http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+					clientKeyPair, err := tls.LoadX509KeyPair(publicKeyFile.Name(), privateKeyFile.Name())
+					return &clientKeyPair, err
+				},
+				RootCAs: rootCAs,
+			},
+		},
+	}
 	httpsAddr := fmt.Sprintf("https://%s/test", hs.(*httpServer).l.Addr().String())
-	res, err := c.R().Get(httpsAddr)
-	assert.NoError(t, err)
-
+	res, err := c.Get(httpsAddr)
 	assert.NoError(t, err)
 	if res != nil {
-		assert.Equal(t, 200, res.StatusCode())
+		assert.Equal(t, 200, res.StatusCode)
 		var resBody map[string]interface{}
-		err = json.Unmarshal(res.Body(), &resBody)
-		assert.NoError(t, err)
+		json.NewDecoder(res.Body).Decode(&resBody)
 		assert.Equal(t, "world", resBody["hello"])
 	}
 
