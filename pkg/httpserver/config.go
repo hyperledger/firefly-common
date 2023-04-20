@@ -85,3 +85,14 @@ func InitHTTPConfig(conf config.Section, defaultPort int) {
 	tlsConfig := conf.SubSection("tls")
 	fftls.InitTLSConfig(tlsConfig)
 }
+
+const (
+
+	// DebugEnabled is whether to actually run the debug server or not
+	DebugEnabled = "enabled"
+)
+
+func InitDebugConfig(conf config.Section) {
+	InitHTTPConfig(conf, 0 /* auto assign */)
+	conf.AddKnownKey(DebugEnabled, true /* on by default */)
+}

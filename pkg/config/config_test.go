@@ -75,6 +75,7 @@ func TestDefaults(t *testing.T) {
 	assert.Equal(t, uint(25), GetUint(key3))
 	assert.Equal(t, int(0), GetInt(key4))
 	assert.Equal(t, int64(0), GetInt64(key4))
+	assert.Equal(t, uint64(0), GetUint64(key4))
 	assert.Equal(t, 250*time.Millisecond, GetDuration(key5))
 	assert.Equal(t, float64(2.0), GetFloat64(key6))
 	assert.Equal(t, []string{"value1", "value2"}, GetStringSlice(key7))

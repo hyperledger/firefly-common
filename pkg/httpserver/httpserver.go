@@ -80,7 +80,7 @@ func NewHTTPServer(ctx context.Context, name string, r *mux.Router, onClose chan
 	for _, o := range opts {
 		hs.options = *o
 	}
-	hs.l, err = hs.createListener(ctx)
+	hs.l, err = createListener(ctx, hs.name, hs.conf)
 	if err == nil {
 		hs.s, err = hs.createServer(ctx, r)
 	}
@@ -91,13 +91,13 @@ func (hs *httpServer) Addr() net.Addr {
 	return hs.l.Addr()
 }
 
-func (hs *httpServer) createListener(ctx context.Context) (net.Listener, error) {
-	listenAddr := fmt.Sprintf("%s:%d", hs.conf.GetString(HTTPConfAddress), hs.conf.GetUint(HTTPConfPort))
+func createListener(ctx context.Context, name string, conf config.Section) (net.Listener, error) {
+	listenAddr := fmt.Sprintf("%s:%d", conf.GetString(HTTPConfAddress), conf.GetUint(HTTPConfPort))
 	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		return nil, i18n.WrapError(ctx, err, i18n.MsgAPIServerStartFailed, listenAddr)
 	}
-	log.L(ctx).Infof("%s listening on HTTP %s", hs.name, listener.Addr())
+	log.L(ctx).Infof("%s listening on HTTP %s", name, listener.Addr())
 	return listener, err
 }
 

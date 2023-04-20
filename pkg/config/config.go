@@ -107,6 +107,7 @@ type Section interface {
 	GetFloat64(key string) float64
 	GetByteSize(key string) int64
 	GetUint(key string) uint
+	GetUint64(key string) uint64
 	GetDuration(key string) time.Duration
 	GetStringSlice(key string) []string
 	GetObject(key string) fftypes.JSONObject
@@ -520,7 +521,7 @@ func (c *configSection) GetInt(key string) int {
 	return viper.GetInt(c.prefixKey(key))
 }
 
-// GetInt64 gets a configuration uint
+// GetInt64 gets a configuration int64
 func GetInt64(key RootKey) int64 {
 	return root.GetInt64(string(key))
 }
@@ -529,6 +530,17 @@ func (c *configSection) GetInt64(key string) int64 {
 	defer keysMutex.Unlock()
 
 	return viper.GetInt64(c.prefixKey(key))
+}
+
+// GetUint64 gets a configuration uint64
+func GetUint64(key RootKey) uint64 {
+	return root.GetUint64(string(key))
+}
+func (c *configSection) GetUint64(key string) uint64 {
+	keysMutex.Lock()
+	defer keysMutex.Unlock()
+
+	return viper.GetUint64(c.prefixKey(key))
 }
 
 // GetFloat64 gets a configuration uint

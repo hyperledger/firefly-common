@@ -24,15 +24,25 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	muxprom "gitlab.com/hfuss/mux-prometheus/pkg/middleware"
 )
 
-var allowedNameStringRegex = `^[a-z]+[a-z_]*[a-z]$`
+var allowedNameStringRegex = `^[a-zA-Z]+[a-zA-Z0-9_]*[a-zA-Z0-9]$`
 var ffMetricsPrefix = "ff"
+
+const compulsoryComponentLabel = fireflySystemLabelsPrefix + "component"
+
+/** Metrics names should follow the convention documented in https://prometheus.io/docs/practices/naming/. Below is an example breakdown of the term mapping:
+* Example metric: ff                _  api_server_rest    _ requests         _ total   {ff_component="tm"              , method       =  "Get"          ...}
+                  ff                _  token              _ mint_duration    _ seconds {ff_component=""                , status       =  "Success"      ...}
+* Mapping       : <firefly prefix>  _  <subsystem>        _ <metric target>  _ <unit>  {ff_component=<component name>  , <label name> =  <label value>  ...}
+*/
 
 // MetricsRegistry contains all metrics defined in a micro-service.
 //   - All metrics will have the default "ff" prefix
+//   - A component name can be provided to add a "ff_component" label to separate metrics with same names from other components
 //   - Metrics are defined in subsystems, a subsystem can only use one of the two options for creating metrics:
 //     1. create a metrics manager to defined custom metrics manually
 //     2. use out-of-box predefined metrics for a common resource type (e.g. HTTP request)
@@ -78,10 +88,18 @@ type MetricsManager interface {
 	ObserveSummaryMetricWithLabels(ctx context.Context, metricName string, number float64, labels map[string]string, defaultLabels *FireflyDefaultLabels)
 }
 
-func NewPrometheusMetricsRegistry() MetricsRegistry {
+func NewPrometheusMetricsRegistry(fireflyComponentName string /*component name will be added to all metrics as a label*/) MetricsRegistry {
+	registry := prometheus.NewRegistry()
+	registerer := prometheus.WrapRegistererWith(prometheus.Labels{compulsoryComponentLabel: fireflyComponentName}, registry)
+
+	// register default cpu & go metrics by default
+	registerer.MustRegister(collectors.NewGoCollector())
+	registerer.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+
 	return &prometheusMetricsRegistry{
 		namespace:                      ffMetricsPrefix,
-		registry:                       prometheus.NewRegistry(),
+		registry:                       registry,
+		registerer:                     registerer,
 		managerMap:                     make(map[string]MetricsManager),
 		httpMetricsInstrumentationsMap: make(map[string]*muxprom.Instrumentation),
 	}
@@ -90,6 +108,7 @@ func NewPrometheusMetricsRegistry() MetricsRegistry {
 type prometheusMetricsRegistry struct {
 	regMux                         sync.Mutex
 	registry                       *prometheus.Registry
+	registerer                     prometheus.Registerer
 	namespace                      string
 	managerMap                     map[string]MetricsManager
 	httpMetricsInstrumentationsMap map[string]*muxprom.Instrumentation
@@ -115,7 +134,7 @@ func (pmr *prometheusMetricsRegistry) NewMetricsManagerForSubsystem(ctx context.
 	pmr.managerMap[subsystem] = &prometheusMetricsManager{
 		namespace:  pmr.namespace,
 		subsystem:  subsystem,
-		registry:   pmr.registry,
+		registerer: pmr.registerer,
 		metricsMap: make(map[string]*prometheusMetric),
 	}
 	return pmr.managerMap[subsystem], nil
@@ -125,6 +144,10 @@ func (pmr *prometheusMetricsRegistry) NewMetricsManagerForSubsystem(ctx context.
 func (pmr *prometheusMetricsRegistry) NewHTTPMetricsInstrumentationsForSubsystem(ctx context.Context, subsystem string, useRouteTemplate bool, reqDurationBuckets []float64, labels map[string]string) error {
 	pmr.regMux.Lock()
 	defer pmr.regMux.Unlock()
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+
 	nameRegex := regexp.MustCompile(allowedNameStringRegex)
 	isValidNameString := nameRegex.MatchString(subsystem)
 	if !isValidNameString {
@@ -142,7 +165,7 @@ func (pmr *prometheusMetricsRegistry) NewHTTPMetricsInstrumentationsForSubsystem
 		subsystem,
 		reqDurationBuckets,
 		labels,
-		pmr.registry,
+		pmr.registerer,
 	)
 	pmr.httpMetricsInstrumentationsMap[subsystem] = httpInstrumentation
 	return nil
@@ -152,7 +175,7 @@ func (pmr *prometheusMetricsRegistry) HTTPHandler(ctx context.Context, handlerOp
 	if len(pmr.managerMap) == 0 && len(pmr.httpMetricsInstrumentationsMap) == 0 {
 		return nil, i18n.NewError(ctx, i18n.MsgMetricsEmptyRegistry)
 	}
-	return promhttp.InstrumentMetricHandler(pmr.registry, promhttp.HandlerFor(pmr.registry, handlerOpts)), nil
+	return promhttp.InstrumentMetricHandler(pmr.registerer, promhttp.HandlerFor(pmr.registry, handlerOpts)), nil
 }
 
 func (pmr *prometheusMetricsRegistry) GetHTTPMetricsInstrumentationsMiddlewareForSubsystem(ctx context.Context, subsystem string) (func(next http.Handler) http.Handler, error) {

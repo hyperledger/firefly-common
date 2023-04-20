@@ -22,6 +22,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strings"
@@ -98,7 +99,10 @@ func (hs *HandlerFactory) getParams(req *http.Request, route *Route) (queryParam
 	if len(route.PathParams) > 0 {
 		v := mux.Vars(req)
 		for _, pp := range route.PathParams {
-			pathParams[pp.Name] = v[pp.Name]
+			paramUnescaped, err := url.QueryUnescape(v[pp.Name]) // Gorilla mux assures this works
+			if err == nil {
+				pathParams[pp.Name] = paramUnescaped
+			}
 		}
 	}
 	for _, qp := range route.QueryParams {
@@ -141,8 +145,9 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 				if jsonInput != nil {
 					err = json.NewDecoder(req.Body).Decode(&jsonInput)
 				}
+			case strings.HasPrefix(strings.ToLower(contentType), "text/plain"):
 			default:
-				return 415, i18n.NewError(req.Context(), i18n.MsgInvalidContentType)
+				return 415, i18n.NewError(req.Context(), i18n.MsgInvalidContentType, contentType)
 			}
 		}
 
