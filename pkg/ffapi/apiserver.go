@@ -31,6 +31,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/gorilla/mux"
 	"github.com/hyperledger/firefly-common/pkg/config"
+	"github.com/hyperledger/firefly-common/pkg/fftls"
 	"github.com/hyperledger/firefly-common/pkg/httpserver"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/metric"
@@ -171,7 +172,8 @@ func buildPublicURL(conf config.Section, a net.Addr) string {
 	publicURL := conf.GetString(httpserver.HTTPConfPublicURL)
 	if publicURL == "" {
 		proto := "https"
-		if !conf.GetBool(httpserver.HTTPConfTLSEnabled) {
+		tlsConfig := conf.SubSection("tls")
+		if !tlsConfig.GetBool(fftls.HTTPConfTLSEnabled) {
 			proto = "http"
 		}
 		publicURL = fmt.Sprintf("%s://%s", proto, a.String())

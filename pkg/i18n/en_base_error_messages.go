@@ -138,4 +138,5 @@ var (
 	MsgInvalidNamespaceUUID                        = ffe("FF00203", "Expected 'namespace:' prefix on ID '%s'", 400)
 	MsgInvalidOutputOption                         = ffe("FF00204", "Invalid output option '%s'")
 	MsgDBNoRowsAffected                            = ffe("FF00205", "Specified resource not found for update", 404)
+	MsgInvalidKeyPairFiles                         = ffe("FF00206", "Invalid certifcate and key pair files")
 )
