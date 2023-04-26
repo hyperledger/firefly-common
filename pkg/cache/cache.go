@@ -18,6 +18,7 @@ package cache
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -29,8 +30,9 @@ import (
 // Each cache instance has unique name and its own cache size and TTL configuration.
 type Manager interface {
 	// Get a cache by name, if a cache already exists with the same name, it will be returned as is without checking maxSize, ttl and enabled matches
-	GetCache(ctx context.Context, cacheName string, maxSize int64, ttl time.Duration, enabled bool) (CInterface, error)
-	ListCacheNames() []string
+	GetCache(ctx context.Context, namespace, name string, maxSize int64, ttl time.Duration, enabled bool) (CInterface, error)
+	ListCacheNames(namespace string) []string
+	ResetCaches(namespace string)
 	IsEnabled() bool
 }
 
@@ -53,11 +55,12 @@ type CInterface interface {
 }
 
 type CCache struct {
-	enabled  bool
-	ctx      context.Context
-	name     string
-	cache    *ccache.Cache
-	cacheTTL time.Duration
+	enabled   bool
+	ctx       context.Context
+	namespace string
+	name      string
+	cache     *ccache.Cache
+	cacheTTL  time.Duration
 }
 
 func (c *CCache) Set(key string, val interface{}) {
@@ -138,13 +141,14 @@ type cacheManager struct {
 	enabled          bool // global default, when set to true, each cache instance can have an override
 	ctx              context.Context
 	m                sync.Mutex
-	configuredCaches map[string]CInterface // Cache manager maintain a list of named configured CCache, the names are unique
+	configuredCaches map[string]*CCache // Cache manager maintain a list of named configured CCache, the names are unique
 }
 
-func (cm *cacheManager) GetCache(ctx context.Context, cacheName string, maxSize int64, ttl time.Duration, enabled bool) (CInterface, error) {
+func (cm *cacheManager) GetCache(ctx context.Context, namespace, name string, maxSize int64, ttl time.Duration, enabled bool) (CInterface, error) {
 	cm.m.Lock()
 	defer cm.m.Unlock()
-	cache, exists := cm.configuredCaches[cacheName]
+	fqName := fmt.Sprintf("%s:%s", namespace, name)
+	cache, exists := cm.configuredCaches[fqName]
 	enabledValue := enabled
 	if !cm.IsEnabled() {
 		// when cache manager is disabled, the enabled toggle doesn't make any difference
@@ -152,23 +156,39 @@ func (cm *cacheManager) GetCache(ctx context.Context, cacheName string, maxSize 
 	}
 	if !exists {
 		cache = &CCache{
-			ctx:      ctx,
-			name:     cacheName,
-			cache:    ccache.New(ccache.Configure().MaxSize(maxSize)),
-			cacheTTL: ttl,
-			enabled:  enabledValue,
+			ctx:       ctx,
+			namespace: namespace,
+			name:      name,
+			cache:     ccache.New(ccache.Configure().MaxSize(maxSize)),
+			cacheTTL:  ttl,
+			enabled:   enabledValue,
 		}
-		cm.configuredCaches[cacheName] = cache
+		cm.configuredCaches[fqName] = cache
 	}
 	return cache, nil
 }
 
-func (cm *cacheManager) ListCacheNames() []string {
+func (cm *cacheManager) ListCacheNames(namespace string) []string {
 	keys := make([]string, 0, len(cm.configuredCaches))
-	for k := range cm.configuredCaches {
-		keys = append(keys, k)
+	for k, c := range cm.configuredCaches {
+		if c.namespace == namespace {
+			keys = append(keys, k)
+		}
 	}
 	return keys
+}
+
+func (cm *cacheManager) ResetCaches(namespace string) {
+	cm.m.Lock()
+	defer cm.m.Unlock()
+	for k, c := range cm.configuredCaches {
+		if c.namespace == namespace {
+			// Clear the cache to free the memory immediately
+			c.cache.Clear()
+			// Remove it from the map, so the next call will generate a new one
+			delete(cm.configuredCaches, k)
+		}
+	}
 }
 
 func (cm *cacheManager) IsEnabled() bool {
@@ -178,7 +198,7 @@ func (cm *cacheManager) IsEnabled() bool {
 func NewCacheManager(ctx context.Context, enabled bool) Manager {
 	cm := &cacheManager{
 		ctx:              ctx,
-		configuredCaches: map[string]CInterface{},
+		configuredCaches: map[string]*CCache{},
 		enabled:          enabled,
 	}
 	return cm

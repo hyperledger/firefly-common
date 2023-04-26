@@ -27,22 +27,22 @@ import (
 func TestGetCacheReturnsSameCacheForSameConfig(t *testing.T) {
 	ctx := context.Background()
 	cacheManager := NewCacheManager(ctx, true)
-	cache0, _ := cacheManager.GetCache(ctx, "cacheA", 85, time.Second, true)
-	cache1, _ := cacheManager.GetCache(ctx, "cacheA", 85, time.Second, true)
+	cache0, _ := cacheManager.GetCache(ctx, "ns1", "cacheA", 85, time.Second, true)
+	cache1, _ := cacheManager.GetCache(ctx, "ns1", "cacheA", 85, time.Second, true)
 
 	assert.Equal(t, cache0, cache1)
-	assert.Equal(t, []string{"cacheA"}, cacheManager.ListCacheNames())
+	assert.Equal(t, []string{"ns1:cacheA"}, cacheManager.ListCacheNames("ns1"))
 
-	cache2, _ := cacheManager.GetCache(ctx, "cacheB", 85, time.Second, true)
+	cache2, _ := cacheManager.GetCache(ctx, "ns1", "cacheB", 85, time.Second, true)
 	assert.NotEqual(t, cache0, cache2)
-	assert.Equal(t, 2, len(cacheManager.ListCacheNames()))
+	assert.Equal(t, 2, len(cacheManager.ListCacheNames("ns1")))
 }
 
 func TestTwoSeparateCacheWorksIndependently(t *testing.T) {
 	ctx := context.Background()
 	cacheManager := NewCacheManager(ctx, true)
-	cache0, _ := cacheManager.GetCache(ctx, "cacheA", 85, time.Second, true)
-	cache1, _ := cacheManager.GetCache(ctx, "cacheB", 85, time.Second, true)
+	cache0, _ := cacheManager.GetCache(ctx, "ns1", "cacheA", 85, time.Second, true)
+	cache1, _ := cacheManager.GetCache(ctx, "ns1", "cacheB", 85, time.Second, true)
 
 	cache0.SetInt("int0", 100)
 	assert.Equal(t, 100, cache0.GetInt("int0"))
@@ -66,21 +66,21 @@ func TestCacheEnablement(t *testing.T) {
 	var zero int64 = 0
 	// test global enablement set to false
 	disabledCacheManager := NewCacheManager(ctx, false)
-	cache0, _ := disabledCacheManager.GetCache(ctx, "cache0", 85, time.Second, false)
+	cache0, _ := disabledCacheManager.GetCache(ctx, "ns1", "cache0", 85, time.Second, false)
 	assert.Equal(t, false, cache0.IsEnabled())
 
 	cache0.SetInt64("int0", hundred)
 	assert.Equal(t, nil, cache0.Get("int0"))
 
 	// check individual cache cannot be turned on when the cache manager is disabled
-	cache1, _ := disabledCacheManager.GetCache(ctx, "cache1", 85, time.Second, true)
+	cache1, _ := disabledCacheManager.GetCache(ctx, "ns1", "cache1", 85, time.Second, true)
 	assert.Equal(t, false, cache1.IsEnabled())
 
 	// test global enablement set to true
 
 	enabledCacheManager := NewCacheManager(ctx, true)
 	// check individual cache can be turned off when the cache manager is enabled
-	cache0, _ = enabledCacheManager.GetCache(ctx, "cache0", 85, time.Second, false)
+	cache0, _ = enabledCacheManager.GetCache(ctx, "ns1", "cache0", 85, time.Second, false)
 	assert.Equal(t, false, cache0.IsEnabled())
 
 	cache0.SetInt64("int0", hundred)
@@ -88,7 +88,7 @@ func TestCacheEnablement(t *testing.T) {
 	deleted := cache0.Delete("int0")
 	assert.False(t, deleted)
 
-	cache1, _ = enabledCacheManager.GetCache(ctx, "cache1", 85, time.Second, true)
+	cache1, _ = enabledCacheManager.GetCache(ctx, "ns1", "cache1", 85, time.Second, true)
 	assert.Equal(t, true, cache1.IsEnabled())
 
 	cache1.SetInt64("int0", hundred)
@@ -100,4 +100,29 @@ func TestUmmanagedCacheInstance(t *testing.T) {
 	uc0 := NewUmanagedCache(context.Background(), 100, 5*time.Minute)
 	uc1 := NewUmanagedCache(context.Background(), 100, 5*time.Minute)
 	assert.NotEqual(t, uc0, uc1)
+}
+
+func TestResetCachesForNamespace(t *testing.T) {
+	ctx := context.Background()
+	cacheManager := NewCacheManager(ctx, true)
+	cacheNS1, _ := cacheManager.GetCache(ctx, "ns1", "cache1", 85, time.Second, true)
+	cacheNS1.Set("key1", "value1")
+
+	cacheNS2, _ := cacheManager.GetCache(ctx, "ns2", "cache1", 85, time.Second, true)
+	cacheNS2.Set("key2", "value2")
+
+	cacheNS1_a, _ := cacheManager.GetCache(ctx, "ns1", "cache1", 85, time.Second, true)
+	assert.Equal(t, cacheNS1, cacheNS1_a)
+	assert.Equal(t, "value1", cacheNS1_a.Get("key1"))
+
+	cacheManager.ResetCaches("ns1")
+
+	cacheNS2_a, _ := cacheManager.GetCache(ctx, "ns2", "cache1", 85, time.Second, true)
+	assert.Equal(t, cacheNS2, cacheNS2_a)
+	assert.Equal(t, "value2", cacheNS2_a.Get("key2"))
+
+	cacheNS1_b, _ := cacheManager.GetCache(ctx, "ns1", "cache1", 85, time.Second, true)
+	assert.NotEqual(t, cacheNS1, cacheNS1_b)
+	assert.Nil(t, cacheNS1_b.Get("key1"))
+
 }
