@@ -33,6 +33,10 @@ const (
 )
 
 func ConstructTLSConfig(ctx context.Context, conf config.Section, tlsType string) (*tls.Config, error) {
+	if !conf.GetBool(HTTPConfTLSEnabled) {
+		return nil, nil
+	}
+
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12,
 		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
@@ -40,10 +44,6 @@ func ConstructTLSConfig(ctx context.Context, conf config.Section, tlsType string
 			log.L(ctx).Debugf("Client certificate provided Subject=%s Issuer=%s Expiry=%s", cert.Subject, cert.Issuer, cert.NotAfter)
 			return nil
 		},
-	}
-
-	if !conf.GetBool(HTTPConfTLSEnabled) {
-		return tlsConfig, nil
 	}
 
 	var err error
