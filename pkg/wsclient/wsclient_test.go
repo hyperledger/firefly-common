@@ -18,9 +18,12 @@ package wsclient
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -30,6 +33,85 @@ import (
 
 func generateConfig() *WSConfig {
 	return &WSConfig{}
+}
+
+func TestWSClientE2ETLS(t *testing.T) {
+
+	publicKeyFile, privateKeyFile := GenerateTLSCertficates(t)
+	defer os.Remove(privateKeyFile.Name())
+	defer os.Remove(publicKeyFile.Name())
+	toServer, fromServer, url, close, err := NewTestTLSWSServer(func(req *http.Request) {
+		assert.Equal(t, "/test/updated", req.URL.Path)
+	}, publicKeyFile, privateKeyFile)
+	defer close()
+	assert.NoError(t, err)
+
+	first := true
+	beforeConnect := func(ctx context.Context) error {
+		if first {
+			first = false
+			return fmt.Errorf("first run fails")
+		}
+		return nil
+	}
+	afterConnect := func(ctx context.Context, w WSClient) error {
+		return w.Send(ctx, []byte(`after connect message`))
+	}
+
+	// Init clean config
+	wsConfig := generateConfig()
+
+	wsConfig.HTTPURL = url
+	wsConfig.WSKeyPath = "/test"
+	wsConfig.HeartbeatInterval = 50 * time.Millisecond
+	wsConfig.InitialConnectAttempts = 2
+	rootCAs := x509.NewCertPool()
+	caPEM, _ := os.ReadFile(publicKeyFile.Name())
+	ok := rootCAs.AppendCertsFromPEM(caPEM)
+	assert.True(t, ok)
+	cert, err := tls.LoadX509KeyPair(publicKeyFile.Name(), privateKeyFile.Name())
+	assert.NoError(t, err)
+
+	wsConfig.TLSClientConfig = &tls.Config{
+		MinVersion:   tls.VersionTLS12,
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      rootCAs,
+	}
+
+	wsc, err := New(context.Background(), wsConfig, beforeConnect, afterConnect)
+	assert.NoError(t, err)
+
+	//  Change the settings and connect
+	wsc.SetURL(wsc.URL() + "/updated")
+	err = wsc.Connect()
+	assert.NoError(t, err)
+
+	// Receive the message automatically sent in afterConnect
+	message1 := <-toServer
+	assert.Equal(t, `after connect message`, message1)
+
+	// Tell the unit test server to send us a reply, and confirm it
+	fromServer <- `some data from server`
+	reply := <-wsc.Receive()
+	assert.Equal(t, `some data from server`, string(reply))
+
+	// Send some data back
+	err = wsc.Send(context.Background(), []byte(`some data to server`))
+	assert.NoError(t, err)
+
+	// Check the sevrer got it
+	message2 := <-toServer
+	assert.Equal(t, `some data to server`, message2)
+
+	// Check heartbeating works
+	beforePing := time.Now()
+	for wsc.(*wsClient).lastPingCompleted.Before(beforePing) {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Close the client
+	wsc.Close()
+
 }
 
 func TestWSClientE2E(t *testing.T) {
