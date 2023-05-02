@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -41,7 +41,7 @@ func GenerateTLSCertficates(t *testing.T) (publicKeyFile *os.File, privateKeyFil
 	// Create an X509 certificate pair
 	privatekey, _ := rsa.GenerateKey(rand.Reader, 2048)
 	publickey := &privatekey.PublicKey
-	var privateKeyBytes []byte = x509.MarshalPKCS1PrivateKey(privatekey)
+	var privateKeyBytes = x509.MarshalPKCS1PrivateKey(privatekey)
 	privateKeyFile, _ = os.CreateTemp("", "key.pem")
 	privateKeyBlock := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: privateKeyBytes}
 	err := pem.Encode(privateKeyFile, privateKeyBlock)
