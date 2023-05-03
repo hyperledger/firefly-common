@@ -17,8 +17,11 @@
 package wsclient
 
 import (
+	"context"
+
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/ffresty"
+	"github.com/hyperledger/firefly-common/pkg/fftls"
 )
 
 const (
@@ -53,8 +56,8 @@ func InitConfig(conf config.Section) {
 	conf.AddKnownKey(WSConfigHeartbeatInterval, defaultHeartbeatInterval)
 }
 
-func GenerateConfig(conf config.Section) *WSConfig {
-	return &WSConfig{
+func GenerateConfig(ctx context.Context, conf config.Section) (*WSConfig, error) {
+	wsConfig := &WSConfig{
 		HTTPURL:                conf.GetString(ffresty.HTTPConfigURL),
 		WSKeyPath:              conf.GetString(WSConfigKeyPath),
 		ReadBufferSize:         int(conf.GetByteSize(WSConfigKeyReadBufferSize)),
@@ -67,4 +70,13 @@ func GenerateConfig(conf config.Section) *WSConfig {
 		AuthPassword:           conf.GetString(ffresty.HTTPConfigAuthPassword),
 		HeartbeatInterval:      conf.GetDuration(WSConfigHeartbeatInterval),
 	}
+	tlsSection := conf.SubSection("tls")
+	tlsClientConfig, err := fftls.ConstructTLSConfig(ctx, tlsSection, fftls.ClientType)
+	if err != nil {
+		return nil, err
+	}
+
+	wsConfig.TLSClientConfig = tlsClientConfig
+
+	return wsConfig, nil
 }
