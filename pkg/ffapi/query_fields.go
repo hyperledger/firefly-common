@@ -76,7 +76,7 @@ type Field interface {
 // nullField is a special FieldSerialization used to represent nil in queries
 type nullField struct{}
 
-func (f *nullField) Scan(src interface{}) error {
+func (f *nullField) Scan(_ interface{}) error {
 	return nil
 }
 func (f *nullField) Value() (driver.Value, error) { return nil, nil }

@@ -263,7 +263,7 @@ func (w *wsClient) readLoop() {
 	}
 }
 
-func (w *wsClient) pongHandler(appData string) error {
+func (w *wsClient) pongHandler(_ string) error {
 	w.pongReceivedOrReset(true)
 	return nil
 }

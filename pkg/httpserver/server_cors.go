@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -25,7 +25,7 @@ import (
 	"github.com/rs/cors"
 )
 
-func wrapCorsIfEnabled(ctx context.Context, conf config.Section, chain http.Handler) http.Handler {
+func WrapCorsIfEnabled(ctx context.Context, conf config.Section, chain http.Handler) http.Handler {
 	if !conf.GetBool(CorsEnabled) {
 		return chain
 	}
