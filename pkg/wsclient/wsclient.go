@@ -47,11 +47,27 @@ type WSConfig struct {
 	HTTPHeaders            fftypes.JSONObject `json:"headers,omitempty"`
 	HeartbeatInterval      time.Duration      `json:"heartbeatInterval,omitempty"`
 	TLSClientConfig        *tls.Config        `json:"tlsClientConfig,omitempty"`
+	// This one cannot be set in JSON - must be configured on the code interface
+	ReceiveExt bool
+}
+
+// WSPayload allows API consumers of this package to stream data, and inspect the message
+// type, rather than just being passed the bytes directly.
+type WSPayload struct {
+	MessageType int
+	Reader      io.Reader
+	processed   chan struct{}
+}
+
+// Must call done on each payload, before being delivered the next
+func (wsp *WSPayload) Processed() {
+	close(wsp.processed)
 }
 
 type WSClient interface {
 	Connect() error
 	Receive() <-chan []byte
+	ReceiveExt() <-chan WSPayload
 	URL() string
 	SetURL(url string)
 	Send(ctx context.Context, message []byte) error
@@ -67,7 +83,9 @@ type wsClient struct {
 	wsconn               *websocket.Conn
 	retry                retry.Retry
 	closed               bool
+	useReceiveExt        bool
 	receive              chan []byte
+	receiveExt           chan WSPayload
 	send                 chan []byte
 	sendDone             chan []byte
 	closing              chan struct{}
@@ -106,12 +124,17 @@ func New(ctx context.Context, config *WSConfig, beforeConnect WSPreConnectHandle
 		},
 		initialRetryAttempts: config.InitialConnectAttempts,
 		headers:              make(http.Header),
-		receive:              make(chan []byte),
 		send:                 make(chan []byte),
 		closing:              make(chan struct{}),
 		beforeConnect:        beforeConnect,
 		afterConnect:         afterConnect,
 		heartbeatInterval:    config.HeartbeatInterval,
+		useReceiveExt:        config.ReceiveExt,
+	}
+	if w.useReceiveExt {
+		w.receiveExt = make(chan WSPayload)
+	} else {
+		w.receive = make(chan []byte)
 	}
 	for k, v := range config.HTTPHeaders {
 		if vs, ok := v.(string); ok {
@@ -149,9 +172,13 @@ func (w *wsClient) Close() {
 	}
 }
 
-// Receive returns
 func (w *wsClient) Receive() <-chan []byte {
 	return w.receive
+}
+
+// Must set ReceiveExt on the WSConfig to use this
+func (w *wsClient) ReceiveExt() <-chan WSPayload {
+	return w.receiveExt
 }
 
 func (w *wsClient) URL() string {
@@ -263,6 +290,34 @@ func (w *wsClient) readLoop() {
 	}
 }
 
+func (w *wsClient) readLoopExt() {
+	l := log.L(w.ctx)
+	for {
+		mt, r, err := w.wsconn.NextReader()
+		if err != nil {
+			// We treat this as informational, as it's normal for the client to disconnect here
+			l.Infof("WS %s closed: %s", w.url, err)
+			return
+		}
+
+		// Pass the message to the consumer
+		l.Tracef("WS %s read (mt=%d)", w.url, mt)
+		payload := WSPayload{
+			MessageType: mt,
+			Reader:      r,
+			processed:   make(chan struct{}),
+		}
+		select {
+		case <-w.sendDone:
+			l.Debugf("WS %s closing reader after send error", w.url)
+			return
+		case w.receiveExt <- payload:
+			// It's the callers responsibility to ensure they call done on this
+			<-payload.processed
+		}
+	}
+}
+
 func (w *wsClient) pongHandler(_ string) error {
 	w.pongReceivedOrReset(true)
 	return nil
@@ -329,7 +384,11 @@ func (w *wsClient) sendLoop(receiverDone chan struct{}) {
 
 func (w *wsClient) receiveReconnectLoop() {
 	l := log.L(w.ctx)
-	defer close(w.receive)
+	if w.useReceiveExt {
+		defer close(w.receiveExt)
+	} else {
+		defer close(w.receive)
+	}
 	for !w.closed {
 		// Start the sender, letting it close without blocking sending a notification on the sendDone
 		w.sendDone = make(chan []byte, 1)
@@ -344,7 +403,11 @@ func (w *wsClient) receiveReconnectLoop() {
 
 		if err == nil {
 			// Synchronously invoke the reader, as it's important we react immediately to any error there.
-			w.readLoop()
+			if w.useReceiveExt {
+				w.readLoopExt()
+			} else {
+				w.readLoop()
+			}
 			close(receiverDone)
 			<-w.sendDone
 
