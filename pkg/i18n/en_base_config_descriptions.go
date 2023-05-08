@@ -112,10 +112,10 @@ var (
 
 	ConfigGlobalDebugEnabled = ffc("config.debug.enabled", "Whether the debug HTTP endpoint is enabled", BooleanType)
 
-	ConfigGlobalPort            = ffc("config.port", "Listener port", IntType)
-	ConfigGlobalAddress         = ffc("config.address", "Listener address", IntType)
-	ConfigGlobalPublicURL       = ffc("config.publicURL", "Externally available URL for the HTTP endpoint", StringType)
-	ConfigGlobalReadTimeout     = ffc("config.readTimeout", "HTTP server read timeout", TimeDurationType)
-	ConfigGlobalWriteTimeout    = ffc("config.writeTimeout", "HTTP server write timeout", TimeDurationType)
-	ConfigGlobalShutdownTimeout = ffc("config.shutdownTimeout", "HTTP server shutdown timeout", TimeDurationType)
+	ConfigGlobalPort            = ffc("config.global.port", "Listener port", IntType)
+	ConfigGlobalAddress         = ffc("config.global.address", "Listener address", IntType)
+	ConfigGlobalPublicURL       = ffc("config.global.publicURL", "Externally available URL for the HTTP endpoint", StringType)
+	ConfigGlobalReadTimeout     = ffc("config.global.readTimeout", "HTTP server read timeout", TimeDurationType)
+	ConfigGlobalWriteTimeout    = ffc("config.global.writeTimeout", "HTTP server write timeout", TimeDurationType)
+	ConfigGlobalShutdownTimeout = ffc("config.global.shutdownTimeout", "HTTP server shutdown timeout", TimeDurationType)
 )
