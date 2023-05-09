@@ -436,7 +436,7 @@ func TestWSReadLoopExtProcessedFailure(t *testing.T) {
 		ctx:           context.Background(),
 		sendDone:      make(chan []byte, 1),
 		wsconn:        wsconn,
-		receiveExt:    make(chan WSPayload),
+		receiveExt:    make(chan *WSPayload),
 		useReceiveExt: true,
 	}
 
@@ -473,7 +473,7 @@ func TestWSReconnectFail(t *testing.T) {
 	w := &wsClient{
 		ctx:        ctxCanceled,
 		receive:    make(chan []byte),
-		receiveExt: make(chan WSPayload),
+		receiveExt: make(chan *WSPayload),
 		send:       make(chan []byte),
 		closing:    make(chan struct{}),
 		wsconn:     wsconn,
@@ -496,7 +496,7 @@ func TestWSDisableReconnect(t *testing.T) {
 	w := &wsClient{
 		ctx:              ctxCanceled,
 		receive:          make(chan []byte),
-		receiveExt:       make(chan WSPayload),
+		receiveExt:       make(chan *WSPayload),
 		send:             make(chan []byte),
 		closing:          make(chan struct{}),
 		wsconn:           wsconn,
@@ -517,7 +517,7 @@ func TestWSSendFail(t *testing.T) {
 	w := &wsClient{
 		ctx:        context.Background(),
 		receive:    make(chan []byte),
-		receiveExt: make(chan WSPayload),
+		receiveExt: make(chan *WSPayload),
 		send:       make(chan []byte, 1),
 		closing:    make(chan struct{}),
 		sendDone:   make(chan []byte, 1),
@@ -539,7 +539,7 @@ func TestWSSendInstructClose(t *testing.T) {
 	w := &wsClient{
 		ctx:        context.Background(),
 		receive:    make(chan []byte),
-		receiveExt: make(chan WSPayload),
+		receiveExt: make(chan *WSPayload),
 		send:       make(chan []byte, 1),
 		closing:    make(chan struct{}),
 		sendDone:   make(chan []byte, 1),

@@ -60,6 +60,14 @@ type WSPayload struct {
 	processed   chan struct{}
 }
 
+func NewWSPayload(mt int, r io.Reader) *WSPayload {
+	return &WSPayload{
+		MessageType: mt,
+		Reader:      r,
+		processed:   make(chan struct{}),
+	}
+}
+
 // Must call done on each payload, before being delivered the next
 func (wsp *WSPayload) Processed() {
 	close(wsp.processed)
@@ -68,7 +76,7 @@ func (wsp *WSPayload) Processed() {
 type WSClient interface {
 	Connect() error
 	Receive() <-chan []byte
-	ReceiveExt() <-chan WSPayload
+	ReceiveExt() <-chan *WSPayload
 	URL() string
 	SetURL(url string)
 	Send(ctx context.Context, message []byte) error
@@ -86,7 +94,7 @@ type wsClient struct {
 	closed               bool
 	useReceiveExt        bool
 	receive              chan []byte
-	receiveExt           chan WSPayload
+	receiveExt           chan *WSPayload
 	send                 chan []byte
 	sendDone             chan []byte
 	closing              chan struct{}
@@ -135,7 +143,7 @@ func New(ctx context.Context, config *WSConfig, beforeConnect WSPreConnectHandle
 		disableReconnect:     config.DisableReconnect,
 	}
 	if w.useReceiveExt {
-		w.receiveExt = make(chan WSPayload)
+		w.receiveExt = make(chan *WSPayload)
 	} else {
 		w.receive = make(chan []byte)
 	}
@@ -180,7 +188,7 @@ func (w *wsClient) Receive() <-chan []byte {
 }
 
 // Must set ReceiveExt on the WSConfig to use this
-func (w *wsClient) ReceiveExt() <-chan WSPayload {
+func (w *wsClient) ReceiveExt() <-chan *WSPayload {
 	return w.receiveExt
 }
 
@@ -310,11 +318,7 @@ func (w *wsClient) readLoopExt() {
 
 		// Pass the message to the consumer
 		l.Tracef("WS %s read (mt=%d)", w.url, mt)
-		payload := WSPayload{
-			MessageType: mt,
-			Reader:      r,
-			processed:   make(chan struct{}),
-		}
+		payload := NewWSPayload(mt, r)
 		select {
 		case <-w.sendDone:
 			l.Debugf("WS %s closing reader after send error (waiting for data)", w.url)
