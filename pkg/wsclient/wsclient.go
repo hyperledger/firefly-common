@@ -42,6 +42,7 @@ type WSConfig struct {
 	InitialDelay           time.Duration      `json:"initialDelay,omitempty"`
 	MaximumDelay           time.Duration      `json:"maximumDelay,omitempty"`
 	InitialConnectAttempts int                `json:"initialConnectAttempts,omitempty"`
+	DisableReconnect       bool               `json:"disableReconnect"`
 	AuthUsername           string             `json:"authUsername,omitempty"`
 	AuthPassword           string             `json:"authPassword,omitempty"`
 	HTTPHeaders            fftypes.JSONObject `json:"headers,omitempty"`
@@ -91,6 +92,7 @@ type wsClient struct {
 	closing              chan struct{}
 	beforeConnect        WSPreConnectHandler
 	afterConnect         WSPostConnectHandler
+	disableReconnect     bool
 	heartbeatInterval    time.Duration
 	heartbeatMux         sync.Mutex
 	activePingSent       *time.Time
@@ -421,7 +423,7 @@ func (w *wsClient) receiveReconnectLoop() {
 		}
 
 		// Go into reconnect
-		if !w.closed {
+		if !w.closed && !w.disableReconnect {
 			err = w.connect(false)
 			if err != nil {
 				l.Debugf("WS %s exiting: %s", w.url, err)
