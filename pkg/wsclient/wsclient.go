@@ -132,6 +132,7 @@ func New(ctx context.Context, config *WSConfig, beforeConnect WSPreConnectHandle
 		afterConnect:         afterConnect,
 		heartbeatInterval:    config.HeartbeatInterval,
 		useReceiveExt:        config.ReceiveExt,
+		disableReconnect:     config.DisableReconnect,
 	}
 	if w.useReceiveExt {
 		w.receiveExt = make(chan WSPayload)
