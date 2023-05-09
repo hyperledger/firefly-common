@@ -422,6 +422,44 @@ func TestWSReadLoopExtSendFailure(t *testing.T) {
 
 }
 
+func TestWSReadLoopExtProcessedFailure(t *testing.T) {
+
+	toServer, fromServer, url, done := NewTestWSServer(nil)
+	defer done()
+
+	wsconn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	assert.NoError(t, err)
+	wsconn.WriteJSON(map[string]string{"type": "listen", "topic": "topic1"})
+	assert.NoError(t, err)
+	<-toServer
+	w := &wsClient{
+		ctx:           context.Background(),
+		sendDone:      make(chan []byte, 1),
+		wsconn:        wsconn,
+		receiveExt:    make(chan WSPayload),
+		useReceiveExt: true,
+	}
+
+	// Queue a message for the receiver, then immediately close the sender channel
+	fromServer <- `some data from server`
+
+	// Ensure the readLoop exits immediately
+	readLoopDone := make(chan struct{})
+	go func() {
+		w.readLoopExt()
+		close(readLoopDone)
+	}()
+
+	_ = <-w.receiveExt // we don't bother to ack this, making the client wait indefinitely
+	close(w.sendDone)
+	<-readLoopDone
+
+	// Try reconnect, should fail here
+	_, _, err = websocket.DefaultDialer.Dial(url, nil)
+	assert.Error(t, err)
+
+}
+
 func TestWSReconnectFail(t *testing.T) {
 
 	_, _, url, done := NewTestWSServer(nil)

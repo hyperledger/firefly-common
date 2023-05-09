@@ -311,11 +311,16 @@ func (w *wsClient) readLoopExt() {
 		}
 		select {
 		case <-w.sendDone:
-			l.Debugf("WS %s closing reader after send error", w.url)
+			l.Debugf("WS %s closing reader after send error (waiting for data)", w.url)
 			return
 		case w.receiveExt <- payload:
-			// It's the callers responsibility to ensure they call done on this
-			<-payload.processed
+		}
+		select {
+		case <-payload.processed:
+			// It's the callers responsibility to ensure they call done on this before we can get the next payload
+		case <-w.sendDone:
+			l.Debugf("WS %s closing reader after send error (waiting for processing of data by client)", w.url)
+			return
 		}
 	}
 }
