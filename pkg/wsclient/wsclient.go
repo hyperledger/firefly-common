@@ -427,8 +427,12 @@ func (w *wsClient) receiveReconnectLoop() {
 			w.wsconn = nil
 		}
 
+		if w.disableReconnect {
+			return
+		}
+
 		// Go into reconnect
-		if !w.closed && !w.disableReconnect {
+		if !w.closed {
 			err = w.connect(false)
 			if err != nil {
 				l.Debugf("WS %s exiting: %s", w.url, err)

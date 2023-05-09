@@ -483,6 +483,29 @@ func TestWSReconnectFail(t *testing.T) {
 	w.receiveReconnectLoop()
 }
 
+func TestWSDisableReconnect(t *testing.T) {
+
+	_, _, url, done := NewTestWSServer(nil)
+	defer done()
+
+	wsconn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	assert.NoError(t, err)
+	wsconn.Close()
+	ctxCanceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	w := &wsClient{
+		ctx:              ctxCanceled,
+		receive:          make(chan []byte),
+		receiveExt:       make(chan WSPayload),
+		send:             make(chan []byte),
+		closing:          make(chan struct{}),
+		wsconn:           wsconn,
+		disableReconnect: true,
+	}
+
+	w.receiveReconnectLoop()
+}
+
 func TestWSSendFail(t *testing.T) {
 
 	_, _, url, done := NewTestWSServer(nil)
