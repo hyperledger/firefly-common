@@ -295,6 +295,11 @@ func (w *wsClient) readLoop() {
 func (w *wsClient) readLoopExt() {
 	l := log.L(w.ctx)
 	for {
+		// We set a deadline for twice the heartbeat interval - note we bump this on pong
+		if w.heartbeatInterval > 0 {
+			_ = w.wsconn.SetReadDeadline(time.Now().Add(2 * w.heartbeatInterval))
+		}
+
 		mt, r, err := w.wsconn.NextReader()
 		if err != nil {
 			// We treat this as informational, as it's normal for the client to disconnect here
@@ -339,6 +344,12 @@ func (w *wsClient) pongReceivedOrReset(isPong bool) {
 	}
 	w.lastPingCompleted = time.Now() // in new connection case we still want to consider now the time we completed the ping
 	w.activePingSent = nil
+
+	// We set a deadline for twice the heartbeat interval
+	if w.heartbeatInterval > 0 {
+		_ = w.wsconn.SetReadDeadline(time.Now().Add(2 * w.heartbeatInterval))
+	}
+
 }
 
 func (w *wsClient) heartbeatCheck() error {
