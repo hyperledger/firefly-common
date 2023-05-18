@@ -69,7 +69,7 @@ var (
 	ConfigGlobalTLSClientAuth           = ffc("config.global.tls.clientAuth", "Enables or disables client auth for TLS on this API", StringType)
 	ConfigGlobalTLSEnabled              = ffc("config.global.tls.enabled", "Enables or disables TLS on this API", BooleanType)
 	ConfigGlobalTLSKeyFile              = ffc("config.global.tls.keyFile", "The path to the private key file for TLS on this API", StringType)
-	ConfigGlobalTLSRequiredDNAttributes = ffc("config.global.tls.requiredDNAttributes", "A set of required subject DN attributes. Only applied when clientAuth is true. Each entry is a regular expression, and the subject certificate must have a matching attribute of the specified type (CN, C, O, OU, ST, L, STREET, POSTALCODE, SERIALNUMBER are valid attributes)", MapStringStringType)
+	ConfigGlobalTLSRequiredDNAttributes = ffc("config.global.tls.requiredDNAttributes", "A set of required subject DN attributes. Each entry is a regular expression, and the subject certificate must have a matching attribute of the specified type (CN, C, O, OU, ST, L, STREET, POSTALCODE, SERIALNUMBER are valid attributes)", MapStringStringType)
 	ConfigGlobalTLSHandshakeTimeout     = ffc("config.global.tlsHandshakeTimeout", "The maximum amount of time to wait for a successful TLS handshake", TimeDurationType)
 
 	ConfigGlobalBodyTemplate              = ffc("config.global.bodyTemplate", "The body go template string to use when making HTTP requests", GoTemplateType)

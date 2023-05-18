@@ -95,13 +95,14 @@ func ConstructTLSConfig(ctx context.Context, conf config.Section, tlsType string
 
 			// Used to verify a client certificate by the policy in ClientAuth.
 			tlsConfig.ClientCAs = rootCAs
+		}
 
-			requiredDNAttributes := conf.GetObject(HTTPConfTLSRequiredDNAttributes)
-			if len(requiredDNAttributes) > 0 {
-				if tlsConfig.VerifyPeerCertificate, err = buildDNValidator(ctx, requiredDNAttributes); err != nil {
-					return nil, err
-				}
-			}
+	}
+
+	requiredDNAttributes := conf.GetObject(HTTPConfTLSRequiredDNAttributes)
+	if len(requiredDNAttributes) > 0 {
+		if tlsConfig.VerifyPeerCertificate, err = buildDNValidator(ctx, requiredDNAttributes); err != nil {
+			return nil, err
 		}
 	}
 
