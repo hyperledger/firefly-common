@@ -28,7 +28,11 @@ const (
 	// HTTPConfTLSEnabled whether TLS is enabled for the HTTP server
 	HTTPConfTLSEnabled = "enabled"
 	// HTTPConfTLSKeyFile the private key file for TLS on the server
-	HTTPConfTLSKeyFile    = "keyFile"
+	HTTPConfTLSKeyFile = "keyFile"
+
+	// HTTPConfTLSRequiredDNAttributes provides a set of regular expressions, to match against the DN of the client. Requires HTTPConfTLSClientAuth
+	HTTPConfTLSRequiredDNAttributes = "requiredDNAttributes"
+
 	defaultHTTPTLSEnabled = false
 )
 
@@ -38,4 +42,5 @@ func InitTLSConfig(conf config.Section) {
 	conf.AddKnownKey(HTTPConfTLSClientAuth)
 	conf.AddKnownKey(HTTPConfTLSCertFile)
 	conf.AddKnownKey(HTTPConfTLSKeyFile)
+	conf.AddKnownKey(HTTPConfTLSRequiredDNAttributes)
 }
