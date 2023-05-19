@@ -21,9 +21,11 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path"
 	"testing"
 	"time"
 
@@ -85,6 +87,13 @@ func TestWSClientE2ETLS(t *testing.T) {
 	wsc.SetURL(wsc.URL() + "/updated")
 	err = wsc.Connect()
 	assert.NoError(t, err)
+
+	// Test server rejects a 2nd connection
+	wsc2, err := New(context.Background(), wsConfig, beforeConnect, afterConnect)
+	assert.NoError(t, err)
+	wsc2.SetURL(wsc2.URL() + "/updated")
+	err = wsc2.Connect()
+	assert.Error(t, err)
 
 	// Receive the message automatically sent in afterConnect
 	message1 := <-toServer
@@ -157,6 +166,74 @@ func TestWSClientE2E(t *testing.T) {
 	fromServer <- `some data from server`
 	reply := <-wsc.Receive()
 	assert.Equal(t, `some data from server`, string(reply))
+
+	// Send some data back
+	err = wsc.Send(context.Background(), []byte(`some data to server`))
+	assert.NoError(t, err)
+
+	// Check the sevrer got it
+	message2 := <-toServer
+	assert.Equal(t, `some data to server`, message2)
+
+	// Check heartbeating works
+	beforePing := time.Now()
+	for wsc.(*wsClient).lastPingCompleted.Before(beforePing) {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Close the client
+	wsc.Close()
+
+}
+
+func TestWSClientE2EReceiveExt(t *testing.T) {
+
+	toServer, fromServer, url, close := NewTestWSServer(func(req *http.Request) {
+		assert.Equal(t, "/test/updated", req.URL.Path)
+	})
+	defer close()
+
+	first := true
+	beforeConnect := func(ctx context.Context) error {
+		if first {
+			first = false
+			return fmt.Errorf("first run fails")
+		}
+		return nil
+	}
+	afterConnect := func(ctx context.Context, w WSClient) error {
+		return w.Send(ctx, []byte(`after connect message`))
+	}
+
+	// Init clean config
+	wsConfig := generateConfig()
+
+	wsConfig.HTTPURL = url
+	wsConfig.WSKeyPath = "/test"
+	wsConfig.HeartbeatInterval = 50 * time.Millisecond
+	wsConfig.InitialConnectAttempts = 2
+	wsConfig.ReceiveExt = true
+
+	wsc, err := New(context.Background(), wsConfig, beforeConnect, afterConnect)
+	assert.NoError(t, err)
+
+	//  Change the settings and connect
+	wsc.SetURL(wsc.URL() + "/updated")
+	err = wsc.Connect()
+	assert.NoError(t, err)
+
+	// Receive the message automatically sent in afterConnect
+	message1 := <-toServer
+	assert.Equal(t, `after connect message`, message1)
+
+	// Tell the unit test server to send us a reply, and confirm it
+	fromServer <- `some data from server`
+	reply := <-wsc.ReceiveExt()
+	assert.Equal(t, websocket.TextMessage, reply.MessageType)
+	msgData, err := io.ReadAll(reply.Reader)
+	assert.NoError(t, err)
+	assert.Equal(t, `some data from server`, string(msgData))
+	reply.Processed()
 
 	// Send some data back
 	err = wsc.Send(context.Background(), []byte(`some data to server`))
@@ -315,6 +392,74 @@ func TestWSReadLoopSendFailure(t *testing.T) {
 
 }
 
+func TestWSReadLoopExtSendFailure(t *testing.T) {
+
+	toServer, fromServer, url, done := NewTestWSServer(nil)
+	defer done()
+
+	wsconn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	assert.NoError(t, err)
+	wsconn.WriteJSON(map[string]string{"type": "listen", "topic": "topic1"})
+	assert.NoError(t, err)
+	<-toServer
+	w := &wsClient{
+		ctx:           context.Background(),
+		sendDone:      make(chan []byte, 1),
+		wsconn:        wsconn,
+		useReceiveExt: true,
+	}
+
+	// Queue a message for the receiver, then immediately close the sender channel
+	fromServer <- `some data from server`
+	close(w.sendDone)
+
+	// Ensure the readLoop exits immediately
+	w.readLoopExt()
+
+	// Try reconnect, should fail here
+	_, _, err = websocket.DefaultDialer.Dial(url, nil)
+	assert.Error(t, err)
+
+}
+
+func TestWSReadLoopExtProcessedFailure(t *testing.T) {
+
+	toServer, fromServer, url, done := NewTestWSServer(nil)
+	defer done()
+
+	wsconn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	assert.NoError(t, err)
+	wsconn.WriteJSON(map[string]string{"type": "listen", "topic": "topic1"})
+	assert.NoError(t, err)
+	<-toServer
+	w := &wsClient{
+		ctx:           context.Background(),
+		sendDone:      make(chan []byte, 1),
+		wsconn:        wsconn,
+		receiveExt:    make(chan *WSPayload),
+		useReceiveExt: true,
+	}
+
+	// Queue a message for the receiver, then immediately close the sender channel
+	fromServer <- `some data from server`
+
+	// Ensure the readLoop exits immediately
+	readLoopDone := make(chan struct{})
+	go func() {
+		w.readLoopExt()
+		close(readLoopDone)
+	}()
+
+	_ = <-w.receiveExt // we don't bother to ack this, making the client wait indefinitely
+	close(w.sendDone)
+	<-readLoopDone
+
+	// Try reconnect, should fail here
+	_, _, err = websocket.DefaultDialer.Dial(url, nil)
+	assert.Error(t, err)
+
+}
+
 func TestWSReconnectFail(t *testing.T) {
 
 	_, _, url, done := NewTestWSServer(nil)
@@ -326,13 +471,37 @@ func TestWSReconnectFail(t *testing.T) {
 	ctxCanceled, cancel := context.WithCancel(context.Background())
 	cancel()
 	w := &wsClient{
-		ctx:     ctxCanceled,
-		receive: make(chan []byte),
-		send:    make(chan []byte),
-		closing: make(chan struct{}),
-		wsconn:  wsconn,
+		ctx:        ctxCanceled,
+		receive:    make(chan []byte),
+		receiveExt: make(chan *WSPayload),
+		send:       make(chan []byte),
+		closing:    make(chan struct{}),
+		wsconn:     wsconn,
 	}
 	close(w.send) // will mean sender exits immediately
+
+	w.receiveReconnectLoop()
+}
+
+func TestWSDisableReconnect(t *testing.T) {
+
+	_, _, url, done := NewTestWSServer(nil)
+	defer done()
+
+	wsconn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	assert.NoError(t, err)
+	wsconn.Close()
+	ctxCanceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	w := &wsClient{
+		ctx:              ctxCanceled,
+		receive:          make(chan []byte),
+		receiveExt:       make(chan *WSPayload),
+		send:             make(chan []byte),
+		closing:          make(chan struct{}),
+		wsconn:           wsconn,
+		disableReconnect: true,
+	}
 
 	w.receiveReconnectLoop()
 }
@@ -346,12 +515,13 @@ func TestWSSendFail(t *testing.T) {
 	assert.NoError(t, err)
 	wsconn.Close()
 	w := &wsClient{
-		ctx:      context.Background(),
-		receive:  make(chan []byte),
-		send:     make(chan []byte, 1),
-		closing:  make(chan struct{}),
-		sendDone: make(chan []byte, 1),
-		wsconn:   wsconn,
+		ctx:        context.Background(),
+		receive:    make(chan []byte),
+		receiveExt: make(chan *WSPayload),
+		send:       make(chan []byte, 1),
+		closing:    make(chan struct{}),
+		sendDone:   make(chan []byte, 1),
+		wsconn:     wsconn,
 	}
 	w.send <- []byte(`wakes sender`)
 	w.sendLoop(make(chan struct{}))
@@ -367,12 +537,13 @@ func TestWSSendInstructClose(t *testing.T) {
 	assert.NoError(t, err)
 	wsconn.Close()
 	w := &wsClient{
-		ctx:      context.Background(),
-		receive:  make(chan []byte),
-		send:     make(chan []byte, 1),
-		closing:  make(chan struct{}),
-		sendDone: make(chan []byte, 1),
-		wsconn:   wsconn,
+		ctx:        context.Background(),
+		receive:    make(chan []byte),
+		receiveExt: make(chan *WSPayload),
+		send:       make(chan []byte, 1),
+		closing:    make(chan struct{}),
+		sendDone:   make(chan []byte, 1),
+		wsconn:     wsconn,
 	}
 	receiverClosed := make(chan struct{})
 	close(receiverClosed)
@@ -416,5 +587,40 @@ func TestHeartbeatSendFailed(t *testing.T) {
 	}
 
 	w.sendLoop(make(chan struct{}))
+
+}
+
+func TestTestServerFailsSecondConnect(t *testing.T) {
+
+	_, _, url, done := NewTestWSServer(nil)
+	defer done()
+
+	wsc, err := New(context.Background(), &WSConfig{HTTPURL: url}, nil, func(ctx context.Context, w WSClient) error { return nil })
+	assert.NoError(t, err)
+	defer wsc.Close()
+
+	err = wsc.Connect()
+	assert.NoError(t, err)
+
+	wsc2, err := New(context.Background(), &WSConfig{HTTPURL: url}, nil, func(ctx context.Context, w WSClient) error { return nil })
+	assert.NoError(t, err)
+	defer wsc2.Close()
+
+	err = wsc2.Connect()
+	assert.Error(t, err)
+
+}
+
+func TestTestTLSServerFailsBadCerts(t *testing.T) {
+
+	filePath := path.Join(os.TempDir(), "badfile")
+	err := os.WriteFile(filePath, []byte(`will be deleted`), 0644)
+	assert.NoError(t, err)
+	closedFile, err := os.Open(filePath)
+	assert.NoError(t, err)
+	err = closedFile.Close()
+	assert.NoError(t, err)
+	_, _, _, _, err = NewTestTLSWSServer(nil, closedFile, closedFile)
+	assert.Error(t, err)
 
 }

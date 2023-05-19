@@ -8,7 +8,7 @@ require (
 	github.com/aidarkhanov/nanoid v1.0.8
 	github.com/docker/go-units v0.5.0
 	github.com/fsnotify/fsnotify v1.6.0
-	github.com/getkin/kin-openapi v0.107.0
+	github.com/getkin/kin-openapi v0.116.0
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-resty/resty/v2 v2.7.0
 	github.com/golang-migrate/migrate/v4 v4.15.2
@@ -61,6 +61,7 @@ require (
 	github.com/onsi/gomega v1.19.0 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.5 // indirect
+	github.com/perimeterx/marshmallow v1.1.4 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.30.0 // indirect

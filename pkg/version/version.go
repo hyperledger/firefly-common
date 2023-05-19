@@ -30,10 +30,6 @@ import (
 
 var shortened, output = false, "yaml"
 
-var BuildDate string
-var BuildCommit string
-var BuildVersionOverride string
-
 type Info struct {
 	*cobra.Command `json:"-"`
 	Version        string `json:"Version,omitempty" yaml:"Version,omitempty"`
@@ -55,9 +51,9 @@ func (info *Info) LogVersion(ctx context.Context) {
 
 func NewInfo(buildDate, buildCommit, buildVersionOverride, license string) *Info {
 	info := &Info{
-		Date:    BuildDate,
-		Commit:  BuildCommit,
-		Version: BuildVersionOverride,
+		Date:    buildDate,
+		Commit:  buildCommit,
+		Version: buildVersionOverride,
 		License: license,
 	}
 	// Where you are using go install, we will get good version information usefully from Go

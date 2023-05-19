@@ -113,7 +113,7 @@ func (hs *httpServer) createServer(ctx context.Context, r *mux.Router) (srv *htt
 	if err != nil {
 		return nil, err
 	}
-	handler = wrapCorsIfEnabled(ctx, hs.corsConf, handler)
+	handler = WrapCorsIfEnabled(ctx, hs.corsConf, handler)
 
 	// Where a maximum request timeout is set, it does not make sense for either the
 	// read timeout (time to read full body), or the write timeout (time to write the
