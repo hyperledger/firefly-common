@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -22,6 +22,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"reflect"
 	"strconv"
 	"strings"
@@ -75,7 +76,7 @@ type Field interface {
 // nullField is a special FieldSerialization used to represent nil in queries
 type nullField struct{}
 
-func (f *nullField) Scan(src interface{}) error {
+func (f *nullField) Scan(_ interface{}) error {
 	return nil
 }
 func (f *nullField) Value() (driver.Value, error) { return nil, nil }
@@ -236,6 +237,55 @@ func (f *int64Field) String() string                       { return fmt.Sprintf(
 func (f *Int64Field) GetSerialization() FieldSerialization { return &int64Field{} }
 func (f *Int64Field) FilterAsString() bool                 { return false }
 func (f *Int64Field) Description() string                  { return "Integer" }
+
+type BigIntField struct{}
+type bigIntField struct{ i *fftypes.FFBigInt }
+
+func (f *bigIntField) Scan(src interface{}) (err error) {
+	switch tv := src.(type) {
+	case int:
+		f.i = fftypes.NewFFBigInt(int64(tv))
+	case int32:
+		f.i = fftypes.NewFFBigInt(int64(tv))
+	case int64:
+		f.i = fftypes.NewFFBigInt(tv)
+	case uint:
+		f.i = fftypes.NewFFBigInt(int64(tv))
+	case uint32:
+		f.i = fftypes.NewFFBigInt(int64(tv))
+	case uint64:
+		f.i = fftypes.NewFFBigInt(int64(tv))
+	case fftypes.FFBigInt:
+		i := tv
+		f.i = &i
+	case *fftypes.FFBigInt:
+		i := *tv
+		f.i = &i
+	case big.Int:
+		i := fftypes.FFBigInt(tv)
+		f.i = &i
+	case *big.Int:
+		i := fftypes.FFBigInt(*tv)
+		f.i = &i
+	case string:
+		i := new(big.Int)
+		i, ok := i.SetString(tv, 0)
+		if !ok {
+			return i18n.NewError(context.Background(), i18n.MsgTypeRestoreFailed, src, int64(0))
+		}
+		f.i = (*fftypes.FFBigInt)(i)
+	case nil:
+		f.i = fftypes.NewFFBigInt(0)
+	default:
+		return i18n.NewError(context.Background(), i18n.MsgTypeRestoreFailed, src, f.i)
+	}
+	return nil
+}
+func (f *bigIntField) Value() (driver.Value, error)         { return f.i.Int().Text(16), nil } // Hex string in DB
+func (f *bigIntField) String() string                       { return f.i.Int().Text(10) }
+func (f *BigIntField) GetSerialization() FieldSerialization { return &bigIntField{} }
+func (f *BigIntField) FilterAsString() bool                 { return false }
+func (f *BigIntField) Description() string                  { return "BigInteger" }
 
 type TimeField struct{}
 type timeField struct{ t *fftypes.FFTime }

@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package config
+package fswatcher
 
 import (
 	"context"
@@ -33,14 +33,16 @@ func TestFileListenerE2E(t *testing.T) {
 	logrus.SetLevel(logrus.DebugLevel)
 	tmpDir := t.TempDir()
 
+	filePath := fmt.Sprintf(fmt.Sprintf("%s/test.yaml", tmpDir))
+
 	viper.SetConfigType("yaml")
-	viper.SetConfigFile(fmt.Sprintf("%s/test.yaml", tmpDir))
+	viper.SetConfigFile(filePath)
 
 	// Start listener on empty dir
 	fsListenerDone := make(chan struct{})
 	fsListenerFired := make(chan bool)
 	ctx, cancelCtx := context.WithCancel(context.Background())
-	err := WatchConfig(ctx, func() {
+	err := Watch(ctx, filePath, func() {
 		err := viper.ReadInConfig()
 		assert.NoError(t, err)
 		fsListenerFired <- true
@@ -77,10 +79,12 @@ func TestFileListenerFail(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.RemoveAll(tmpDir)
 
-	viper.SetConfigType("yaml")
-	viper.SetConfigFile(fmt.Sprintf("%s/test.yaml", tmpDir))
+	filepath := fmt.Sprintf("%s/test.yaml", tmpDir)
 
-	err := WatchConfig(context.Background(), nil, nil)
+	viper.SetConfigType("yaml")
+	viper.SetConfigFile(filepath)
+
+	err := Watch(context.Background(), filepath, nil, nil)
 	assert.Regexp(t, "FF00194", err)
 }
 

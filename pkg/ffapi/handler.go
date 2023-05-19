@@ -22,6 +22,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strings"
@@ -98,7 +99,10 @@ func (hs *HandlerFactory) getParams(req *http.Request, route *Route) (queryParam
 	if len(route.PathParams) > 0 {
 		v := mux.Vars(req)
 		for _, pp := range route.PathParams {
-			pathParams[pp.Name] = v[pp.Name]
+			paramUnescaped, err := url.QueryUnescape(v[pp.Name]) // Gorilla mux assures this works
+			if err == nil {
+				pathParams[pp.Name] = paramUnescaped
+			}
 		}
 	}
 	for _, qp := range route.QueryParams {
@@ -141,8 +145,9 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 				if jsonInput != nil {
 					err = json.NewDecoder(req.Body).Decode(&jsonInput)
 				}
+			case strings.HasPrefix(strings.ToLower(contentType), "text/plain"):
 			default:
-				return 415, i18n.NewError(req.Context(), i18n.MsgInvalidContentType)
+				return 415, i18n.NewError(req.Context(), i18n.MsgInvalidContentType, contentType)
 			}
 		}
 
@@ -238,14 +243,14 @@ func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWri
 	return status, nil
 }
 
-func (hs *HandlerFactory) getTimeout(req *http.Request) time.Duration {
+func CalcRequestTimeout(req *http.Request, defaultTimeout, maxTimeout time.Duration) time.Duration {
 	// Configure a server-side timeout on each request, to try and avoid cases where the API requester
 	// times out, and we continue to churn indefinitely processing the request.
 	// Long-running processes should be dispatched asynchronously (API returns 202 Accepted asap),
 	// and the caller can either listen on the websocket for updates, or poll the status of the affected object.
 	// This is dependent on the context being passed down through to all blocking operations down the stack
 	// (while avoiding passing the context to asynchronous tasks that are dispatched as a result of the request)
-	reqTimeout := hs.DefaultRequestTimeout
+	reqTimeout := defaultTimeout
 	reqTimeoutHeader := req.Header.Get("Request-Timeout")
 	if reqTimeoutHeader != "" {
 		customTimeout, err := fftypes.ParseDurationString(reqTimeoutHeader, time.Second /* default is seconds */)
@@ -253,12 +258,16 @@ func (hs *HandlerFactory) getTimeout(req *http.Request) time.Duration {
 			log.L(req.Context()).Warnf("Invalid Request-Timeout header '%s': %s", reqTimeoutHeader, err)
 		} else {
 			reqTimeout = time.Duration(customTimeout)
-			if reqTimeout > hs.MaxTimeout {
-				reqTimeout = hs.MaxTimeout
+			if reqTimeout > maxTimeout {
+				reqTimeout = maxTimeout
 			}
 		}
 	}
 	return reqTimeout
+}
+
+func (hs *HandlerFactory) getTimeout(req *http.Request) time.Duration {
+	return CalcRequestTimeout(req, hs.DefaultRequestTimeout, hs.MaxTimeout)
 }
 
 func (hs *HandlerFactory) APIWrapper(handler func(res http.ResponseWriter, req *http.Request) (status int, err error)) http.HandlerFunc {

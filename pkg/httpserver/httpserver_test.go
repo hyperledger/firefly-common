@@ -27,7 +27,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math/big"
 	"net"
 	"net/http"
@@ -39,6 +38,7 @@ import (
 	"github.com/hyperledger/firefly-common/mocks/httpservermocks"
 	"github.com/hyperledger/firefly-common/pkg/auth/basic"
 	"github.com/hyperledger/firefly-common/pkg/config"
+	"github.com/hyperledger/firefly-common/pkg/fftls"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -118,9 +118,11 @@ func TestShutdownError(t *testing.T) {
 func TestMissingCAFile(t *testing.T) {
 	cp := config.RootSection("ut")
 	InitHTTPConfig(cp, 0)
+	tlsSection := cp.SubSection("tls")
+	tlsSection.Set(fftls.HTTPConfTLSEnabled, true)
+	tlsSection.Set(fftls.HTTPConfTLSCAFile, "badness")
 	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
-	cp.Set(HTTPConfTLSCAFile, "badness")
 	_, err := NewHTTPServer(context.Background(), "ut", mux.NewRouter(), make(chan error), cp, cc)
 	assert.Regexp(t, "FF00153", err)
 }
@@ -130,7 +132,9 @@ func TestBadCAFile(t *testing.T) {
 	InitHTTPConfig(cp, 0)
 	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
-	cp.Set(HTTPConfTLSCAFile, configDir+"/firefly.common.yaml")
+	tlsSection := cp.SubSection("tls")
+	tlsSection.Set(fftls.HTTPConfTLSEnabled, true)
+	tlsSection.Set(fftls.HTTPConfTLSCAFile, configDir+"/firefly.common.yaml")
 	_, err := NewHTTPServer(context.Background(), "ut", mux.NewRouter(), make(chan error), cp, cc)
 	assert.Regexp(t, "FF00152", err)
 }
@@ -141,7 +145,7 @@ func TestTLSServerSelfSignedWithClientAuth(t *testing.T) {
 	privatekey, _ := rsa.GenerateKey(rand.Reader, 2048)
 	publickey := &privatekey.PublicKey
 	var privateKeyBytes []byte = x509.MarshalPKCS1PrivateKey(privatekey)
-	privateKeyFile, _ := ioutil.TempFile("", "key.pem")
+	privateKeyFile, _ := os.CreateTemp("", "key.pem")
 	defer os.Remove(privateKeyFile.Name())
 	privateKeyBlock := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: privateKeyBytes}
 	pem.Encode(privateKeyFile, privateKeyBlock)
@@ -159,7 +163,7 @@ func TestTLSServerSelfSignedWithClientAuth(t *testing.T) {
 	}
 	derBytes, err := x509.CreateCertificate(rand.Reader, x509Template, x509Template, publickey, privatekey)
 	assert.NoError(t, err)
-	publicKeyFile, _ := ioutil.TempFile("", "cert.pem")
+	publicKeyFile, _ := os.CreateTemp("", "cert.pem")
 	defer os.Remove(publicKeyFile.Name())
 	pem.Encode(publicKeyFile, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
 
@@ -169,12 +173,13 @@ func TestTLSServerSelfSignedWithClientAuth(t *testing.T) {
 	InitHTTPConfig(cp, 0)
 	cc := config.RootSection("utCors")
 	InitCORSConfig(cc)
+	tlsSection := cp.SubSection("tls")
 	cp.Set(HTTPConfAddress, "127.0.0.1")
-	cp.Set(HTTPConfTLSEnabled, true)
-	cp.Set(HTTPConfTLSClientAuth, true)
-	cp.Set(HTTPConfTLSKeyFile, privateKeyFile.Name())
-	cp.Set(HTTPConfTLSCertFile, publicKeyFile.Name())
-	cp.Set(HTTPConfTLSCAFile, publicKeyFile.Name())
+	tlsSection.Set(fftls.HTTPConfTLSEnabled, true)
+	tlsSection.Set(fftls.HTTPConfTLSClientAuth, true)
+	tlsSection.Set(fftls.HTTPConfTLSKeyFile, privateKeyFile.Name())
+	tlsSection.Set(fftls.HTTPConfTLSCertFile, publicKeyFile.Name())
+	tlsSection.Set(fftls.HTTPConfTLSCAFile, publicKeyFile.Name())
 	cp.Set(HTTPConfPort, 0)
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	r := mux.NewRouter()
@@ -189,7 +194,7 @@ func TestTLSServerSelfSignedWithClientAuth(t *testing.T) {
 
 	// Attempt a request, with a client certificate
 	rootCAs := x509.NewCertPool()
-	caPEM, _ := ioutil.ReadFile(publicKeyFile.Name())
+	caPEM, _ := os.ReadFile(publicKeyFile.Name())
 	ok := rootCAs.AppendCertsFromPEM(caPEM)
 	assert.True(t, ok)
 	c := http.Client{

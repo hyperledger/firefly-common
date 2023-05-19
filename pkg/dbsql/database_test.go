@@ -1,4 +1,4 @@
-// Copyright © 2021 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -64,6 +64,19 @@ func TestInitDatabaseConnsAndSeqCol(t *testing.T) {
 	assert.Equal(t, "seq", s.SequenceColumn())
 }
 
+func TestInitDatabaseFeatures(t *testing.T) {
+	s := &Database{}
+	tp := newMockProvider()
+	s.InitConfig(tp, tp.config)
+	err := s.Init(context.Background(), tp, tp.config)
+	assert.NoError(t, err)
+	assert.NotNil(t, s.DB())
+
+	assert.NotNil(t, s.Features())
+	assert.Equal(t, true, s.Features().UseILIKE)
+	assert.Equal(t, false, s.Features().MultiRowInsert)
+}
+
 func TestInitDatabaseOpenFailed(t *testing.T) {
 	mp := newMockProvider()
 	mp.openError = fmt.Errorf("pop")
@@ -84,8 +97,10 @@ func TestInitDatabaseMigrationFailed(t *testing.T) {
 	mp.mmg.On("Lock").Return(nil)
 	mp.mmg.On("Version").Return(-1, false, nil)
 	mp.mmg.On("SetVersion", 1, true).Return(nil)
+	mp.mmg.On("SetVersion", 2, true).Return(nil)
 	mp.mmg.On("Run", mock.Anything).Return(nil)
 	mp.mmg.On("SetVersion", 1, false).Return(nil)
+	mp.mmg.On("SetVersion", 2, false).Return(nil)
 	mp.mmg.On("Unlock").Return(nil)
 	mp.config.Set(SQLConfMigrationsAuto, true)
 	mp.config.Set(SQLConfMigrationsDirectory, "../../test/dbmigrations")

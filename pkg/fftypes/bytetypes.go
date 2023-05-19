@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -63,7 +63,7 @@ func (b32 *Bytes32) UnmarshalText(b []byte) error {
 	return err
 }
 
-func ParseBytes32(ctx context.Context, hexStr string) (*Bytes32, error) {
+func ParseBytes32(_ context.Context, hexStr string) (*Bytes32, error) {
 	trimmed := []byte(strings.TrimPrefix(hexStr, "0x"))
 	if len(trimmed) != 64 {
 		return nil, i18n.NewError(context.Background(), i18n.MsgInvalidWrongLenB32)

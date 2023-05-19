@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -64,12 +64,13 @@ var (
 	ConfigGlobalWsReadBufferSize         = ffc("config.global.ws.readBufferSize", "The size in bytes of the read buffer for the WebSocket connection", ByteSizeType)
 	ConfigGlobalWsWriteBufferSize        = ffc("config.global.ws.writeBufferSize", "The size in bytes of the write buffer for the WebSocket connection", ByteSizeType)
 
-	ConfigGlobalTLSCaFile           = ffc("config.global.tls.caFile", "The path to the CA file for TLS on this API", StringType)
-	ConfigGlobalTLSCertFile         = ffc("config.global.tls.certFile", "The path to the certificate file for TLS on this API", StringType)
-	ConfigGlobalTLSClientAuth       = ffc("config.global.tls.clientAuth", "Enables or disables client auth for TLS on this API", StringType)
-	ConfigGlobalTLSEnabled          = ffc("config.global.tls.enabled", "Enables or disables TLS on this API", BooleanType)
-	ConfigGlobalTLSKeyFile          = ffc("config.global.tls.keyFile", "The path to the private key file for TLS on this API", StringType)
-	ConfigGlobalTLSHandshakeTimeout = ffc("config.global.tlsHandshakeTimeout", "The maximum amount of time to wait for a successful TLS handshake", TimeDurationType)
+	ConfigGlobalTLSCaFile               = ffc("config.global.tls.caFile", "The path to the CA file for TLS on this API", StringType)
+	ConfigGlobalTLSCertFile             = ffc("config.global.tls.certFile", "The path to the certificate file for TLS on this API", StringType)
+	ConfigGlobalTLSClientAuth           = ffc("config.global.tls.clientAuth", "Enables or disables client auth for TLS on this API", StringType)
+	ConfigGlobalTLSEnabled              = ffc("config.global.tls.enabled", "Enables or disables TLS on this API", BooleanType)
+	ConfigGlobalTLSKeyFile              = ffc("config.global.tls.keyFile", "The path to the private key file for TLS on this API", StringType)
+	ConfigGlobalTLSRequiredDNAttributes = ffc("config.global.tls.requiredDNAttributes", "A set of required subject DN attributes. Each entry is a regular expression, and the subject certificate must have a matching attribute of the specified type (CN, C, O, OU, ST, L, STREET, POSTALCODE, SERIALNUMBER are valid attributes)", MapStringStringType)
+	ConfigGlobalTLSHandshakeTimeout     = ffc("config.global.tlsHandshakeTimeout", "The maximum amount of time to wait for a successful TLS handshake", TimeDurationType)
 
 	ConfigGlobalBodyTemplate              = ffc("config.global.bodyTemplate", "The body go template string to use when making HTTP requests", GoTemplateType)
 	ConfigGlobalCustomClient              = ffc("config.global.customClient", "Used for testing purposes only", IgnoredType)
@@ -109,4 +110,13 @@ var (
 	ConfigCorsOrigins = ffc("config.global.cors.origins", "CORS setting to control the allowed origins", ArrayStringType)
 
 	ConfigGlobalAuthBasicPasswordFile = ffc("config.global.basic.passwordfile", "The path to a .htpasswd file to use for authenticating requests. Passwords should be hashed with bcrypt.", StringType)
+
+	ConfigGlobalDebugEnabled = ffc("config.debug.enabled", "Whether the debug HTTP endpoint is enabled", BooleanType)
+
+	ConfigGlobalPort            = ffc("config.global.port", "Listener port", IntType)
+	ConfigGlobalAddress         = ffc("config.global.address", "Listener address", IntType)
+	ConfigGlobalPublicURL       = ffc("config.global.publicURL", "Externally available URL for the HTTP endpoint", StringType)
+	ConfigGlobalReadTimeout     = ffc("config.global.readTimeout", "HTTP server read timeout", TimeDurationType)
+	ConfigGlobalWriteTimeout    = ffc("config.global.writeTimeout", "HTTP server write timeout", TimeDurationType)
+	ConfigGlobalShutdownTimeout = ffc("config.global.shutdownTimeout", "HTTP server shutdown timeout", TimeDurationType)
 )

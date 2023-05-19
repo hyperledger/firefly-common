@@ -29,5 +29,5 @@ func TestServerCorsDisabled(t *testing.T) {
 	section := config.RootSection("cors")
 	InitCORSConfig(section)
 	section.Set(CorsEnabled, false)
-	assert.Nil(t, wrapCorsIfEnabled(context.Background(), section, nil))
+	assert.Nil(t, WrapCorsIfEnabled(context.Background(), section, nil))
 }

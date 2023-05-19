@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
+	"github.com/hyperledger/firefly-common/pkg/fswatcher"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
 	"github.com/sirupsen/logrus"
@@ -106,6 +107,7 @@ type Section interface {
 	GetFloat64(key string) float64
 	GetByteSize(key string) int64
 	GetUint(key string) uint
+	GetUint64(key string) uint64
 	GetDuration(key string) time.Duration
 	GetStringSlice(key string) []string
 	GetObject(key string) fftypes.JSONObject
@@ -176,6 +178,18 @@ func ReadConfig(cfgSuffix, cfgFile string) error {
 		viper.SetConfigFile(cfgFile)
 	}
 	return viper.ReadInConfig()
+}
+
+// Listens for changes to the configuration file configured in Viper.
+func WatchConfig(ctx context.Context, onChange, onClose func()) error {
+
+	// Note that while viper.WatchConfig() exists, it doesn't handle various
+	// types of config change. Specifically it doesn't handle the case where the
+	// removed event comes from the filesystem, before the create/update event(s).
+	// The listener just ends in that case, and stops notifying of events :shrug
+
+	fullConfigFilePath := viper.ConfigFileUsed()
+	return fswatcher.Watch(ctx, fullConfigFilePath, onChange, onClose)
 }
 
 func MergeConfig(configRecords []*fftypes.ConfigRecord) error {
@@ -507,7 +521,7 @@ func (c *configSection) GetInt(key string) int {
 	return viper.GetInt(c.prefixKey(key))
 }
 
-// GetInt64 gets a configuration uint
+// GetInt64 gets a configuration int64
 func GetInt64(key RootKey) int64 {
 	return root.GetInt64(string(key))
 }
@@ -516,6 +530,17 @@ func (c *configSection) GetInt64(key string) int64 {
 	defer keysMutex.Unlock()
 
 	return viper.GetInt64(c.prefixKey(key))
+}
+
+// GetUint64 gets a configuration uint64
+func GetUint64(key RootKey) uint64 {
+	return root.GetUint64(string(key))
+}
+func (c *configSection) GetUint64(key string) uint64 {
+	keysMutex.Lock()
+	defer keysMutex.Unlock()
+
+	return viper.GetUint64(c.prefixKey(key))
 }
 
 // GetFloat64 gets a configuration uint
