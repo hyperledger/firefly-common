@@ -31,6 +31,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/gorilla/mux"
 	"github.com/hyperledger/firefly-common/pkg/config"
+	"github.com/hyperledger/firefly-common/pkg/fftls"
 	"github.com/hyperledger/firefly-common/pkg/httpserver"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/metric"
@@ -171,7 +172,8 @@ func buildPublicURL(conf config.Section, a net.Addr) string {
 	publicURL := conf.GetString(httpserver.HTTPConfPublicURL)
 	if publicURL == "" {
 		proto := "https"
-		if !conf.GetBool(httpserver.HTTPConfTLSEnabled) {
+		tlsConfig := conf.SubSection("tls")
+		if !tlsConfig.GetBool(fftls.HTTPConfTLSEnabled) {
 			proto = "http"
 		}
 		publicURL = fmt.Sprintf("%s://%s", proto, a.String())
@@ -215,7 +217,7 @@ func (as *apiServer[T]) swaggerGenerator(apiBaseURL string) func(req *http.Reque
 		return swg.Generate(req.Context(), as.Routes), nil
 	}
 }
-func (as *apiServer[T]) routeHandler(hf *HandlerFactory, apiBaseURL string, route *Route) http.HandlerFunc {
+func (as *apiServer[T]) routeHandler(hf *HandlerFactory, route *Route) http.HandlerFunc {
 	// We extend the base ffapi functionality, with standardized DB filter support for all core resources.
 	// We also pass the Orchestrator context through
 	ext := route.Extensions.(*APIServerRouteExt[T])
@@ -261,7 +263,7 @@ func (as *apiServer[T]) createMuxRouter(ctx context.Context, publicURL string) *
 			}
 		}
 		if ce.JSONHandler != nil || ce.UploadHandler != nil {
-			r.HandleFunc(fmt.Sprintf("/api/v1/%s", route.Path), as.routeHandler(hf, apiBaseURL, route)).
+			r.HandleFunc(fmt.Sprintf("/api/v1/%s", route.Path), as.routeHandler(hf, route)).
 				Methods(route.Method)
 		}
 	}

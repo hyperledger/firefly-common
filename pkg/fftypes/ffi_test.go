@@ -76,7 +76,7 @@ func TestValidateFFI(t *testing.T) {
 			},
 		},
 	}
-	err := ffi.Validate(context.Background(), true)
+	err := ffi.Validate(context.Background())
 	assert.NoError(t, err)
 }
 
@@ -86,7 +86,7 @@ func TestValidateFFIBadVersion(t *testing.T) {
 		Namespace: "default",
 		Version:   "*(&!$%^)",
 	}
-	err := ffi.Validate(context.Background(), true)
+	err := ffi.Validate(context.Background())
 	assert.Regexp(t, "FF00140", err)
 }
 
@@ -96,7 +96,7 @@ func TestValidateFFIBadName(t *testing.T) {
 		Namespace: "default",
 		Version:   "v1.0.0",
 	}
-	err := ffi.Validate(context.Background(), true)
+	err := ffi.Validate(context.Background())
 	assert.Regexp(t, "FF00140", err)
 }
 
@@ -107,7 +107,7 @@ func TestValidateFFIBadNetworkName(t *testing.T) {
 		Namespace:   "default",
 		Version:     "v1.0.0",
 	}
-	err := ffi.Validate(context.Background(), true)
+	err := ffi.Validate(context.Background())
 	assert.Regexp(t, "FF00140", err)
 }
 

@@ -29,7 +29,7 @@ import (
 // UUID is a wrapper on a UUID implementation, ensuring Value handles nil
 type UUID uuid.UUID
 
-func NewNamespacedUUIDString(ctx context.Context, namespace string, uuid *UUID) string {
+func NewNamespacedUUIDString(_ context.Context, namespace string, uuid *UUID) string {
 	return namespace + ":" + uuid.String()
 }
 
@@ -50,7 +50,7 @@ func ParseNamespacedUUID(ctx context.Context, nsIDStr string) (namespace string,
 func ParseUUID(ctx context.Context, uuidStr string) (*UUID, error) {
 	u, err := uuid.Parse(uuidStr)
 	if err != nil {
-		return nil, i18n.WrapError(context.Background(), err, i18n.MsgInvalidUUID)
+		return nil, i18n.WrapError(ctx, err, i18n.MsgInvalidUUID)
 	}
 	uuid := UUID(u)
 	return &uuid, nil

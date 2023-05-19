@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -54,6 +54,7 @@ func (a *Auth) Init(ctx context.Context, name string, config config.Section) err
 		return err
 	}
 	a.users = users
+	log.L(ctx).Infof("basic auth plugin enabled (name=%s)", name)
 	return nil
 }
 

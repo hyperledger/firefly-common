@@ -29,12 +29,18 @@ var ffLogo16 []byte
 var ffLogo32 []byte
 
 func favIconsHandler(logo16, logo32 []byte) http.HandlerFunc {
+	if logo16 == nil {
+		logo16 = ffLogo16
+	}
+	if logo32 == nil {
+		logo32 = ffLogo32
+	}
 	return func(res http.ResponseWriter, req *http.Request) {
 		res.Header().Set("content-type", "image/png")
 		if strings.Contains(req.URL.Path, "16") {
-			_, _ = res.Write(ffLogo16)
+			_, _ = res.Write(logo16)
 		} else {
-			_, _ = res.Write(ffLogo32)
+			_, _ = res.Write(logo32)
 		}
 	}
 }

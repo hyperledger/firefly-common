@@ -29,6 +29,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
+	"github.com/hyperledger/firefly-common/pkg/fftls"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
@@ -67,10 +68,7 @@ func OnAfterResponse(c *resty.Client, resp *resty.Response) {
 //
 // You can use the normal Resty builder pattern, to set per-instance configuration
 // as required.
-func New(ctx context.Context, staticConfig config.Section) *resty.Client {
-
-	var client *resty.Client
-
+func New(ctx context.Context, staticConfig config.Section) (client *resty.Client, err error) {
 	passthroughHeadersEnabled := staticConfig.GetBool(HTTPPassthroughHeadersEnabled)
 
 	iHTTPClient := staticConfig.Get(HTTPCustomClient)
@@ -80,6 +78,7 @@ func New(ctx context.Context, staticConfig config.Section) *resty.Client {
 		}
 	}
 	if client == nil {
+
 		httpTransport := &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			DialContext: (&net.Dialer{
@@ -92,6 +91,14 @@ func New(ctx context.Context, staticConfig config.Section) *resty.Client {
 			TLSHandshakeTimeout:   staticConfig.GetDuration(HTTPTLSHandshakeTimeout),
 			ExpectContinueTimeout: staticConfig.GetDuration(HTTPExpectContinueTimeout),
 		}
+
+		tlsConfig, err := fftls.ConstructTLSConfig(ctx, staticConfig.SubSection("tls"), "client")
+		if err != nil {
+			return nil, err
+		}
+
+		httpTransport.TLSClientConfig = tlsConfig
+
 		httpClient := &http.Client{
 			Transport: httpTransport,
 		}
@@ -184,7 +191,7 @@ func New(ctx context.Context, staticConfig config.Section) *resty.Client {
 			})
 	}
 
-	return client
+	return client, nil
 }
 
 func WrapRestErr(ctx context.Context, res *resty.Response, err error, key i18n.ErrorMessageKey) error {

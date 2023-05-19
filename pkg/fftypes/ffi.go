@@ -109,7 +109,7 @@ type FFIGenerationRequest struct {
 	Input       *JSONAny `ffstruct:"FFIGenerationRequest" json:"input"`
 }
 
-func (f *FFI) Validate(ctx context.Context, existing bool) (err error) {
+func (f *FFI) Validate(ctx context.Context) (err error) {
 	if err = ValidateFFNameField(ctx, f.Name, "name"); err != nil {
 		return err
 	}
