@@ -88,17 +88,17 @@ func (mp *MockProvider) Features() SQLFeatures {
 	return features
 }
 
-func (mp *MockProvider) ApplyInsertQueryCustomizations(insert sq.InsertBuilder, requestConflictEmptyResult bool) (sq.InsertBuilder, bool) {
+func (mp *MockProvider) ApplyInsertQueryCustomizations(insert sq.InsertBuilder, _ bool) (sq.InsertBuilder, bool) {
 	if mp.FakePSQLInsert {
 		return insert.Suffix(" RETURNING seq"), true
 	}
 	return insert, false
 }
 
-func (mp *MockProvider) Open(url string) (*sql.DB, error) {
+func (mp *MockProvider) Open(_ string) (*sql.DB, error) {
 	return mp.mockDB, mp.OpenError
 }
 
-func (mp *MockProvider) GetMigrationDriver(db *sql.DB) (migratedb.Driver, error) {
+func (mp *MockProvider) GetMigrationDriver(_ *sql.DB) (migratedb.Driver, error) {
 	return mp.mmg, mp.GetMigrationDriverError
 }

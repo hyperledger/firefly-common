@@ -178,7 +178,7 @@ func (c *CrudBase[T]) idFilter(id *fftypes.UUID) sq.Eq {
 	return filter
 }
 
-func (c *CrudBase[T]) buildUpdateList(ctx context.Context, update sq.UpdateBuilder, inst T, includeNil bool) sq.UpdateBuilder {
+func (c *CrudBase[T]) buildUpdateList(_ context.Context, update sq.UpdateBuilder, inst T, includeNil bool) sq.UpdateBuilder {
 colLoop:
 	for _, col := range c.Columns {
 		for _, immutable := range append(c.ImmutableColumns, ColumnID, ColumnCreated, ColumnUpdated, c.DB.sequenceColumn) {

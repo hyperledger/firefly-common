@@ -1,11 +1,13 @@
 package wsclient
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/ffresty"
+	"github.com/hyperledger/firefly-common/pkg/fftls"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -32,7 +34,9 @@ func TestWSConfigGeneration(t *testing.T) {
 	utConf.Set(WSConfigKeyInitialConnectAttempts, 1)
 	utConf.Set(WSConfigKeyPath, "/websocket")
 
-	wsConfig := GenerateConfig(utConf)
+	ctx := context.Background()
+	wsConfig, err := GenerateConfig(ctx, utConf)
+	assert.NoError(t, err)
 
 	assert.Equal(t, "http://test:12345", wsConfig.HTTPURL)
 	assert.Equal(t, "user", wsConfig.AuthUsername)
@@ -44,4 +48,16 @@ func TestWSConfigGeneration(t *testing.T) {
 	assert.Equal(t, "custom value", wsConfig.HTTPHeaders.GetString("custom-header"))
 	assert.Equal(t, 1024, wsConfig.ReadBufferSize)
 	assert.Equal(t, 1024, wsConfig.WriteBufferSize)
+}
+
+func TestWSConfigTLSGenerationFail(t *testing.T) {
+	resetConf()
+
+	tlsSection := utConf.SubSection("tls")
+	tlsSection.Set(fftls.HTTPConfTLSEnabled, true)
+	tlsSection.Set(fftls.HTTPConfTLSCAFile, "bad-ca")
+
+	ctx := context.Background()
+	_, err := GenerateConfig(ctx, utConf)
+	assert.Regexp(t, "FF00153", err)
 }

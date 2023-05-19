@@ -555,7 +555,7 @@ func TestGetByIDBadOpts(t *testing.T) {
 	db, _ := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	_, err := tc.GetByID(context.Background(), fftypes.NewUUID(), GetOption(999))
-	assert.Regexp(t, "FF00206", err)
+	assert.Regexp(t, "FF00212", err)
 }
 
 func TestGetByIDSelectFail(t *testing.T) {

@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -16,7 +16,10 @@
 
 package ffresty
 
-import "github.com/hyperledger/firefly-common/pkg/config"
+import (
+	"github.com/hyperledger/firefly-common/pkg/config"
+	"github.com/hyperledger/firefly-common/pkg/fftls"
+)
 
 const (
 	defaultRetryEnabled                  = false
@@ -70,7 +73,7 @@ const (
 	HTTPCustomClient = "customClient"
 )
 
-func InitConfig(conf config.KeySet) {
+func InitConfig(conf config.Section) {
 	conf.AddKnownKey(HTTPConfigURL)
 	conf.AddKnownKey(HTTPConfigProxyURL)
 	conf.AddKnownKey(HTTPConfigHeaders)
@@ -88,4 +91,7 @@ func InitConfig(conf config.KeySet) {
 	conf.AddKnownKey(HTTPExpectContinueTimeout, defaultHTTPExpectContinueTimeout)
 	conf.AddKnownKey(HTTPPassthroughHeadersEnabled, defaultHTTPPassthroughHeadersEnabled)
 	conf.AddKnownKey(HTTPCustomClient)
+
+	tlsConfig := conf.SubSection("tls")
+	fftls.InitTLSConfig(tlsConfig)
 }

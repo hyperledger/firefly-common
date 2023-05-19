@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -116,7 +116,7 @@ var compiledMetaSchema = jsonschema.MustCompileString("ffi.json", `{
 	}
 }`)
 
-func (v BaseFFIParamValidator) Compile(ctx jsonschema.CompilerContext, m map[string]interface{}) (jsonschema.ExtSchema, error) {
+func (v BaseFFIParamValidator) Compile(_ jsonschema.CompilerContext, _ map[string]interface{}) (jsonschema.ExtSchema, error) {
 	return nil, nil
 }
 

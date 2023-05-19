@@ -35,7 +35,6 @@ endef
 $(eval $(call makemock, $$(DBMIGRATE_PATH),        Driver,             dbmigratemocks))
 $(eval $(call makemock, pkg/httpserver,            GoHTTPServer,       httpservermocks))
 $(eval $(call makemock, pkg/auth,                  Plugin,             authmocks))
-$(eval $(call makemock, pkg/auth,                  Plugin,             authmocks))
 
 firefly-common: ${GOFILES}
 		$(VGO) build ./pkg/*

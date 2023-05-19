@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -73,7 +73,7 @@ func (sg *SwaggerGen) Generate(ctx context.Context, routes []*Route) *openapi3.T
 			Version:     sg.options.Version,
 			Description: sg.options.Description,
 		},
-		Components: openapi3.Components{
+		Components: &openapi3.Components{
 			Schemas: make(openapi3.Schemas),
 		},
 	}
