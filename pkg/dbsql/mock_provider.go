@@ -1,4 +1,4 @@
-// Copyright © 2021 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -28,26 +28,30 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/config"
 )
 
-// testProvider uses the datadog mocking framework
-type mockProvider struct {
+// MockProvider uses the datadog mocking framework
+type MockProvider struct {
+	MockProviderConfig
+
 	Database
 	config config.Section
 
 	mockDB *sql.DB
 	mdb    sqlmock.Sqlmock
 	mmg    *dbmigratemocks.Driver
-
-	fakePSQLInsert          bool
-	openError               error
-	getMigrationDriverError error
-	individualSort          bool
 }
 
-func newMockProvider() *mockProvider {
+type MockProviderConfig struct {
+	FakePSQLInsert          bool
+	OpenError               error
+	GetMigrationDriverError error
+	IndividualSort          bool
+}
+
+func NewMockProvider() *MockProvider {
 	config.RootConfigReset()
 	conf := config.RootSection("unittest.db")
 	conf.AddKnownKey("url", "test")
-	mp := &mockProvider{
+	mp := &MockProvider{
 		config: conf,
 		mmg:    &dbmigratemocks.Driver{},
 	}
@@ -58,24 +62,24 @@ func newMockProvider() *mockProvider {
 }
 
 // init is a convenience to init for tests that aren't testing init itself
-func (mp *mockProvider) init() (*mockProvider, sqlmock.Sqlmock) {
+func (mp *MockProvider) UTInit() (*MockProvider, sqlmock.Sqlmock) {
 	_ = mp.Init(context.Background(), mp, mp.config)
 	return mp, mp.mdb
 }
 
-func (mp *mockProvider) Name() string {
+func (mp *MockProvider) Name() string {
 	return "mockdb"
 }
 
-func (mp *mockProvider) SequenceColumn() string {
+func (mp *MockProvider) SequenceColumn() string {
 	return "seq"
 }
 
-func (mp *mockProvider) MigrationsDir() string {
+func (mp *MockProvider) MigrationsDir() string {
 	return mp.Name()
 }
 
-func (psql *mockProvider) Features() SQLFeatures {
+func (mp *MockProvider) Features() SQLFeatures {
 	features := DefaultSQLProviderFeatures()
 	features.UseILIKE = true
 	features.AcquireLock = func(lockName string) string {
@@ -84,17 +88,17 @@ func (psql *mockProvider) Features() SQLFeatures {
 	return features
 }
 
-func (mp *mockProvider) ApplyInsertQueryCustomizations(insert sq.InsertBuilder, requestConflictEmptyResult bool) (sq.InsertBuilder, bool) {
-	if mp.fakePSQLInsert {
+func (mp *MockProvider) ApplyInsertQueryCustomizations(insert sq.InsertBuilder, _ bool) (sq.InsertBuilder, bool) {
+	if mp.FakePSQLInsert {
 		return insert.Suffix(" RETURNING seq"), true
 	}
 	return insert, false
 }
 
-func (mp *mockProvider) Open(url string) (*sql.DB, error) {
-	return mp.mockDB, mp.openError
+func (mp *MockProvider) Open(_ string) (*sql.DB, error) {
+	return mp.mockDB, mp.OpenError
 }
 
-func (mp *mockProvider) GetMigrationDriver(db *sql.DB) (migratedb.Driver, error) {
-	return mp.mmg, mp.getMigrationDriverError
+func (mp *MockProvider) GetMigrationDriver(_ *sql.DB) (migratedb.Driver, error) {
+	return mp.mmg, mp.GetMigrationDriverError
 }

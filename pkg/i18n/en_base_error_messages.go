@@ -144,4 +144,5 @@ var (
 	MsgInvalidTLSDnMatcherAttr                     = ffe("FF00209", "Unknown DN attribute '%s'")
 	MsgInvalidTLSDnChain                           = ffe("FF00210", "Cannot match subject distinguished name as cert chain is not verified")
 	MsgInvalidTLSDnMismatch                        = ffe("FF00211", "Certificate subject does not meet requirements")
+	MsgDBUnknownGetOption                          = ffe("FF00212", "Unknown get option (%d)", 400)
 )
