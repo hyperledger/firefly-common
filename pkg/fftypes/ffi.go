@@ -42,11 +42,13 @@ type FFI struct {
 	Message     *UUID        `ffstruct:"FFI" json:"message,omitempty" ffexcludeinput:"true"`
 	Namespace   string       `ffstruct:"FFI" json:"namespace,omitempty" ffexcludeinput:"true"`
 	Name        string       `ffstruct:"FFI" json:"name"`
+	NetworkName string       `ffstruct:"FFI" json:"networkName,omitempty"`
 	Description string       `ffstruct:"FFI" json:"description"`
 	Version     string       `ffstruct:"FFI" json:"version"`
 	Methods     []*FFIMethod `ffstruct:"FFI" json:"methods,omitempty"`
 	Events      []*FFIEvent  `ffstruct:"FFI" json:"events,omitempty"`
 	Errors      []*FFIError  `ffstruct:"FFI" json:"errors,omitempty"`
+	Published   bool         `ffstruct:"FFI" json:"published" ffexcludeinput:"true"`
 }
 
 type FFIMethod struct {
@@ -111,7 +113,15 @@ func (f *FFI) Validate(ctx context.Context) (err error) {
 	if err = ValidateFFNameField(ctx, f.Name, "name"); err != nil {
 		return err
 	}
-	return ValidateFFNameField(ctx, f.Version, "version")
+	if err = ValidateFFNameField(ctx, f.Version, "version"); err != nil {
+		return err
+	}
+	if f.NetworkName != "" {
+		if err = ValidateFFNameField(ctx, f.NetworkName, "networkName"); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (f *FFI) Topic() string {
