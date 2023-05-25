@@ -501,14 +501,14 @@ func isNil(o interface{}) bool {
 
 	value := reflect.ValueOf(o)
 	kind := value.Kind()
-	isNilableKind := containsKind(
+	isNillableKind := containsKind(
 		[]reflect.Kind{
 			reflect.Chan, reflect.Func,
 			reflect.Interface, reflect.Map,
 			reflect.Ptr, reflect.Slice},
 		kind)
 
-	if isNilableKind && value.IsNil() {
+	if isNillableKind && value.IsNil() {
 		return true
 	}
 
