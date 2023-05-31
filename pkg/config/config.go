@@ -123,6 +123,8 @@ type ArraySection interface {
 	ArraySize() int
 	ArrayEntry(i int) Section
 	SubSection(name string) Section
+	SubArray(name string) ArraySection
+	SetDefault(key string, defValue interface{})
 }
 
 // RootKey key are the known configuration keys
@@ -351,6 +353,23 @@ func (c *configSection) SubArray(name string) ArraySection {
 	return a
 }
 
+func (c *configArray) SubArray(name string) ArraySection {
+	a := &configArray{
+		base:     keyName(c.base+"[]", name),
+		parent:   c,
+		defaults: make(map[string][]interface{}),
+	}
+	// Get defaults from any enclosing array entry, and copy over any applicable to this subtree
+	// This is necessary to propagate known keys for arrays within arrays
+	prefix := a.base + "[]."
+	for key, val := range getArrayEntryDefaults(c) {
+		if strings.HasPrefix(key, prefix) {
+			a.defaults[strings.TrimPrefix(key, prefix)] = val
+		}
+	}
+	return a
+}
+
 func (c *configArray) ArraySize() int {
 	val := viper.Get(c.base)
 	vt := reflect.TypeOf(val)
@@ -431,6 +450,12 @@ func (c *configSection) AddChild(k string, defValue ...interface{}) {
 
 func (c *configSection) SetDefault(k string, defValue interface{}) {
 	key := keyName(c.prefix, k)
+	viper.SetDefault(key, defValue)
+	c.AddChild(key, defValue)
+}
+
+func (c *configArray) SetDefault(k string, defValue interface{}) {
+	key := keyName(c.base+"[]", k)
 	viper.SetDefault(key, defValue)
 	c.AddChild(key, defValue)
 }

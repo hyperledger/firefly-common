@@ -198,6 +198,43 @@ plugins:
 	assert.Equal(t, "defname", bobheaders.ArrayEntry(1).GetString("name"))
 }
 
+func TestNestedArrays(t *testing.T) {
+	defer RootConfigReset()
+
+	namespacesRoot := RootSection("namespaces")
+	predefined := namespacesRoot.SubArray("predefined")
+	predefined.AddKnownKey("name")
+	predefined.AddKnownKey("key1", "default value")
+	tlsConfigs := predefined.SubArray("tlsConfigs")
+	tlsConfigs.SetDefault("testdefault", "test")
+	tlsConfigs.AddKnownKey("name")
+	tlsConfigs.SubSection("tls").AddKnownKey("enabled")
+	tlsConfigs.SubSection("tls").SetDefault("testdefault", "test")
+	viper.SetConfigType("yaml")
+	err := viper.ReadConfig(strings.NewReader(`
+namespaces:
+  predefined:
+  - name: myns
+    tlsConfigs:
+    - name: myconfig
+      tls:
+        enabled: true
+`))
+	assert.NoError(t, err)
+	assert.Equal(t, 1, predefined.ArraySize())
+	assert.Equal(t, 0, RootArray("nonexistent").ArraySize())
+	ns := predefined.ArrayEntry(0)
+	assert.Equal(t, "myns", ns.GetString("name"))
+	assert.Equal(t, "default value", ns.GetString("key1"))
+	nsTLSConfigs := ns.SubArray("tlsConfigs")
+	assert.Equal(t, 1, nsTLSConfigs.ArraySize())
+	tlsConfig := nsTLSConfigs.ArrayEntry(0)
+	assert.Equal(t, "myconfig", tlsConfig.GetString("name"))
+	assert.Equal(t, "test", tlsConfig.GetString("testdefault"))
+	assert.Equal(t, true, tlsConfig.SubSection("tls").GetBool("enabled"))
+	assert.Equal(t, "test", tlsConfig.SubSection("tls").GetString("testdefault"))
+}
+
 func TestMapOfAdminOverridePlugins(t *testing.T) {
 	defer RootConfigReset()
 
