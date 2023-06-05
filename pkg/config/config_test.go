@@ -234,6 +234,47 @@ namespaces:
 	assert.Equal(t, true, tlsConfig.SubSection("tls").GetBool("enabled"))
 	assert.Equal(t, "test", tlsConfig.SubSection("tls").GetString("testdefault"))
 }
+func TestNestedArraysObjectDefault(t *testing.T) {
+	defer RootConfigReset()
+
+	namespacesRoot := RootSection("namespaces")
+	predefined := namespacesRoot.SubArray("predefined")
+	predefined.AddKnownKey("name")
+	predefined.AddKnownKey("key1", "default value")
+	newSection := predefined.SubSection("new")
+	tlsConfigs := newSection.SubArray("tlsConfigs")
+	tlsConfigs.SetDefault("testdefault", "test")
+	tlsConfigs.AddKnownKey("name")
+	tlsConfigs.SubSection("tls").AddKnownKey("enabled")
+	tlsConfigs.SubSection("tls").SetDefault("testdefault", "test")
+	viper.SetConfigType("yaml")
+	// thing.stuff[].watsit.hoojars[].mydefault
+
+	err := viper.ReadConfig(strings.NewReader(`
+namespaces:
+  predefined:
+  - name: myns
+    new:
+      tlsConfigs:
+      - name: myconfig
+        tls:
+          enabled: true
+`))
+	assert.NoError(t, err)
+	assert.Equal(t, 1, predefined.ArraySize())
+	assert.Equal(t, 0, RootArray("nonexistent").ArraySize())
+	ns := predefined.ArrayEntry(0)
+	assert.Equal(t, "myns", ns.GetString("name"))
+	assert.Equal(t, "default value", ns.GetString("key1"))
+	section := ns.SubSection("new")
+	nsTLSConfigs := section.SubArray("tlsConfigs")
+	assert.Equal(t, 1, nsTLSConfigs.ArraySize())
+	tlsConfig := nsTLSConfigs.ArrayEntry(0)
+	assert.Equal(t, "myconfig", tlsConfig.GetString("name"))
+	assert.Equal(t, "test", tlsConfig.GetString("testdefault"))
+	assert.Equal(t, true, tlsConfig.SubSection("tls").GetBool("enabled"))
+	assert.Equal(t, "test", tlsConfig.SubSection("tls").GetString("testdefault"))
+}
 
 func TestMapOfAdminOverridePlugins(t *testing.T) {
 	defer RootConfigReset()
