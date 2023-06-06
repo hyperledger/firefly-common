@@ -354,20 +354,11 @@ func (c *configSection) SubArray(name string) ArraySection {
 }
 
 func (c *configArray) SubArray(name string) ArraySection {
-	a := &configArray{
+	return &configArray{
 		base:     keyName(c.base+"[]", name),
 		parent:   c,
 		defaults: make(map[string][]interface{}),
 	}
-	// Get defaults from any enclosing array entry, and copy over any applicable to this subtree
-	// This is necessary to propagate known keys for arrays within arrays
-	prefix := a.base + "[]."
-	for key, val := range getArrayEntryDefaults(c) {
-		if strings.HasPrefix(key, prefix) {
-			a.defaults[strings.TrimPrefix(key, prefix)] = val
-		}
-	}
-	return a
 }
 
 func (c *configArray) ArraySize() int {
