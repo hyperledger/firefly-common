@@ -117,7 +117,7 @@ func newCRUDCollection(db *Database, ns string) *TestCRUD {
 			},
 		},
 	}
-	tc.CrudBase.EventHandler = func(id *fftypes.UUID, eventType ChangeEventType) {
+	tc.CrudBase.EventHandler = func(id string, eventType ChangeEventType) {
 		tc.events = append(tc.events, eventType)
 	}
 	tc.postCommit = func() { tc.postCommits++ }
@@ -225,7 +225,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	collection.events = nil
 
 	// Check we get it back
-	c1copy, err := iCrud.GetByID(ctx, c1.ID)
+	c1copy, err := iCrud.GetByID(ctx, c1.ID.String())
 	assert.NoError(t, err)
 	checkEqualExceptTimes(t, *c1, *c1copy)
 
@@ -234,7 +234,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	created, err := iCrud.Upsert(ctx, c1copy, UpsertOptimizationExisting)
 	assert.NoError(t, err)
 	assert.False(t, created)
-	c1copy1, err := iCrud.GetByID(ctx, c1.ID)
+	c1copy1, err := iCrud.GetByID(ctx, c1.ID.String())
 	assert.NoError(t, err)
 	checkEqualExceptTimes(t, *c1copy, *c1copy1)
 	assert.Len(t, collection.events, 1)
@@ -246,7 +246,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	created, err = iCrud.Upsert(ctx, c1copy, UpsertOptimizationNew, collection.postCommit)
 	assert.NoError(t, err)
 	assert.False(t, created)
-	c1copy2, err := iCrud.GetByID(ctx, c1.ID)
+	c1copy2, err := iCrud.GetByID(ctx, c1.ID.String())
 	assert.NoError(t, err)
 	checkEqualExceptTimes(t, *c1copy, *c1copy2)
 
@@ -254,17 +254,17 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	c1copy.Field1 = strPtr("hello again - 3")
 	err = iCrud.Replace(ctx, c1copy, collection.postCommit)
 	assert.NoError(t, err)
-	c1copy3, err := iCrud.GetByID(ctx, c1.ID)
+	c1copy3, err := iCrud.GetByID(ctx, c1.ID.String())
 	assert.NoError(t, err)
 	checkEqualExceptTimes(t, *c1copy, *c1copy3)
 
 	// Explicitly update it
 	c1copy.Field1 = strPtr("hello again - 4")
-	err = iCrud.Update(ctx, c1copy.ID, CRUDableQueryFactory.NewUpdate(ctx).Set(
+	err = iCrud.Update(ctx, c1copy.ID.String(), CRUDableQueryFactory.NewUpdate(ctx).Set(
 		"f1", *c1copy.Field1,
 	), collection.postCommit)
 	assert.NoError(t, err)
-	c1copy4, err := iCrud.GetByID(ctx, c1.ID)
+	c1copy4, err := iCrud.GetByID(ctx, c1.ID.String())
 	assert.NoError(t, err)
 	checkEqualExceptTimes(t, *c1copy, *c1copy4)
 
@@ -278,7 +278,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	}
 	err = iCrud.UpdateSparse(ctx, sparseUpdate, collection.postCommit)
 	assert.NoError(t, err)
-	c1copy5, err := iCrud.GetByID(ctx, c1.ID)
+	c1copy5, err := iCrud.GetByID(ctx, c1.ID.String())
 	assert.NoError(t, err)
 	checkEqualExceptTimes(t, *c1copy, *c1copy5)
 
@@ -293,7 +293,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	created, err = iCrud.Upsert(ctx, &c2, UpsertOptimizationNew)
 	assert.NoError(t, err)
 	assert.True(t, created)
-	c2copy1, err := iCrud.GetByID(ctx, c2.ID)
+	c2copy1, err := iCrud.GetByID(ctx, c2.ID.String())
 	assert.NoError(t, err)
 	checkEqualExceptTimes(t, c2, *c2copy1)
 
@@ -321,7 +321,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Grab one
-	bunch5copy, err := iCrud.GetByID(ctx, bunchOfCRUDables[4].ID)
+	bunch5copy, err := iCrud.GetByID(ctx, bunchOfCRUDables[4].ID.String())
 	assert.NoError(t, err)
 	checkEqualExceptTimes(t, *bunchOfCRUDables[4], *bunch5copy)
 
@@ -335,17 +335,17 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	checkEqualExceptTimes(t, *bunchOfCRUDables[4], *bunch5copy)
 
 	for i := range bunchOfCRUDables {
-		ci, err := iCrud.GetByID(ctx, bunchOfCRUDables[i].ID)
+		ci, err := iCrud.GetByID(ctx, bunchOfCRUDables[i].ID.String())
 		assert.NoError(t, err)
 		assert.Equal(t, int64(929292), ci.Field2.Int64())
 	}
 
 	// Delete it
-	err = iCrud.Delete(ctx, bunchOfCRUDables[4].ID, collection.postCommit)
+	err = iCrud.Delete(ctx, bunchOfCRUDables[4].ID.String(), collection.postCommit)
 	assert.NoError(t, err)
 
 	// Check it's gone
-	goneOne, err := iCrud.GetByID(ctx, bunchOfCRUDables[4].ID)
+	goneOne, err := iCrud.GetByID(ctx, bunchOfCRUDables[4].ID.String())
 	assert.NoError(t, err)
 	assert.Nil(t, goneOne)
 
@@ -388,7 +388,7 @@ func TestLeftJOINExample(t *testing.T) {
 	err = linkables.Insert(ctx, l1)
 	assert.NoError(t, err)
 
-	l1Copy, err := linkables.GetByID(ctx, l1.ID)
+	l1Copy, err := linkables.GetByID(ctx, l1.ID.String())
 	assert.NoError(t, err)
 	assert.Equal(t, c1.ID, l1Copy.CrudID)
 	assert.Equal(t, "linked to C1", l1Copy.Description)
@@ -396,7 +396,7 @@ func TestLeftJOINExample(t *testing.T) {
 	assert.Equal(t, int64(11111), l1Copy.Field2.Int64() /* from JOIN */)
 	assert.Equal(t, int64(1), l1Copy.Field3.JSONObject().GetInt64("linked") /* from JOIN */)
 
-	l1s, _, err := linkables.GetMany(ctx, LinkableQueryFactory.NewFilter(ctx).Eq("crud", c1.ID))
+	l1s, _, err := linkables.GetMany(ctx, LinkableQueryFactory.NewFilter(ctx).Eq("crud", c1.ID.String()))
 	assert.NoError(t, err)
 	assert.Len(t, l1s, 1)
 	assert.Equal(t, c1.ID, l1s[0].CrudID)
@@ -546,7 +546,7 @@ func TestGetByIDNotFound(t *testing.T) {
 	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectQuery("SELECT.*").WillReturnRows(sqlmock.NewRows([]string{}))
-	_, err := tc.GetByID(context.Background(), fftypes.NewUUID(), FailIfNotFound)
+	_, err := tc.GetByID(context.Background(), fftypes.NewUUID().String(), FailIfNotFound)
 	assert.Regexp(t, "FF00164", err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -554,7 +554,7 @@ func TestGetByIDNotFound(t *testing.T) {
 func TestGetByIDBadOpts(t *testing.T) {
 	db, _ := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
-	_, err := tc.GetByID(context.Background(), fftypes.NewUUID(), GetOption(999))
+	_, err := tc.GetByID(context.Background(), fftypes.NewUUID().String(), GetOption(999))
 	assert.Regexp(t, "FF00212", err)
 }
 
@@ -562,7 +562,7 @@ func TestGetByIDSelectFail(t *testing.T) {
 	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectQuery("SELECT.*").WillReturnError(fmt.Errorf("pop"))
-	_, err := tc.GetByID(context.Background(), fftypes.NewUUID())
+	_, err := tc.GetByID(context.Background(), fftypes.NewUUID().String())
 	assert.Regexp(t, "FF00176", err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -571,7 +571,7 @@ func TestGetByIDScanFail(t *testing.T) {
 	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectQuery("SELECT.*").WillReturnRows(sqlmock.NewRows([]string{}).AddRow())
-	_, err := tc.GetByID(context.Background(), fftypes.NewUUID())
+	_, err := tc.GetByID(context.Background(), fftypes.NewUUID().String())
 	assert.Regexp(t, "FF00182", err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -607,7 +607,7 @@ func TestUpdateBeginFail(t *testing.T) {
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
 	mock.ExpectExec("UPDATE.*").WillReturnResult(driver.ResultNoRows)
-	err := tc.Update(context.Background(), fftypes.NewUUID(), CRUDableQueryFactory.NewUpdate(context.Background()).Set("f1", "12345"))
+	err := tc.Update(context.Background(), fftypes.NewUUID().String(), CRUDableQueryFactory.NewUpdate(context.Background()).Set("f1", "12345"))
 	assert.Regexp(t, "FF00175", err)
 }
 
@@ -626,7 +626,7 @@ func TestUpdateUpdateFail(t *testing.T) {
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE.*").WillReturnError(fmt.Errorf("pop"))
-	err := tc.Update(context.Background(), fftypes.NewUUID(), CRUDableQueryFactory.NewUpdate(context.Background()).Set("f1", "12345"))
+	err := tc.Update(context.Background(), fftypes.NewUUID().String(), CRUDableQueryFactory.NewUpdate(context.Background()).Set("f1", "12345"))
 	assert.Regexp(t, "FF00178", err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -636,7 +636,7 @@ func TestUpdateNowRows(t *testing.T) {
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE.*").WillReturnResult(driver.ResultNoRows)
-	err := tc.Update(context.Background(), fftypes.NewUUID(), CRUDableQueryFactory.NewUpdate(context.Background()).Set("f1", "12345"))
+	err := tc.Update(context.Background(), fftypes.NewUUID().String(), CRUDableQueryFactory.NewUpdate(context.Background()).Set("f1", "12345"))
 	assert.Regexp(t, "FF00205", err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -646,7 +646,7 @@ func TestDeleteBeginFail(t *testing.T) {
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
 	mock.ExpectExec("UPDATE.*").WillReturnResult(driver.ResultNoRows)
-	err := tc.Delete(context.Background(), fftypes.NewUUID())
+	err := tc.Delete(context.Background(), fftypes.NewUUID().String())
 	assert.Regexp(t, "FF00175", err)
 }
 
@@ -655,7 +655,7 @@ func TestDeleteDeleteFail(t *testing.T) {
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
 	mock.ExpectExec("DELETE.*").WillReturnError(fmt.Errorf("pop"))
-	err := tc.Delete(context.Background(), fftypes.NewUUID())
+	err := tc.Delete(context.Background(), fftypes.NewUUID().String())
 	assert.Regexp(t, "FF00179", err)
 }
 

@@ -61,19 +61,22 @@ const (
 type PostCompletionHook func()
 
 type Resource interface {
-	GetID() *fftypes.UUID
+	GetID() string
 	SetCreated(*fftypes.FFTime)
 	SetUpdated(*fftypes.FFTime)
 }
 
+// Resource is the default implementation of the Resource interface, but consumers of this
+// package can implement the interface directly if they want to use different field names
+// or field types for the fields.
 type ResourceBase struct {
 	ID      *fftypes.UUID   `ffstruct:"ResourceBase" json:"id"`
 	Created *fftypes.FFTime `ffstruct:"ResourceBase" json:"created"`
 	Updated *fftypes.FFTime `ffstruct:"ResourceBase" json:"updated"`
 }
 
-func (r *ResourceBase) GetID() *fftypes.UUID {
-	return r.ID
+func (r *ResourceBase) GetID() string {
+	return r.ID.String() // nil safe
 }
 
 func (r *ResourceBase) SetCreated(t *fftypes.FFTime) {
@@ -90,12 +93,12 @@ type CRUD[T Resource] interface {
 	InsertMany(ctx context.Context, instances []T, allowPartialSuccess bool, hooks ...PostCompletionHook) (err error)
 	Insert(ctx context.Context, inst T, hooks ...PostCompletionHook) (err error)
 	Replace(ctx context.Context, inst T, hooks ...PostCompletionHook) (err error)
-	GetByID(ctx context.Context, id *fftypes.UUID, getOpts ...GetOption) (inst T, err error)
+	GetByID(ctx context.Context, id string, getOpts ...GetOption) (inst T, err error)
 	GetMany(ctx context.Context, filter ffapi.Filter) (instances []T, fr *ffapi.FilterResult, err error)
-	Update(ctx context.Context, id *fftypes.UUID, update ffapi.Update, hooks ...PostCompletionHook) (err error)
+	Update(ctx context.Context, id string, update ffapi.Update, hooks ...PostCompletionHook) (err error)
 	UpdateSparse(ctx context.Context, sparseUpdate T, hooks ...PostCompletionHook) (err error)
 	UpdateMany(ctx context.Context, filter ffapi.Filter, update ffapi.Update, hooks ...PostCompletionHook) (err error)
-	Delete(ctx context.Context, id *fftypes.UUID, hooks ...PostCompletionHook) (err error)
+	Delete(ctx context.Context, id string, hooks ...PostCompletionHook) (err error)
 }
 
 type CrudBase[T Resource] struct {
@@ -108,7 +111,7 @@ type CrudBase[T Resource] struct {
 	NilValue     func() T // nil value typed to T
 	NewInstance  func() T
 	ScopedFilter func() sq.Eq
-	EventHandler func(id *fftypes.UUID, eventType ChangeEventType)
+	EventHandler func(id string, eventType ChangeEventType)
 	GetFieldPtr  func(inst T, col string) interface{}
 
 	// Optional extensions
@@ -168,7 +171,7 @@ func (c *CrudBase[T]) Validate() {
 	}
 }
 
-func (c *CrudBase[T]) idFilter(id *fftypes.UUID) sq.Eq {
+func (c *CrudBase[T]) idFilter(id string) sq.Eq {
 	filter := c.ScopedFilter()
 	if c.ReadTableAlias != "" {
 		filter[fmt.Sprintf("%s.id", c.ReadTableAlias)] = id
@@ -407,7 +410,7 @@ func (c *CrudBase[T]) getReadCols() (tableFrom string, cols, readCols []string) 
 	return tableFrom, cols, readCols
 }
 
-func (c *CrudBase[T]) GetByID(ctx context.Context, id *fftypes.UUID, getOpts ...GetOption) (inst T, err error) {
+func (c *CrudBase[T]) GetByID(ctx context.Context, id string, getOpts ...GetOption) (inst T, err error) {
 
 	failNotFound := false
 	for _, o := range getOpts {
@@ -478,7 +481,7 @@ func (c *CrudBase[T]) GetMany(ctx context.Context, filter ffapi.Filter) (instanc
 	return instances, c.DB.QueryRes(ctx, c.Table, tx, fop, fi), err
 }
 
-func (c *CrudBase[T]) Update(ctx context.Context, id *fftypes.UUID, update ffapi.Update, hooks ...PostCompletionHook) (err error) {
+func (c *CrudBase[T]) Update(ctx context.Context, id string, update ffapi.Update, hooks ...PostCompletionHook) (err error) {
 	return c.attemptUpdate(ctx, func(query sq.UpdateBuilder) (sq.UpdateBuilder, error) {
 		return query.Where(sq.Eq{"id": id}), nil
 	}, update, true, hooks...)
@@ -575,7 +578,7 @@ func (c *CrudBase[T]) attemptUpdate(ctx context.Context, filterFn func(sq.Update
 	return c.DB.CommitTx(ctx, tx, autoCommit)
 }
 
-func (c *CrudBase[T]) Delete(ctx context.Context, id *fftypes.UUID, hooks ...PostCompletionHook) (err error) {
+func (c *CrudBase[T]) Delete(ctx context.Context, id string, hooks ...PostCompletionHook) (err error) {
 
 	ctx, tx, autoCommit, err := c.DB.BeginOrUseTx(ctx)
 	if err != nil {
