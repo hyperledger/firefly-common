@@ -18,6 +18,7 @@ package wsclient
 
 import (
 	"context"
+	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/ffresty"
@@ -27,7 +28,8 @@ import (
 const (
 	defaultInitialConnectAttempts = 5
 	defaultBufferSize             = "16Kb"
-	defaultHeartbeatInterval      = "30s" // up to a minute to detect a dead connection
+	defaultHeartbeatInterval      = "30s"            // up to a minute to detect a dead connection
+	defaultConnectionTimeout      = 45 * time.Second // 45 seconds - the built in default for gorilla/websocket
 )
 
 const (
@@ -41,8 +43,10 @@ const (
 	WSConfigKeyInitialConnectAttempts = "ws.initialConnectAttempts"
 	// WSConfigKeyPath if set will define the path to connect to - allows sharing of the same URL between HTTP and WebSocket connection info
 	WSConfigKeyPath = "ws.path"
-	// WSConfigHeartbeatInterval is the frequency of ping/pong requests, and also used for the timeout to receive a response to the heartbeat
-	WSConfigHeartbeatInterval = "ws.heartbeatInterval"
+	// WSConfigKeyHeartbeatInterval is the frequency of ping/pong requests, and also used for the timeout to receive a response to the heartbeat
+	WSConfigKeyHeartbeatInterval = "ws.heartbeatInterval"
+	// WSConnectionTimeout is the amount of time to wait while attempting to establish a connection (or automatic reconnection)
+	WSConfigKeyConnectionTimeout = "ws.connectionTimeout"
 )
 
 // InitConfig ensures the config is initialized for HTTP too, as WS and HTTP
@@ -53,7 +57,8 @@ func InitConfig(conf config.Section) {
 	conf.AddKnownKey(WSConfigKeyReadBufferSize, defaultBufferSize)
 	conf.AddKnownKey(WSConfigKeyInitialConnectAttempts, defaultInitialConnectAttempts)
 	conf.AddKnownKey(WSConfigKeyPath)
-	conf.AddKnownKey(WSConfigHeartbeatInterval, defaultHeartbeatInterval)
+	conf.AddKnownKey(WSConfigKeyHeartbeatInterval, defaultHeartbeatInterval)
+	conf.AddKnownKey(WSConfigKeyConnectionTimeout, defaultConnectionTimeout)
 }
 
 func GenerateConfig(ctx context.Context, conf config.Section) (*WSConfig, error) {
@@ -68,7 +73,8 @@ func GenerateConfig(ctx context.Context, conf config.Section) (*WSConfig, error)
 		HTTPHeaders:            conf.GetObject(ffresty.HTTPConfigHeaders),
 		AuthUsername:           conf.GetString(ffresty.HTTPConfigAuthUsername),
 		AuthPassword:           conf.GetString(ffresty.HTTPConfigAuthPassword),
-		HeartbeatInterval:      conf.GetDuration(WSConfigHeartbeatInterval),
+		HeartbeatInterval:      conf.GetDuration(WSConfigKeyHeartbeatInterval),
+		ConnectionTimeout:      conf.GetDuration(WSConfigKeyConnectionTimeout),
 	}
 	tlsSection := conf.SubSection("tls")
 	tlsClientConfig, err := fftls.ConstructTLSConfig(ctx, tlsSection, fftls.ClientType)

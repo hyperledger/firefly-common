@@ -48,6 +48,7 @@ type WSConfig struct {
 	HTTPHeaders            fftypes.JSONObject `json:"headers,omitempty"`
 	HeartbeatInterval      time.Duration      `json:"heartbeatInterval,omitempty"`
 	TLSClientConfig        *tls.Config        `json:"tlsClientConfig,omitempty"`
+	ConnectionTimeout      time.Duration      `json:"connectionTimeout,omitempty"`
 	// This one cannot be set in JSON - must be configured on the code interface
 	ReceiveExt bool
 }
@@ -124,9 +125,10 @@ func New(ctx context.Context, config *WSConfig, beforeConnect WSPreConnectHandle
 		ctx: ctx,
 		url: wsURL,
 		wsdialer: &websocket.Dialer{
-			ReadBufferSize:  config.ReadBufferSize,
-			WriteBufferSize: config.WriteBufferSize,
-			TLSClientConfig: config.TLSClientConfig,
+			ReadBufferSize:   config.ReadBufferSize,
+			WriteBufferSize:  config.WriteBufferSize,
+			TLSClientConfig:  config.TLSClientConfig,
+			HandshakeTimeout: config.ConnectionTimeout,
 		},
 		retry: retry.Retry{
 			InitialDelay: config.InitialDelay,
