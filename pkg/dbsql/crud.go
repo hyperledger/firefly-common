@@ -99,6 +99,7 @@ type CRUD[T Resource] interface {
 	UpdateSparse(ctx context.Context, sparseUpdate T, hooks ...PostCompletionHook) (err error)
 	UpdateMany(ctx context.Context, filter ffapi.Filter, update ffapi.Update, hooks ...PostCompletionHook) (err error)
 	Delete(ctx context.Context, id string, hooks ...PostCompletionHook) (err error)
+	DeleteMany(ctx context.Context, filter ffapi.Filter, hooks ...PostCompletionHook) (err error) // no events
 }
 
 type CrudBase[T Resource] struct {
@@ -107,6 +108,7 @@ type CrudBase[T Resource] struct {
 	Columns          []string
 	FilterFieldMap   map[string]string
 	NoUpdateColumn   bool // whole entries are immutable, and do not have an updated column
+	PatchDisabled    bool // allows non-pointer fields, but prevents UpdateSparse function
 	ImmutableColumns []string
 
 	NilValue     func() T // nil value typed to T
@@ -154,7 +156,9 @@ func (c *CrudBase[T]) Validate() {
 		fieldPtr := c.GetFieldPtr(inst, col)
 		ptrVal := reflect.ValueOf(fieldPtr)
 		if ptrVal.Kind() != reflect.Ptr || !isNil(ptrVal.Elem().Interface()) {
-			panic(fmt.Sprintf("field %s does not seem to be a pointer type - prevents null-check for PATCH semantics functioning", col))
+			if !c.PatchDisabled {
+				panic(fmt.Sprintf("field %s does not seem to be a pointer type - prevents null-check for PATCH semantics functioning", col))
+			}
 		}
 		ptrs[col] = fieldPtr
 	}
@@ -166,16 +170,18 @@ func (c *CrudBase[T]) Validate() {
 	if !isNil(c.NilValue()) {
 		panic("NilValue() value must be nil")
 	}
-	if isNil(c.ScopedFilter()) {
-		panic("ScopedFilter() value must not be nil")
-	}
 	if !isNil(c.GetFieldPtr(inst, fftypes.NewUUID().String())) {
 		panic("GetFieldPtr() must return nil for unknown column")
 	}
 }
 
 func (c *CrudBase[T]) idFilter(id string) sq.Eq {
-	filter := c.ScopedFilter()
+	var filter sq.Eq
+	if c.ScopedFilter != nil {
+		filter = c.ScopedFilter()
+	} else {
+		filter = sq.Eq{}
+	}
 	if c.ReadTableAlias != "" {
 		filter[fmt.Sprintf("%s.id", c.ReadTableAlias)] = id
 	} else {
@@ -462,10 +468,14 @@ func (c *CrudBase[T]) GetByID(ctx context.Context, id string, getOpts ...GetOpti
 
 func (c *CrudBase[T]) GetMany(ctx context.Context, filter ffapi.Filter) (instances []T, fr *ffapi.FilterResult, err error) {
 	tableFrom, cols, readCols := c.getReadCols()
+	var preconditions []sq.Sqlizer
+	if c.ScopedFilter != nil {
+		preconditions = []sq.Sqlizer{c.ScopedFilter()}
+	}
 	query, fop, fi, err := c.DB.FilterSelect(ctx, c.ReadTableAlias, sq.Select(readCols...).From(tableFrom), filter, c.FilterFieldMap,
 		[]interface{}{
 			&ffapi.SortField{Field: c.DB.sequenceColumn, Descending: true},
-		}, c.ScopedFilter())
+		}, preconditions...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -528,6 +538,10 @@ func isNil(o interface{}) bool {
 }
 
 func (c *CrudBase[T]) UpdateSparse(ctx context.Context, sparseUpdate T, hooks ...PostCompletionHook) (err error) {
+	if c.PatchDisabled {
+		return i18n.NewError(ctx, i18n.MsgDBPatchNotSupportedForCollection, c.Table)
+	}
+
 	ctx, tx, autoCommit, err := c.DB.BeginOrUseTx(ctx)
 	if err != nil {
 		return err
@@ -562,7 +576,11 @@ func (c *CrudBase[T]) attemptUpdate(ctx context.Context, filterFn func(sq.Update
 	}
 	defer c.DB.RollbackTx(ctx, tx, autoCommit)
 
-	query, err := c.DB.BuildUpdate(sq.Update(c.Table).Where(c.ScopedFilter()), update, c.FilterFieldMap)
+	baseQuery := sq.Update(c.Table)
+	if c.ScopedFilter != nil {
+		baseQuery = baseQuery.Where(c.ScopedFilter())
+	}
+	query, err := c.DB.BuildUpdate(baseQuery, update, c.FilterFieldMap)
 	if err == nil {
 		query, err = filterFn(query)
 	}
@@ -605,6 +623,42 @@ func (c *CrudBase[T]) Delete(ctx context.Context, id string, hooks ...PostComple
 		}
 	})
 	if err != nil {
+		return err
+	}
+
+	for _, hook := range hooks {
+		tx.AddPostCommitHook(hook)
+	}
+
+	return c.DB.CommitTx(ctx, tx, autoCommit)
+
+}
+
+func (c *CrudBase[T]) DeleteMany(ctx context.Context, filter ffapi.Filter, hooks ...PostCompletionHook) (err error) {
+
+	ctx, tx, autoCommit, err := c.DB.BeginOrUseTx(ctx)
+	if err != nil {
+		return err
+	}
+	defer c.DB.RollbackTx(ctx, tx, autoCommit)
+
+	var fop sq.Sqlizer
+	fi, err := filter.Finalize()
+	if err == nil {
+		fop, err = c.DB.filterOp(ctx, c.Table, fi, c.FilterFieldMap)
+	}
+	if err != nil {
+		return err
+	}
+
+	if c.ScopedFilter != nil {
+		fop = sq.And{
+			c.ScopedFilter(),
+			fop,
+		}
+	}
+	err = c.DB.DeleteTx(ctx, c.Table, tx, sq.Delete(c.Table).Where(fop), nil /* no event hooks support for DeleteMany */)
+	if err != nil && err != fftypes.DeleteRecordNotFound /* no entries is fine */ {
 		return err
 	}
 

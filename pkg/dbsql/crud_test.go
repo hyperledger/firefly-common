@@ -49,6 +49,37 @@ var CRUDableQueryFactory = &ffapi.QueryFields{
 	"f3":      &ffapi.JSONField{},
 }
 
+// TestHistory shows a simple object:
+// - without pointer fields (so no patch support)
+// - with just an insert time, not an updated field
+// - with a simple string ID
+// - without namespacing
+type TestHistory struct {
+	ID      string          `json:"id"`
+	Time    *fftypes.FFTime `json:"time"`
+	Subject string          `json:"subject"`
+	Info    string          `json:"info"`
+}
+
+var HistoryQueryFactory = &ffapi.QueryFields{
+	"id":      &ffapi.UUIDField{},
+	"time":    &ffapi.TimeField{},
+	"subject": &ffapi.StringField{},
+	"info":    &ffapi.StringField{},
+}
+
+func (h *TestHistory) GetID() string {
+	return h.ID
+}
+
+func (h *TestHistory) SetCreated(t *fftypes.FFTime) {
+	h.Time = t
+}
+
+func (h *TestHistory) SetUpdated(t *fftypes.FFTime) {
+	panic("should not be called when marked NoUpdateColumn")
+}
+
 type TestLinkable struct {
 	ResourceBase
 	NS          string           `json:"namespace"`
@@ -68,6 +99,13 @@ var LinkableQueryFactory = &ffapi.QueryFields{
 
 type TestCRUD struct {
 	*CrudBase[*TestCRUDable]
+	events      []ChangeEventType
+	postCommit  func()
+	postCommits int
+}
+
+type TestHistoryCRUD struct {
+	*CrudBase[*TestHistory]
 	events      []ChangeEventType
 	postCommit  func()
 	postCommits int
@@ -112,6 +150,48 @@ func newCRUDCollection(db *Database, ns string) *TestCRUD {
 					return &inst.Field2
 				case "field3":
 					return &inst.Field3
+				}
+				return nil
+			},
+		},
+	}
+	tc.CrudBase.EventHandler = func(id string, eventType ChangeEventType) {
+		tc.events = append(tc.events, eventType)
+	}
+	tc.postCommit = func() { tc.postCommits++ }
+	return tc
+}
+
+func newHistoryCollection(db *Database) *TestHistoryCRUD {
+	tc := &TestHistoryCRUD{
+		CrudBase: &CrudBase[*TestHistory]{
+			DB:    db,
+			Table: "history",
+			Columns: []string{
+				ColumnID,
+				ColumnCreated,
+				"subject",
+				"info",
+			},
+			FilterFieldMap: map[string]string{
+				"time": ColumnCreated,
+			},
+			NoUpdateColumn: true,
+			PatchDisabled:  true,
+			NilValue:       func() *TestHistory { return nil },
+			NewInstance:    func() *TestHistory { return &TestHistory{} },
+			ScopedFilter:   nil, // no scoping on this collection
+			EventHandler:   nil, // set below
+			GetFieldPtr: func(inst *TestHistory, col string) interface{} {
+				switch col {
+				case ColumnID:
+					return &inst.ID
+				case ColumnCreated:
+					return &inst.Time
+				case "subject":
+					return &inst.Subject
+				case "info":
+					return &inst.Info
 				}
 				return nil
 			},
@@ -354,64 +434,84 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 
 }
 
-func TestCRUDNoUpdateColumn(t *testing.T) {
+func TestHistoryExampleNoNSOrUpdateColumn(t *testing.T) {
 	log.SetLevel("trace")
 
 	db, done := newSQLiteTestProvider(t)
 	defer done()
 	ctx := context.Background()
 
-	c1 := &TestCRUDable{
-		ResourceBase: ResourceBase{
-			ID: fftypes.NewUUID(),
-		},
-		NS:     strPtr("ns1"),
-		Field1: strPtr("hello1"),
-		Field2: fftypes.NewFFBigInt(12345),
-		Field3: fftypes.JSONAnyPtr(`{"some":"stuff"}`),
+	var sub1Entries []*TestHistory
+	var sub2Entries []*TestHistory
+	for i := 0; i < 10; i++ {
+		sub1Entries = append(sub1Entries, &TestHistory{
+			ID:      fftypes.NewUUID().String(),
+			Subject: "sub1",
+			Info:    fmt.Sprintf("sub1_info%.3d", i),
+		})
+		sub2Entries = append(sub2Entries, &TestHistory{
+			ID:      fftypes.NewUUID().String(),
+			Subject: "sub2",
+			Info:    fmt.Sprintf("sub2_info%.3d", i),
+		})
 	}
 
-	collection := newCRUDCollection(&db.Database, "ns1")
-	collection.Table = "crudablesnoupdate"
-	collection.NoUpdateColumn = true
-	newColumns := []string{}
-	for _, c := range collection.Columns {
-		if c != ColumnUpdated {
-			newColumns = append(newColumns, c)
-		}
-	}
-	collection.Columns = newColumns
-	var iCrud CRUD[*TestCRUDable] = collection.CrudBase
+	collection := newHistoryCollection(&db.Database)
+	var iCrud CRUD[*TestHistory] = collection.CrudBase
 	iCrud.Validate()
 
-	// Add a row
-	err := iCrud.Insert(ctx, c1, collection.postCommit)
-	assert.NoError(t, err)
-	assert.Len(t, collection.events, 1)
-	assert.Equal(t, Created, collection.events[0])
-	collection.events = nil
-
-	// Check we get it back
-	c1copy, err := iCrud.GetByID(ctx, c1.ID.String())
-	assert.NoError(t, err)
-	checkEqualExceptTimes(t, *c1, *c1copy)
-
-	// Replace it
-	c1copy.Field1 = strPtr("hello again - 3")
-	err = iCrud.Replace(ctx, c1copy, collection.postCommit)
-	assert.NoError(t, err)
-	c1copy3, err := iCrud.GetByID(ctx, c1.ID.String())
-	assert.NoError(t, err)
-	checkEqualExceptTimes(t, *c1copy, *c1copy3)
-
-	// Delete it
-	err = iCrud.Delete(ctx, c1.ID.String(), collection.postCommit)
+	// add sub1 entries 1 by 1
+	for _, e := range sub1Entries {
+		err := iCrud.Insert(ctx, e, collection.postCommit)
+		assert.NoError(t, err)
+	}
+	// add sub2 entries all at once
+	err := iCrud.InsertMany(ctx, sub2Entries, false)
 	assert.NoError(t, err)
 
-	// Check it's gone
-	goneOne, err := iCrud.GetByID(ctx, c1.ID.String())
+	// Check we get one back from each
+	s1e0, err := iCrud.GetByID(ctx, sub1Entries[0].ID)
 	assert.NoError(t, err)
-	assert.Nil(t, goneOne)
+	assert.Equal(t, sub1Entries[0].Info, s1e0.Info)
+	s2e0, err := iCrud.GetByID(ctx, sub2Entries[0].ID)
+	assert.NoError(t, err)
+	assert.Equal(t, sub2Entries[0].Info, s2e0.Info)
+
+	// Update sparse (patch) not supported, as we don't have pointer fields
+	err = iCrud.UpdateSparse(ctx, s2e0)
+	assert.Regexp(t, "FF00213", err)
+
+	// Replace one
+	s2e0.Info = "new data"
+	err = iCrud.Replace(ctx, s2e0, collection.postCommit)
+	assert.NoError(t, err)
+	s2e0, err = iCrud.GetByID(ctx, s2e0.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, "new data", s2e0.Info)
+
+	// Get all the entries for sub1
+	allEntries, _, err := iCrud.GetMany(ctx, HistoryQueryFactory.NewFilter(ctx).Eq("subject", "sub1"))
+	assert.NoError(t, err)
+	assert.Len(t, allEntries, len(sub1Entries))
+	for _, e := range allEntries {
+		assert.Equal(t, "sub1", e.Subject)
+	}
+
+	// Delete all the sub1 entries
+	postDeleteMany := make(chan struct{})
+	err = iCrud.DeleteMany(ctx, HistoryQueryFactory.NewFilter(ctx).Eq("subject", "sub1"), func() {
+		close(postDeleteMany)
+	})
+	assert.NoError(t, err)
+	<-postDeleteMany
+
+	// Check they are all gone
+	allEntries, _, err = iCrud.GetMany(ctx, HistoryQueryFactory.NewFilter(ctx).And())
+	assert.NoError(t, err)
+	assert.Len(t, allEntries, len(sub2Entries))
+	for _, e := range allEntries {
+		assert.Equal(t, "sub2", e.Subject)
+	}
 
 }
 
@@ -753,6 +853,36 @@ func TestUpdateSparseFailNoResult(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestDeleteManyBeginFail(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin().WillReturnError(fmt.Errorf("pop"))
+	err := tc.DeleteMany(context.Background(), CRUDableQueryFactory.NewFilter(context.Background()).And())
+	assert.Regexp(t, "FF00175", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDeleteManyDeleteFail(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectExec("DELETE.*").WillReturnError(fmt.Errorf("pop"))
+	err := tc.DeleteMany(context.Background(), CRUDableQueryFactory.NewFilter(context.Background()).And())
+	assert.Regexp(t, "FF00179", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestDeleteManyBadFilter(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	err := tc.DeleteMany(context.Background(), CRUDableQueryFactory.NewFilter(context.Background()).Eq(
+		"wrong", "anything",
+	))
+	assert.Regexp(t, "FF00142", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestValidateNewInstanceNil(t *testing.T) {
 	tc := &CrudBase[*TestCRUDable]{
 		NewInstance: func() *TestCRUDable { return nil },
@@ -834,24 +964,6 @@ func TestValidateNilValueNonNil(t *testing.T) {
 		NilValue: func() *TestCRUDable { return &TestCRUDable{} },
 	}
 	assert.PanicsWithValue(t, "NilValue() value must be nil", func() {
-		tc.Validate()
-	})
-}
-
-func TestValidateScopedFilterNil(t *testing.T) {
-	db, _ := NewMockProvider().UTInit()
-	tc := &CrudBase[*TestCRUDable]{
-		DB:          &db.Database,
-		NewInstance: func() *TestCRUDable { return &TestCRUDable{} },
-		Columns:     []string{ColumnID, ColumnCreated, ColumnUpdated},
-		GetFieldPtr: func(inst *TestCRUDable, col string) interface{} {
-			var t *string
-			return &t
-		},
-		NilValue:     func() *TestCRUDable { return nil },
-		ScopedFilter: func() sq.Eq { return nil },
-	}
-	assert.PanicsWithValue(t, "ScopedFilter() value must not be nil", func() {
 		tc.Validate()
 	})
 }
