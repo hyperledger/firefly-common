@@ -354,6 +354,67 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 
 }
 
+func TestCRUDNoUpdateColumn(t *testing.T) {
+	log.SetLevel("trace")
+
+	db, done := newSQLiteTestProvider(t)
+	defer done()
+	ctx := context.Background()
+
+	c1 := &TestCRUDable{
+		ResourceBase: ResourceBase{
+			ID: fftypes.NewUUID(),
+		},
+		NS:     strPtr("ns1"),
+		Field1: strPtr("hello1"),
+		Field2: fftypes.NewFFBigInt(12345),
+		Field3: fftypes.JSONAnyPtr(`{"some":"stuff"}`),
+	}
+
+	collection := newCRUDCollection(&db.Database, "ns1")
+	collection.Table = "crudablesnoupdate"
+	collection.NoUpdateColumn = true
+	newColumns := []string{}
+	for _, c := range collection.Columns {
+		if c != ColumnUpdated {
+			newColumns = append(newColumns, c)
+		}
+	}
+	collection.Columns = newColumns
+	var iCrud CRUD[*TestCRUDable] = collection.CrudBase
+	iCrud.Validate()
+
+	// Add a row
+	err := iCrud.Insert(ctx, c1, collection.postCommit)
+	assert.NoError(t, err)
+	assert.Len(t, collection.events, 1)
+	assert.Equal(t, Created, collection.events[0])
+	collection.events = nil
+
+	// Check we get it back
+	c1copy, err := iCrud.GetByID(ctx, c1.ID.String())
+	assert.NoError(t, err)
+	checkEqualExceptTimes(t, *c1, *c1copy)
+
+	// Replace it
+	c1copy.Field1 = strPtr("hello again - 3")
+	err = iCrud.Replace(ctx, c1copy, collection.postCommit)
+	assert.NoError(t, err)
+	c1copy3, err := iCrud.GetByID(ctx, c1.ID.String())
+	assert.NoError(t, err)
+	checkEqualExceptTimes(t, *c1copy, *c1copy3)
+
+	// Delete it
+	err = iCrud.Delete(ctx, c1.ID.String(), collection.postCommit)
+	assert.NoError(t, err)
+
+	// Check it's gone
+	goneOne, err := iCrud.GetByID(ctx, c1.ID.String())
+	assert.NoError(t, err)
+	assert.Nil(t, goneOne)
+
+}
+
 func TestLeftJOINExample(t *testing.T) {
 	log.SetLevel("trace")
 

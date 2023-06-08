@@ -106,6 +106,7 @@ type CrudBase[T Resource] struct {
 	Table            string
 	Columns          []string
 	FilterFieldMap   map[string]string
+	NoUpdateColumn   bool // whole entries are immutable, and do not have an updated column
 	ImmutableColumns []string
 
 	NilValue     func() T // nil value typed to T
@@ -137,7 +138,9 @@ func (c *CrudBase[T]) Validate() {
 		// Mandatory column checks
 		ColumnID:      false,
 		ColumnCreated: false,
-		ColumnUpdated: false,
+	}
+	if !c.NoUpdateColumn {
+		fieldMap[ColumnUpdated] = false
 	}
 	for _, col := range c.Columns {
 		if ok, set := fieldMap[col]; ok && set {
@@ -194,13 +197,17 @@ colLoop:
 			update = update.Set(col, value)
 		}
 	}
-	update = update.Set(ColumnUpdated, fftypes.Now())
+	if !c.NoUpdateColumn {
+		update = update.Set(ColumnUpdated, fftypes.Now())
+	}
 	return update
 }
 
 func (c *CrudBase[T]) updateFromInstance(ctx context.Context, tx *TXWrapper, inst T, includeNil bool) (int64, error) {
 	update := sq.Update(c.Table)
-	inst.SetUpdated(fftypes.Now())
+	if !c.NoUpdateColumn {
+		inst.SetUpdated(fftypes.Now())
+	}
 	update = c.buildUpdateList(ctx, update, inst, includeNil)
 	update = update.Where(c.idFilter(inst.GetID()))
 	return c.DB.UpdateTx(ctx, c.Table, tx,
@@ -220,7 +227,9 @@ func (c *CrudBase[T]) getFieldValue(inst T, col string) interface{} {
 func (c *CrudBase[T]) attemptInsert(ctx context.Context, tx *TXWrapper, inst T, requestConflictEmptyResult bool) (err error) {
 	now := fftypes.Now()
 	inst.SetCreated(now)
-	inst.SetUpdated(now)
+	if !c.NoUpdateColumn {
+		inst.SetUpdated(now)
+	}
 	insert := sq.Insert(c.Table).Columns(c.Columns...)
 	values := make([]interface{}, len(c.Columns))
 	for i, col := range c.Columns {
@@ -557,7 +566,9 @@ func (c *CrudBase[T]) attemptUpdate(ctx context.Context, filterFn func(sq.Update
 	if err == nil {
 		query, err = filterFn(query)
 	}
-	query = query.Set(ColumnUpdated, fftypes.Now())
+	if !c.NoUpdateColumn {
+		query = query.Set(ColumnUpdated, fftypes.Now())
+	}
 	if err != nil {
 		return err
 	}
