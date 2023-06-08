@@ -58,6 +58,7 @@ var (
 	ConfigGlobalSize = ffc("config.global.cache.size", "The size of the cache", ByteSizeType)
 	ConfigGlobalTTL  = ffc("config.global.cache.ttl", "The time to live (TTL) for the cache", TimeDurationType)
 
+	ConfigGlobalWsConnectionTimeout      = ffc("config.global.ws.connectionTimeout", "The amount of time to wait while establishing a connection (or auto-reconnection)", TimeDurationType)
 	ConfigGlobalWsHeartbeatInterval      = ffc("config.global.ws.heartbeatInterval", "The amount of time to wait between heartbeat signals on the WebSocket connection", TimeDurationType)
 	ConfigGlobalWsInitialConnectAttempts = ffc("config.global.ws.initialConnectAttempts", "The number of attempts FireFly will make to connect to the WebSocket when starting up, before failing", IntType)
 	ConfigGlobalWsPath                   = ffc("config.global.ws.path", "The WebSocket sever URL to which FireFly should connect", "WebSocket URL "+StringType)
