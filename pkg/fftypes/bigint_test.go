@@ -139,6 +139,37 @@ func TestLargeNegativeBigIntValue(t *testing.T) {
 	assert.True(t, ok)
 
 }
+
+func TestLargeishPositiveBigIntValue(t *testing.T) {
+
+	iLargeish, ok := (new(big.Int).SetString("123456789abcdef00fedcba987654321", 16))
+	assert.True(t, ok)
+	iLargeishVal, err := (*FFBigInt)(iLargeish).Value()
+	assert.Equal(t, "00000000000000000000000000000000123456789abcdef00fedcba987654321", iLargeishVal)
+	assert.NoError(t, err)
+
+	var iRead big.Int
+	_, ok = iRead.SetString(iLargeishVal.(string), 16)
+	assert.True(t, ok)
+	assert.Equal(t, *iLargeish, iRead)
+
+}
+
+func TestLargeishNegativeBigIntValue(t *testing.T) {
+
+	iLargeish, ok := (new(big.Int).SetString("-123456789abcdef00fedcba987654321", 16))
+	assert.True(t, ok)
+	iLargeishVal, err := (*FFBigInt)(iLargeish).Value()
+	assert.Equal(t, "-00000000000000000000000000000000123456789abcdef00fedcba987654321", iLargeishVal)
+	assert.NoError(t, err)
+
+	var iRead big.Int
+	_, ok = iRead.SetString(iLargeishVal.(string), 16)
+	assert.True(t, ok)
+	assert.Equal(t, *iLargeish, iRead)
+
+}
+
 func TestTooLargeInteger(t *testing.T) {
 
 	var iMax FFBigInt
