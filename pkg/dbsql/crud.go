@@ -95,6 +95,7 @@ type CRUD[T Resource] interface {
 	Replace(ctx context.Context, inst T, hooks ...PostCompletionHook) (err error)
 	GetByID(ctx context.Context, id string, getOpts ...GetOption) (inst T, err error)
 	GetMany(ctx context.Context, filter ffapi.Filter) (instances []T, fr *ffapi.FilterResult, err error)
+	Count(ctx context.Context, filter ffapi.Filter) (count int64, err error)
 	Update(ctx context.Context, id string, update ffapi.Update, hooks ...PostCompletionHook) (err error)
 	UpdateSparse(ctx context.Context, sparseUpdate T, hooks ...PostCompletionHook) (err error)
 	UpdateMany(ctx context.Context, filter ffapi.Filter, update ffapi.Update, hooks ...PostCompletionHook) (err error)
@@ -503,6 +504,25 @@ func (c *CrudBase[T]) GetMany(ctx context.Context, filter ffapi.Filter) (instanc
 		instances = append(instances, inst)
 	}
 	return instances, c.DB.QueryRes(ctx, c.Table, tx, fop, fi), err
+}
+
+func (c *CrudBase[T]) Count(ctx context.Context, filter ffapi.Filter) (count int64, err error) {
+	var fop sq.Sqlizer
+	fi, err := filter.Finalize()
+	if err == nil {
+		fop, err = c.DB.filterOp(ctx, c.Table, fi, c.FilterFieldMap)
+	}
+	if err != nil {
+		return -1, err
+	}
+
+	if c.ScopedFilter != nil {
+		fop = sq.And{
+			c.ScopedFilter(),
+			fop,
+		}
+	}
+	return c.DB.CountQuery(ctx, c.Table, nil, fop, "*")
 }
 
 func (c *CrudBase[T]) Update(ctx context.Context, id string, update ffapi.Update, hooks ...PostCompletionHook) (err error) {

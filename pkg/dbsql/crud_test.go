@@ -497,6 +497,11 @@ func TestHistoryExampleNoNSOrUpdateColumn(t *testing.T) {
 		assert.Equal(t, "sub1", e.Subject)
 	}
 
+	// Count all the sub1 entries
+	count, err := iCrud.Count(ctx, HistoryQueryFactory.NewFilter(ctx).Eq("subject", "sub1"))
+	assert.NoError(t, err)
+	assert.Equal(t, int64(len(sub1Entries)), count)
+
 	// Delete all the sub1 entries
 	postDeleteMany := make(chan struct{})
 	err = iCrud.DeleteMany(ctx, HistoryQueryFactory.NewFilter(ctx).Eq("subject", "sub1"), func() {
@@ -877,6 +882,25 @@ func TestDeleteManyBadFilter(t *testing.T) {
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
 	err := tc.DeleteMany(context.Background(), CRUDableQueryFactory.NewFilter(context.Background()).Eq(
+		"wrong", "anything",
+	))
+	assert.Regexp(t, "FF00142", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCountFail(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectQuery("SELECT COUNT.*").WillReturnError(fmt.Errorf("pop"))
+	_, err := tc.Count(context.Background(), CRUDableQueryFactory.NewFilter(context.Background()).And())
+	assert.Regexp(t, "FF00176", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCountBadFilter(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	_, err := tc.Count(context.Background(), CRUDableQueryFactory.NewFilter(context.Background()).Eq(
 		"wrong", "anything",
 	))
 	assert.Regexp(t, "FF00142", err)
