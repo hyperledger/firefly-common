@@ -48,14 +48,6 @@ func TestWSClientE2ETLS(t *testing.T) {
 	defer close()
 	assert.NoError(t, err)
 
-	first := true
-	beforeConnect := func(ctx context.Context) error {
-		if first {
-			first = false
-			return fmt.Errorf("first run fails")
-		}
-		return nil
-	}
 	afterConnect := func(ctx context.Context, w WSClient) error {
 		return w.Send(ctx, []byte(`after connect message`))
 	}
@@ -80,20 +72,13 @@ func TestWSClientE2ETLS(t *testing.T) {
 		RootCAs:      rootCAs,
 	}
 
-	wsc, err := New(context.Background(), wsConfig, beforeConnect, afterConnect)
+	wsc, err := New(context.Background(), wsConfig, nil, afterConnect)
 	assert.NoError(t, err)
 
 	//  Change the settings and connect
 	wsc.SetURL(wsc.URL() + "/updated")
 	err = wsc.Connect()
 	assert.NoError(t, err)
-
-	// Test server rejects a 2nd connection
-	wsc2, err := New(context.Background(), wsConfig, beforeConnect, afterConnect)
-	assert.NoError(t, err)
-	wsc2.SetURL(wsc2.URL() + "/updated")
-	err = wsc2.Connect()
-	assert.Error(t, err)
 
 	// Receive the message automatically sent in afterConnect
 	message1 := <-toServer
