@@ -56,6 +56,7 @@ func TestWSClientE2ETLS(t *testing.T) {
 		}
 		return nil
 	}
+
 	afterConnect := func(ctx context.Context, w WSClient) error {
 		return w.Send(ctx, []byte(`after connect message`))
 	}
@@ -94,6 +95,7 @@ func TestWSClientE2ETLS(t *testing.T) {
 	wsc2.SetURL(wsc2.URL() + "/updated")
 	err = wsc2.Connect()
 	assert.Error(t, err)
+	wsc2.Close()
 
 	// Receive the message automatically sent in afterConnect
 	message1 := <-toServer
