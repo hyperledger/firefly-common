@@ -230,12 +230,16 @@ func (c *CrudBase[T]) getFieldValue(inst T, col string) interface{} {
 	return reflect.ValueOf(c.GetFieldPtr(inst, col)).Elem().Interface()
 }
 
-func (c *CrudBase[T]) attemptInsert(ctx context.Context, tx *TXWrapper, inst T, requestConflictEmptyResult bool) (err error) {
+func (c *CrudBase[T]) setInsertTimestamps(inst T) {
 	now := fftypes.Now()
 	inst.SetCreated(now)
 	if !c.NoUpdateColumn {
 		inst.SetUpdated(now)
 	}
+}
+
+func (c *CrudBase[T]) attemptInsert(ctx context.Context, tx *TXWrapper, inst T, requestConflictEmptyResult bool) (err error) {
+	c.setInsertTimestamps(inst)
 	insert := sq.Insert(c.Table).Columns(c.Columns...)
 	values := make([]interface{}, len(c.Columns))
 	for i, col := range c.Columns {
@@ -315,6 +319,7 @@ func (c *CrudBase[T]) InsertMany(ctx context.Context, instances []T, allowPartia
 	if c.DB.Features().MultiRowInsert {
 		insert := sq.Insert(c.Table).Columns(c.Columns...)
 		for _, inst := range instances {
+			c.setInsertTimestamps(inst)
 			values := make([]interface{}, len(c.Columns))
 			for i, col := range c.Columns {
 				values[i] = c.getFieldValue(inst, col)

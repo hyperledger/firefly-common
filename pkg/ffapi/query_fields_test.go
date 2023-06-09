@@ -166,7 +166,7 @@ func TestBigIntField(t *testing.T) {
 		assert.NoError(t, err)
 		v, err := f.Value()
 		assert.NoError(t, err)
-		assert.Equal(t, "a", v)
+		assert.Equal(t, "000000000000000000000000000000000000000000000000000000000000000a", v)
 		assert.Equal(t, "10", f.String())
 	}
 
@@ -174,7 +174,7 @@ func TestBigIntField(t *testing.T) {
 	assert.NoError(t, err)
 	v, err := f.Value()
 	assert.NoError(t, err)
-	assert.Equal(t, "0", v)
+	assert.Equal(t, "0000000000000000000000000000000000000000000000000000000000000000", v)
 
 	err = f.Scan("lobster")
 	assert.Regexp(t, "FF00105", err)
