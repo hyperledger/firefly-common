@@ -96,7 +96,7 @@ func New(ctx context.Context, staticConfig config.Section) (client *resty.Client
 		return nil, err
 	}
 
-	return NewWithConfig(ctx, ffrestyConfig)
+	return NewWithConfig(ctx, *ffrestyConfig), nil
 }
 
 // New creates a new Resty client, using static configuration (from the config file)
@@ -104,14 +104,13 @@ func New(ctx context.Context, staticConfig config.Section) (client *resty.Client
 //
 // You can use the normal Resty builder pattern, to set per-instance configuration
 // as required.
-func NewWithConfig(ctx context.Context, ffrestyConfig *Config) (client *resty.Client, err error) {
-	// passthroughHeadersEnabled := staticConfig.GetBool(HTTPPassthroughHeadersEnabled)
-
+func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Client) {
 	if ffrestyConfig.HTTPCustomClient != nil {
 		if httpClient, ok := ffrestyConfig.HTTPCustomClient.(*http.Client); ok {
 			client = resty.NewWithClient(httpClient)
 		}
 	}
+
 	if client == nil {
 
 		httpTransport := &http.Transport{
@@ -219,7 +218,7 @@ func NewWithConfig(ctx context.Context, ffrestyConfig *Config) (client *resty.Cl
 			})
 	}
 
-	return client, nil
+	return client
 }
 
 func WrapRestErr(ctx context.Context, res *resty.Response, err error, key i18n.ErrorMessageKey) error {
