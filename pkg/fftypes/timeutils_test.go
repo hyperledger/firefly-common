@@ -255,6 +255,10 @@ func TestFFDurationParseValue(t *testing.T) {
 	err = fd.Scan("1 year")
 	assert.Regexp(t, "FF00137", err)
 
+	err = fd.Scan("")
+	assert.NoError(t, err)
+	assert.Equal(t, FFDuration(0), fd)
+
 	var pfd *FFDuration
 	v, err := pfd.Value()
 	assert.NoError(t, err)
