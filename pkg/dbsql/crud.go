@@ -66,6 +66,10 @@ type Resource interface {
 	SetUpdated(*fftypes.FFTime)
 }
 
+type ResourceSequence interface {
+	SetSequence(int64)
+}
+
 // Resource is the default implementation of the Resource interface, but consumers of this
 // package can implement the interface directly if they want to use different field names
 // or field types for the fields.
@@ -94,6 +98,7 @@ type CRUD[T Resource] interface {
 	Insert(ctx context.Context, inst T, hooks ...PostCompletionHook) (err error)
 	Replace(ctx context.Context, inst T, hooks ...PostCompletionHook) (err error)
 	GetByID(ctx context.Context, id string, getOpts ...GetOption) (inst T, err error)
+	GetSequenceForID(ctx context.Context, id string) (seq int64, err error)
 	GetMany(ctx context.Context, filter ffapi.Filter) (instances []T, fr *ffapi.FilterResult, err error)
 	Count(ctx context.Context, filter ffapi.Filter) (count int64, err error)
 	Update(ctx context.Context, id string, update ffapi.Update, hooks ...PostCompletionHook) (err error)
@@ -239,6 +244,12 @@ func (c *CrudBase[T]) setInsertTimestamps(inst T) {
 	}
 }
 
+func (c *CrudBase[T]) attemptSetSequence(inst interface{}, seq int64) {
+	if rs, ok := inst.(ResourceSequence); ok {
+		rs.SetSequence(seq)
+	}
+}
+
 func (c *CrudBase[T]) attemptInsert(ctx context.Context, tx *TXWrapper, inst T, requestConflictEmptyResult bool) (err error) {
 	c.setInsertTimestamps(inst)
 	insert := sq.Insert(c.Table).Columns(c.Columns...)
@@ -247,12 +258,15 @@ func (c *CrudBase[T]) attemptInsert(ctx context.Context, tx *TXWrapper, inst T, 
 		values[i] = c.getFieldValue(inst, col)
 	}
 	insert = insert.Values(values...)
-	_, err = c.DB.InsertTxExt(ctx, c.Table, tx, insert,
+	seq, err := c.DB.InsertTxExt(ctx, c.Table, tx, insert,
 		func() {
 			if c.EventHandler != nil {
 				c.EventHandler(inst.GetID(), Created)
 			}
 		}, requestConflictEmptyResult)
+	if err == nil {
+		c.attemptSetSequence(inst, seq)
+	}
 	return err
 }
 
@@ -340,6 +354,11 @@ func (c *CrudBase[T]) InsertMany(ctx context.Context, instances []T, allowPartia
 		if err != nil {
 			return err
 		}
+		if len(sequences) == len(instances) {
+			for i, seq := range sequences {
+				c.attemptSetSequence(instances[i], seq)
+			}
+		}
 	} else {
 		// Fall back to individual inserts grouped in a TX
 		for _, inst := range instances {
@@ -399,19 +418,24 @@ func (c *CrudBase[T]) Replace(ctx context.Context, inst T, hooks ...PostCompleti
 
 func (c *CrudBase[T]) scanRow(ctx context.Context, cols []string, row *sql.Rows) (T, error) {
 	inst := c.NewInstance()
+	var seq int64
 	fieldPointers := make([]interface{}, len(cols))
+	fieldPointers[0] = &seq // The first column is alway the sequence
 	for i, col := range cols {
-		fieldPointers[i] = c.GetFieldPtr(inst, col)
+		if i != 0 {
+			fieldPointers[i] = c.GetFieldPtr(inst, col)
+		}
 	}
 	err := row.Scan(fieldPointers...)
 	if err != nil {
 		return c.NilValue(), i18n.WrapError(ctx, err, i18n.MsgDBReadErr, c.Table)
 	}
+	c.attemptSetSequence(inst, seq)
 	return inst, nil
 }
 
 func (c *CrudBase[T]) getReadCols() (tableFrom string, cols, readCols []string) {
-	cols = append([]string{}, c.Columns...)
+	cols = append([]string{c.DB.SequenceColumn()}, c.Columns...)
 	if c.ReadOnlyColumns != nil {
 		cols = append(cols, c.ReadOnlyColumns...)
 	}
@@ -429,6 +453,22 @@ func (c *CrudBase[T]) getReadCols() (tableFrom string, cols, readCols []string) 
 		}
 	}
 	return tableFrom, cols, readCols
+}
+
+func (c *CrudBase[T]) GetSequenceForID(ctx context.Context, id string) (seq int64, err error) {
+	query := sq.Select(c.DB.SequenceColumn()).From(c.Table).Where(c.idFilter(id))
+	rows, _, err := c.DB.Query(ctx, c.Table, query)
+	if err != nil {
+		return -1, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return -1, i18n.NewError(ctx, i18n.Msg404NoResult)
+	}
+	if err = rows.Scan(&seq); err != nil {
+		return -1, i18n.WrapError(ctx, err, i18n.MsgDBReadErr, c.Table)
+	}
+	return seq, nil
 }
 
 func (c *CrudBase[T]) GetByID(ctx context.Context, id string, getOpts ...GetOption) (inst T, err error) {

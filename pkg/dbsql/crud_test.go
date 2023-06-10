@@ -55,10 +55,11 @@ var CRUDableQueryFactory = &ffapi.QueryFields{
 // - with a simple string ID
 // - without namespacing
 type TestHistory struct {
-	ID      string          `json:"id"`
-	Time    *fftypes.FFTime `json:"time"`
-	Subject string          `json:"subject"`
-	Info    string          `json:"info"`
+	ID         string          `json:"id"`
+	Time       *fftypes.FFTime `json:"time"`
+	SequenceID string          `json:"sequenceId"`
+	Subject    string          `json:"subject"`
+	Info       string          `json:"info"`
 }
 
 var HistoryQueryFactory = &ffapi.QueryFields{
@@ -78,6 +79,10 @@ func (h *TestHistory) SetCreated(t *fftypes.FFTime) {
 
 func (h *TestHistory) SetUpdated(t *fftypes.FFTime) {
 	panic("should not be called when marked NoUpdateColumn")
+}
+
+func (h *TestHistory) SetSequence(i int64) {
+	h.SequenceID = fmt.Sprintf("%.9d", i)
 }
 
 type TestLinkable struct {
@@ -464,10 +469,14 @@ func TestHistoryExampleNoNSOrUpdateColumn(t *testing.T) {
 	for _, e := range sub1Entries {
 		err := iCrud.Insert(ctx, e, collection.postCommit)
 		assert.NoError(t, err)
+		assert.NotEmpty(t, e.SequenceID)
 	}
 	// add sub2 entries all at once
 	err := iCrud.InsertMany(ctx, sub2Entries, false)
 	assert.NoError(t, err)
+	for _, e := range sub2Entries {
+		assert.NotEmpty(t, e.SequenceID)
+	}
 
 	// Check we get one back from each
 	s1e0, err := iCrud.GetByID(ctx, sub1Entries[0].ID)
@@ -476,6 +485,11 @@ func TestHistoryExampleNoNSOrUpdateColumn(t *testing.T) {
 	s2e0, err := iCrud.GetByID(ctx, sub2Entries[0].ID)
 	assert.NoError(t, err)
 	assert.Equal(t, sub2Entries[0].Info, s2e0.Info)
+
+	// Check we can get the sequence and it lines up
+	s2e0Seq, err := iCrud.GetSequenceForID(ctx, s2e0.ID)
+	assert.NoError(t, err)
+	assert.Equal(t, s2e0.SequenceID, fmt.Sprintf("%.9d", s2e0Seq))
 
 	// Update sparse (patch) not supported, as we don't have pointer fields
 	err = iCrud.UpdateSparse(ctx, s2e0)
@@ -904,6 +918,33 @@ func TestCountBadFilter(t *testing.T) {
 		"wrong", "anything",
 	))
 	assert.Regexp(t, "FF00142", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetSequenceForIDFail(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectQuery("SELECT.*").WillReturnError(fmt.Errorf("pop"))
+	_, err := tc.GetSequenceForID(context.Background(), "id12345")
+	assert.Regexp(t, "FF00176", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetSequenceForIDNotFound(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectQuery("SELECT.*").WillReturnRows(sqlmock.NewRows([]string{db.SequenceColumn()}))
+	_, err := tc.GetSequenceForID(context.Background(), "id12345")
+	assert.Regexp(t, "FF00164", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetSequenceForIDScanFail(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectQuery("SELECT.*").WillReturnRows(sqlmock.NewRows([]string{db.SequenceColumn()}).AddRow("not a number"))
+	_, err := tc.GetSequenceForID(context.Background(), "id12345")
+	assert.Regexp(t, "FF00182", err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
