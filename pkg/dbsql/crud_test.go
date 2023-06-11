@@ -181,12 +181,12 @@ func newHistoryCollection(db *Database) *TestHistoryCRUD {
 			FilterFieldMap: map[string]string{
 				"time": ColumnCreated,
 			},
-			NoUpdateColumn: true,
-			PatchDisabled:  true,
-			NilValue:       func() *TestHistory { return nil },
-			NewInstance:    func() *TestHistory { return &TestHistory{} },
-			ScopedFilter:   nil, // no scoping on this collection
-			EventHandler:   nil, // set below
+			TimesDisabled: true,
+			PatchDisabled: true,
+			NilValue:      func() *TestHistory { return nil },
+			NewInstance:   func() *TestHistory { return &TestHistory{} },
+			ScopedFilter:  nil, // no scoping on this collection
+			EventHandler:  nil, // set below
 			GetFieldPtr: func(inst *TestHistory, col string) interface{} {
 				switch col {
 				case ColumnID:
@@ -449,12 +449,15 @@ func TestHistoryExampleNoNSOrUpdateColumn(t *testing.T) {
 	var sub1Entries []*TestHistory
 	var sub2Entries []*TestHistory
 	for i := 0; i < 10; i++ {
+		now := fftypes.Now() // choose to manage times ourself
 		sub1Entries = append(sub1Entries, &TestHistory{
+			Time:    now,
 			ID:      fftypes.NewUUID().String(),
 			Subject: "sub1",
 			Info:    fmt.Sprintf("sub1_info%.3d", i),
 		})
 		sub2Entries = append(sub2Entries, &TestHistory{
+			Time:    now,
 			ID:      fftypes.NewUUID().String(),
 			Subject: "sub2",
 			Info:    fmt.Sprintf("sub2_info%.3d", i),

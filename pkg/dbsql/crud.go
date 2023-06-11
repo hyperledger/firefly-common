@@ -113,7 +113,7 @@ type CrudBase[T Resource] struct {
 	Table            string
 	Columns          []string
 	FilterFieldMap   map[string]string
-	NoUpdateColumn   bool // whole entries are immutable, and do not have an updated column
+	TimesDisabled    bool // no management of the time columns
 	PatchDisabled    bool // allows non-pointer fields, but prevents UpdateSparse function
 	ImmutableColumns []string
 
@@ -144,10 +144,10 @@ func (c *CrudBase[T]) Validate() {
 	ptrs := map[string]interface{}{}
 	fieldMap := map[string]bool{
 		// Mandatory column checks
-		ColumnID:      false,
-		ColumnCreated: false,
+		ColumnID: false,
 	}
-	if !c.NoUpdateColumn {
+	if !c.TimesDisabled {
+		fieldMap[ColumnCreated] = false
 		fieldMap[ColumnUpdated] = false
 	}
 	for _, col := range c.Columns {
@@ -209,7 +209,7 @@ colLoop:
 			update = update.Set(col, value)
 		}
 	}
-	if !c.NoUpdateColumn {
+	if !c.TimesDisabled {
 		update = update.Set(ColumnUpdated, fftypes.Now())
 	}
 	return update
@@ -217,7 +217,7 @@ colLoop:
 
 func (c *CrudBase[T]) updateFromInstance(ctx context.Context, tx *TXWrapper, inst T, includeNil bool) (int64, error) {
 	update := sq.Update(c.Table)
-	if !c.NoUpdateColumn {
+	if !c.TimesDisabled {
 		inst.SetUpdated(fftypes.Now())
 	}
 	update = c.buildUpdateList(ctx, update, inst, includeNil)
@@ -237,9 +237,9 @@ func (c *CrudBase[T]) getFieldValue(inst T, col string) interface{} {
 }
 
 func (c *CrudBase[T]) setInsertTimestamps(inst T) {
-	now := fftypes.Now()
-	inst.SetCreated(now)
-	if !c.NoUpdateColumn {
+	if !c.TimesDisabled {
+		now := fftypes.Now()
+		inst.SetCreated(now)
 		inst.SetUpdated(now)
 	}
 }
@@ -649,7 +649,7 @@ func (c *CrudBase[T]) attemptUpdate(ctx context.Context, filterFn func(sq.Update
 	if err == nil {
 		query, err = filterFn(query)
 	}
-	if !c.NoUpdateColumn {
+	if !c.TimesDisabled {
 		query = query.Set(ColumnUpdated, fftypes.Now())
 	}
 	if err != nil {
