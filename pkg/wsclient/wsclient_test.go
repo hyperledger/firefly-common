@@ -626,3 +626,14 @@ func TestTestTLSServerFailsBadCerts(t *testing.T) {
 	assert.Error(t, err)
 
 }
+
+func TestWSClientContextClosed(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	wsConfig := generateConfig()
+	wsc, err := New(ctx, wsConfig, nil, nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, wsc)
+	err = wsc.Send(context.Background(), []byte{})
+	assert.Regexp(t, "FF00147", err)
+}
