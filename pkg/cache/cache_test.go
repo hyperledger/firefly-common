@@ -60,6 +60,17 @@ func TestTwoSeparateCacheWorksIndependently(t *testing.T) {
 	assert.Equal(t, nil, cache1.Get("string1"))
 }
 
+func TestTTL(t *testing.T) {
+	ctx := context.Background()
+	cacheManager := NewCacheManager(ctx, true)
+	cache0, _ := cacheManager.GetCache(ctx, "ns1", "cacheA", 85, time.Second/2, true)
+
+	cache0.Set("int0", 100)
+	assert.Equal(t, 100, cache0.Get("int0"))
+
+	time.Sleep(time.Second)
+	assert.Nil(t, cache0.Get("int0"))
+}
 func TestCacheEnablement(t *testing.T) {
 	ctx := context.Background()
 	var hundred int64 = 100
