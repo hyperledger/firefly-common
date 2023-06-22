@@ -70,8 +70,7 @@ func (c *CCache) Set(key string, val interface{}) {
 }
 func (c *CCache) Get(key string) interface{} {
 	if c.enabled {
-		if cached := c.cache.Get(key); cached != nil {
-			cached.Extend(c.cacheTTL)
+		if cached := c.cache.Get(key); cached != nil && !cached.Expired() {
 			return cached.Value()
 		}
 	}

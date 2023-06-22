@@ -68,7 +68,11 @@ func TestTTL(t *testing.T) {
 	cache0.Set("int0", 100)
 	assert.Equal(t, 100, cache0.Get("int0"))
 
-	time.Sleep(time.Second)
+	time.Sleep(time.Second / 3)
+	assert.Equal(t, 100, cache0.Get("int0"))
+
+	time.Sleep(time.Second / 3)
+
 	assert.Nil(t, cache0.Get("int0"))
 }
 func TestCacheEnablement(t *testing.T) {
