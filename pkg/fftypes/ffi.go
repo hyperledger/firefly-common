@@ -125,7 +125,7 @@ func (f *FFI) Validate(ctx context.Context) (err error) {
 }
 
 func (f *FFI) Topic() string {
-	return TypeNamespaceNameTopicHash("ffi", f.Namespace, f.Name)
+	return TypeNamespaceNameTopicHash("ffi", f.Namespace, f.NetworkName)
 }
 
 func (f *FFI) SetBroadcastMessage(msgID *UUID) {
