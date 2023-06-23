@@ -390,6 +390,22 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	assert.Len(t, cs, 1)
 	checkEqualExceptTimes(t, c2, *cs[0])
 
+	// Check we can get all the unique values of `field1` column expect bonjour
+	cvs, err := iCrud.GetDistinctValuesForColumn(ctx, "field1", CRUDableQueryFactory.NewFilter(ctx).Neq(
+		"f1", "bonjour",
+	))
+	assert.NoError(t, err)
+	assert.Len(t, cvs, 1)
+	assert.Equal(t, "hello again - 5", cvs[0].(string))
+
+	// Check we can get no unique values of `field1` column if all are excluded
+	cvs, err = iCrud.GetDistinctValuesForColumn(ctx, "field1", CRUDableQueryFactory.NewFilter(ctx).NotIn(
+		"f1",
+		[]driver.Value{"bonjour", "hello again - 5"},
+	))
+	assert.NoError(t, err)
+	assert.Len(t, cvs, 0)
+
 	// Insert a bunch in a batch
 	bunchOfCRUDables := make([]*TestCRUDable, 10)
 	for i := range bunchOfCRUDables {
@@ -781,6 +797,32 @@ func TestGetByManyFilterFail(t *testing.T) {
 	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	_, _, err := tc.GetMany(context.Background(), CRUDableQueryFactory.NewFilter(context.Background()).Eq("wrong", 123))
+	assert.Regexp(t, "FF00142", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetDistinctValuesForColumnSelectFail(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectQuery("SELECT.*").WillReturnError(fmt.Errorf("pop"))
+	_, err := tc.GetDistinctValuesForColumn(context.Background(), "f1", CRUDableQueryFactory.NewFilter(context.Background()).And())
+	assert.Regexp(t, "FF00176", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetDistinctValuesForColumnScanFail(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectQuery("SELECT.*").WillReturnRows(sqlmock.NewRows([]string{}).AddRow())
+	_, err := tc.GetDistinctValuesForColumn(context.Background(), "f1", CRUDableQueryFactory.NewFilter(context.Background()).And())
+	assert.Regexp(t, "FF00182", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetDistinctValuesForColumnFilterFail(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	_, err := tc.GetDistinctValuesForColumn(context.Background(), "f1", CRUDableQueryFactory.NewFilter(context.Background()).Eq("wrong", 123))
 	assert.Regexp(t, "FF00142", err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }

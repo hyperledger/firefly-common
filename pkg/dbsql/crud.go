@@ -100,6 +100,7 @@ type CRUD[T Resource] interface {
 	GetByID(ctx context.Context, id string, getOpts ...GetOption) (inst T, err error)
 	GetSequenceForID(ctx context.Context, id string) (seq int64, err error)
 	GetMany(ctx context.Context, filter ffapi.Filter) (instances []T, fr *ffapi.FilterResult, err error)
+	GetDistinctValuesForColumn(ctx context.Context, columnName string, filter ffapi.Filter) (columnValues []interface{}, err error)
 	Count(ctx context.Context, filter ffapi.Filter) (count int64, err error)
 	Update(ctx context.Context, id string, update ffapi.Update, hooks ...PostCompletionHook) (err error)
 	UpdateSparse(ctx context.Context, sparseUpdate T, hooks ...PostCompletionHook) (err error)
@@ -563,6 +564,40 @@ func (c *CrudBase[T]) Count(ctx context.Context, filter ffapi.Filter) (count int
 		}
 	}
 	return c.DB.CountQuery(ctx, c.Table, nil, fop, "*")
+}
+
+func (c *CrudBase[T]) GetDistinctValuesForColumn(ctx context.Context, columnName string, filter ffapi.Filter) (columnValues []interface{}, err error) {
+	var preconditions []sq.Sqlizer
+	if c.ScopedFilter != nil {
+		preconditions = []sq.Sqlizer{c.ScopedFilter()}
+	}
+	query, _, _, err := c.DB.FilterSelect(ctx, c.ReadTableAlias, sq.Select(fmt.Sprintf("DISTINCT %s", columnName)).From(c.Table), filter, c.FilterFieldMap,
+		[]interface{}{
+			&ffapi.SortField{Field: c.DB.sequenceColumn, Descending: true},
+		}, preconditions...)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, _, err := c.DB.Query(ctx, c.Table, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	columnValues = []interface{}{}
+	for rows.Next() {
+		var columnValue interface{}
+
+		err = rows.Scan(&columnValue)
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, i18n.MsgDBReadErr, c.Table)
+		}
+
+		columnValues = append(columnValues, columnValue)
+	}
+
+	return columnValues, err
 }
 
 func (c *CrudBase[T]) Update(ctx context.Context, id string, update ffapi.Update, hooks ...PostCompletionHook) (err error) {
