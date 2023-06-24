@@ -40,9 +40,10 @@ func TestBuildMessageFilter(t *testing.T) {
 		Count(true).
 		Sort("tag").
 		Descending().
+		GroupBy("type").
 		Finalize()
 	assert.NoError(t, err)
-	assert.Equal(t, "( tag == 'tag1' ) && ( ( id == '35c11cba-adff-4a4d-970a-02e3a0858dc8' ) || ( id == 'caefb9d1-9fc9-4d6a-a155-514d3139adf7' ) ) && ( sequence >> 12345 ) && ( created == null ) sort=-tag skip=50 limit=25 count=true", f.String())
+	assert.Equal(t, "( tag == 'tag1' ) && ( ( id == '35c11cba-adff-4a4d-970a-02e3a0858dc8' ) || ( id == 'caefb9d1-9fc9-4d6a-a155-514d3139adf7' ) ) && ( sequence >> 12345 ) && ( created == null ) groupBy=type sort=-tag skip=50 limit=25 count=true", f.String())
 }
 
 func TestBuildMessageFilter2(t *testing.T) {
