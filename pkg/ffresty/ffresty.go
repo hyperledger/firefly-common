@@ -18,6 +18,7 @@ package ffresty
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -29,7 +30,6 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
-	"github.com/hyperledger/firefly-common/pkg/fftls"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
@@ -42,6 +42,28 @@ type retryCtx struct {
 	id       string
 	start    time.Time
 	attempts uint
+}
+
+type Config struct {
+	URL                           string             `json:"httpURL,omitempty"`
+	ProxyURL                      string             `json:"proxyURL,omitempty"`
+	HTTPRequestTimeout            time.Duration      `json:"requestTimeout,omitempty"`
+	HTTPIdleConnTimeout           time.Duration      `json:"idleTimeout,omitempty"`
+	HTTPMaxIdleTimeout            time.Duration      `json:"maxIdleTimeout,omitempty"`
+	HTTPConnectionTimeout         time.Duration      `json:"connectionTimeout,omitempty"`
+	HTTPExpectContinueTimeout     time.Duration      `json:"expectContinueTimeout,omitempty"`
+	AuthUsername                  string             `json:"authUsername,omitempty"`
+	AuthPassword                  string             `json:"authPassword,omitempty"`
+	Retry                         bool               `json:"retry,omitempty"`
+	RetryCount                    int                `json:"retryCount,omitempty"`
+	RetryInitialDelay             time.Duration      `json:"retryInitialDelay,omitempty"`
+	RetryMaximumDelay             time.Duration      `json:"retryMaximumDelay,omitempty"`
+	HTTPMaxIdleConns              int                `json:"maxIdleConns,omitempty"`
+	HTTPPassthroughHeadersEnabled bool               `json:"httpPassthroughHeadersEnabled,omitempty"`
+	HTTPHeaders                   fftypes.JSONObject `json:"headers,omitempty"`
+	TLSClientConfig               *tls.Config        `json:"tlsClientConfig,omitempty"`
+	HTTPTLSHandshakeTimeout       time.Duration      `json:"tlsHandshakeTimeout,omitempty"`
+	HTTPCustomClient              interface{}        `json:"httpCustomClient,omitempty"`
 }
 
 // OnAfterResponse when using SetDoNotParseResponse(true) for streaming binary replies,
@@ -69,35 +91,44 @@ func OnAfterResponse(c *resty.Client, resp *resty.Response) {
 // You can use the normal Resty builder pattern, to set per-instance configuration
 // as required.
 func New(ctx context.Context, staticConfig config.Section) (client *resty.Client, err error) {
-	passthroughHeadersEnabled := staticConfig.GetBool(HTTPPassthroughHeadersEnabled)
+	ffrestyConfig, err := GenerateConfig(ctx, staticConfig)
+	if err != nil {
+		return nil, err
+	}
 
-	iHTTPClient := staticConfig.Get(HTTPCustomClient)
-	if iHTTPClient != nil {
-		if httpClient, ok := iHTTPClient.(*http.Client); ok {
+	return NewWithConfig(ctx, *ffrestyConfig), nil
+}
+
+// New creates a new Resty client, using static configuration (from the config file)
+// from a given section in the static configuration
+//
+// You can use the normal Resty builder pattern, to set per-instance configuration
+// as required.
+func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Client) {
+	if ffrestyConfig.HTTPCustomClient != nil {
+		if httpClient, ok := ffrestyConfig.HTTPCustomClient.(*http.Client); ok {
 			client = resty.NewWithClient(httpClient)
 		}
 	}
+
 	if client == nil {
 
 		httpTransport := &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			DialContext: (&net.Dialer{
-				Timeout:   staticConfig.GetDuration(HTTPConnectionTimeout),
-				KeepAlive: staticConfig.GetDuration(HTTPConnectionTimeout),
+				Timeout:   ffrestyConfig.HTTPConnectionTimeout,
+				KeepAlive: ffrestyConfig.HTTPConnectionTimeout,
 			}).DialContext,
 			ForceAttemptHTTP2:     true,
-			MaxIdleConns:          staticConfig.GetInt(HTTPMaxIdleConns),
-			IdleConnTimeout:       staticConfig.GetDuration(HTTPIdleTimeout),
-			TLSHandshakeTimeout:   staticConfig.GetDuration(HTTPTLSHandshakeTimeout),
-			ExpectContinueTimeout: staticConfig.GetDuration(HTTPExpectContinueTimeout),
+			MaxIdleConns:          ffrestyConfig.HTTPMaxIdleConns,
+			IdleConnTimeout:       ffrestyConfig.HTTPIdleConnTimeout,
+			TLSHandshakeTimeout:   ffrestyConfig.HTTPTLSHandshakeTimeout,
+			ExpectContinueTimeout: ffrestyConfig.HTTPExpectContinueTimeout,
 		}
 
-		tlsConfig, err := fftls.ConstructTLSConfig(ctx, staticConfig.SubSection("tls"), "client")
-		if err != nil {
-			return nil, err
+		if ffrestyConfig.TLSClientConfig != nil {
+			httpTransport.TLSClientConfig = ffrestyConfig.TLSClientConfig
 		}
-
-		httpTransport.TLSClientConfig = tlsConfig
 
 		httpClient := &http.Client{
 			Transport: httpTransport,
@@ -105,18 +136,17 @@ func New(ctx context.Context, staticConfig config.Section) (client *resty.Client
 		client = resty.NewWithClient(httpClient)
 	}
 
-	url := strings.TrimSuffix(staticConfig.GetString(HTTPConfigURL), "/")
+	url := strings.TrimSuffix(ffrestyConfig.URL, "/")
 	if url != "" {
 		client.SetBaseURL(url)
 		log.L(ctx).Debugf("Created REST client to %s", url)
 	}
 
-	proxy := staticConfig.GetString(HTTPConfigProxyURL)
-	if proxy != "" {
-		client.SetProxy(proxy)
+	if ffrestyConfig.ProxyURL != "" {
+		client.SetProxy(ffrestyConfig.ProxyURL)
 	}
 
-	client.SetTimeout(staticConfig.GetDuration(HTTPConfigRequestTimeout))
+	client.SetTimeout(ffrestyConfig.HTTPRequestTimeout)
 
 	client.OnBeforeRequest(func(c *resty.Client, req *resty.Request) error {
 		rCtx := req.Context()
@@ -135,7 +165,7 @@ func New(ctx context.Context, staticConfig config.Section) (client *resty.Client
 		}
 
 		// If passthroughHeaders: true for this rest client, pass any of the allowed headers on the original req
-		if passthroughHeadersEnabled {
+		if ffrestyConfig.HTTPPassthroughHeadersEnabled {
 			ctxHeaders := rCtx.Value(ffapi.CtxHeadersKey{})
 			if ctxHeaders != nil {
 				passthroughHeaders := ctxHeaders.(http.Header)
@@ -159,22 +189,19 @@ func New(ctx context.Context, staticConfig config.Section) (client *resty.Client
 
 	client.OnAfterResponse(func(c *resty.Client, r *resty.Response) error { OnAfterResponse(c, r); return nil })
 
-	headers := staticConfig.GetObject(HTTPConfigHeaders)
-	for k, v := range headers {
+	for k, v := range ffrestyConfig.HTTPHeaders {
 		if vs, ok := v.(string); ok {
 			client.SetHeader(k, vs)
 		}
 	}
-	authUsername := staticConfig.GetString((HTTPConfigAuthUsername))
-	authPassword := staticConfig.GetString((HTTPConfigAuthPassword))
-	if authUsername != "" && authPassword != "" {
-		client.SetHeader("Authorization", fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", authUsername, authPassword)))))
+	if ffrestyConfig.AuthUsername != "" && ffrestyConfig.AuthPassword != "" {
+		client.SetHeader("Authorization", fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", ffrestyConfig.AuthUsername, ffrestyConfig.AuthPassword)))))
 	}
 
-	if staticConfig.GetBool(HTTPConfigRetryEnabled) {
-		retryCount := staticConfig.GetInt(HTTPConfigRetryCount)
-		minTimeout := staticConfig.GetDuration(HTTPConfigRetryInitDelay)
-		maxTimeout := staticConfig.GetDuration(HTTPConfigRetryMaxDelay)
+	if ffrestyConfig.Retry {
+		retryCount := ffrestyConfig.RetryCount
+		minTimeout := ffrestyConfig.RetryInitialDelay
+		maxTimeout := ffrestyConfig.RetryMaximumDelay
 		client.
 			SetRetryCount(retryCount).
 			SetRetryWaitTime(minTimeout).
@@ -191,7 +218,7 @@ func New(ctx context.Context, staticConfig config.Section) (client *resty.Client
 			})
 	}
 
-	return client, nil
+	return client
 }
 
 func WrapRestErr(ctx context.Context, res *resty.Response, err error, key i18n.ErrorMessageKey) error {

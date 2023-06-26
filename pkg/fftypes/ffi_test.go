@@ -150,9 +150,10 @@ func TestFFIParamsValue(t *testing.T) {
 
 func TestFFITopic(t *testing.T) {
 	ffi := &FFI{
-		Namespace: "ns1",
+		Namespace:   "ns1",
+		NetworkName: "math",
 	}
-	assert.Equal(t, "01a982a7251400a7ec64fccce6febee3942a56e37967fa2ba26d7d6f43523c82", ffi.Topic())
+	assert.Equal(t, "c310d11a9bce752d9ee2a93cc86176f668eb6007b701c844a4eb3321f0f8ebf4", ffi.Topic())
 }
 
 func TestFFISetBroadCastMessage(t *testing.T) {

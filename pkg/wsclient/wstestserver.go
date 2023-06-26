@@ -29,6 +29,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -77,14 +78,17 @@ func NewTestTLSWSServer(testReq func(req *http.Request), publicKeyFile *os.File,
 	sendDone := make(chan struct{})
 	receiveDone := make(chan struct{})
 	connected := false
+	mu := sync.Mutex{}
 
 	handlerFunc := http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+		mu.Lock()
 		if testReq != nil {
 			testReq(req)
 		}
 		if connected {
 			// test server only handles one open connection, as it only has one set of channels
 			res.WriteHeader(409)
+			mu.Unlock()
 			return
 		}
 		ws, _ := upgrader.Upgrade(res, req, http.Header{})
@@ -106,6 +110,7 @@ func NewTestTLSWSServer(testReq func(req *http.Request), publicKeyFile *os.File,
 			}
 		}()
 		connected = true
+		mu.Unlock()
 	})
 
 	svr := httptest.NewUnstartedServer(handlerFunc)

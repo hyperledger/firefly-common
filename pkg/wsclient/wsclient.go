@@ -48,6 +48,7 @@ type WSConfig struct {
 	HTTPHeaders            fftypes.JSONObject `json:"headers,omitempty"`
 	HeartbeatInterval      time.Duration      `json:"heartbeatInterval,omitempty"`
 	TLSClientConfig        *tls.Config        `json:"tlsClientConfig,omitempty"`
+	ConnectionTimeout      time.Duration      `json:"connectionTimeout,omitempty"`
 	// This one cannot be set in JSON - must be configured on the code interface
 	ReceiveExt bool
 }
@@ -114,7 +115,7 @@ type WSPreConnectHandler func(ctx context.Context) error
 type WSPostConnectHandler func(ctx context.Context, w WSClient) error
 
 func New(ctx context.Context, config *WSConfig, beforeConnect WSPreConnectHandler, afterConnect WSPostConnectHandler) (WSClient, error) {
-
+	l := log.L(ctx)
 	wsURL, err := buildWSUrl(ctx, config)
 	if err != nil {
 		return nil, err
@@ -124,9 +125,10 @@ func New(ctx context.Context, config *WSConfig, beforeConnect WSPreConnectHandle
 		ctx: ctx,
 		url: wsURL,
 		wsdialer: &websocket.Dialer{
-			ReadBufferSize:  config.ReadBufferSize,
-			WriteBufferSize: config.WriteBufferSize,
-			TLSClientConfig: config.TLSClientConfig,
+			ReadBufferSize:   config.ReadBufferSize,
+			WriteBufferSize:  config.WriteBufferSize,
+			TLSClientConfig:  config.TLSClientConfig,
+			HandshakeTimeout: config.ConnectionTimeout,
 		},
 		retry: retry.Retry{
 			InitialDelay: config.InitialDelay,
@@ -157,6 +159,16 @@ func New(ctx context.Context, config *WSConfig, beforeConnect WSPreConnectHandle
 	if authUsername != "" && authPassword != "" {
 		w.headers.Set("Authorization", fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", authUsername, authPassword)))))
 	}
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			l.Tracef("WS %s closing due to canceled context", w.url)
+			w.Close()
+		case <-w.closing:
+			l.Tracef("WS %s closing", w.url)
+		}
+	}()
 
 	return w, nil
 }

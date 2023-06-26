@@ -56,6 +56,7 @@ func TestWSClientE2ETLS(t *testing.T) {
 		}
 		return nil
 	}
+
 	afterConnect := func(ctx context.Context, w WSClient) error {
 		return w.Send(ctx, []byte(`after connect message`))
 	}
@@ -94,6 +95,7 @@ func TestWSClientE2ETLS(t *testing.T) {
 	wsc2.SetURL(wsc2.URL() + "/updated")
 	err = wsc2.Connect()
 	assert.Error(t, err)
+	wsc2.Close()
 
 	// Receive the message automatically sent in afterConnect
 	message1 := <-toServer
@@ -623,4 +625,15 @@ func TestTestTLSServerFailsBadCerts(t *testing.T) {
 	_, _, _, _, err = NewTestTLSWSServer(nil, closedFile, closedFile)
 	assert.Error(t, err)
 
+}
+
+func TestWSClientContextClosed(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	wsConfig := generateConfig()
+	wsc, err := New(ctx, wsConfig, nil, nil)
+	assert.NoError(t, err)
+	assert.NotNil(t, wsc)
+	err = wsc.Send(context.Background(), []byte{})
+	assert.Regexp(t, "FF00147", err)
 }

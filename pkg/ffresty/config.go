@@ -17,6 +17,8 @@
 package ffresty
 
 import (
+	"context"
+
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/fftls"
 )
@@ -94,4 +96,35 @@ func InitConfig(conf config.Section) {
 
 	tlsConfig := conf.SubSection("tls")
 	fftls.InitTLSConfig(tlsConfig)
+}
+
+func GenerateConfig(ctx context.Context, conf config.Section) (*Config, error) {
+	ffrestyConfig := &Config{
+		URL:                           conf.GetString(HTTPConfigURL),
+		ProxyURL:                      conf.GetString(HTTPConfigProxyURL),
+		HTTPHeaders:                   conf.GetObject(HTTPConfigHeaders),
+		AuthUsername:                  conf.GetString(HTTPConfigAuthUsername),
+		AuthPassword:                  conf.GetString(HTTPConfigAuthPassword),
+		Retry:                         conf.GetBool(HTTPConfigRetryEnabled),
+		RetryCount:                    conf.GetInt(HTTPConfigRetryCount),
+		RetryInitialDelay:             conf.GetDuration(HTTPConfigRetryInitDelay),
+		RetryMaximumDelay:             conf.GetDuration(HTTPConfigRetryMaxDelay),
+		HTTPRequestTimeout:            conf.GetDuration(HTTPConfigRequestTimeout),
+		HTTPIdleConnTimeout:           conf.GetDuration(HTTPIdleTimeout),
+		HTTPMaxIdleConns:              conf.GetInt(HTTPMaxIdleConns),
+		HTTPConnectionTimeout:         conf.GetDuration(HTTPConnectionTimeout),
+		HTTPTLSHandshakeTimeout:       conf.GetDuration(HTTPTLSHandshakeTimeout),
+		HTTPExpectContinueTimeout:     conf.GetDuration(HTTPExpectContinueTimeout),
+		HTTPPassthroughHeadersEnabled: conf.GetBool(HTTPPassthroughHeadersEnabled),
+		HTTPCustomClient:              conf.Get(HTTPCustomClient),
+	}
+	tlsSection := conf.SubSection("tls")
+	tlsClientConfig, err := fftls.ConstructTLSConfig(ctx, tlsSection, fftls.ClientType)
+	if err != nil {
+		return nil, err
+	}
+
+	ffrestyConfig.TLSClientConfig = tlsClientConfig
+
+	return ffrestyConfig, nil
 }
