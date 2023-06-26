@@ -305,7 +305,6 @@ func TestMTLSClientWithServer(t *testing.T) {
 
 	// Create a Server instance to listen on port 8443 with the TLS config
 	server := &http.Server{
-		Addr:      "127.0.0.1:8443",
 		TLSConfig: tlsConfig,
 	}
 
@@ -321,13 +320,20 @@ func TestMTLSClientWithServer(t *testing.T) {
 		}
 	}()
 
-	go server.ListenAndServeTLS(publicKeyFile.Name(), privateKeyFile.Name())
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer ln.Close()
+
+	go server.ServeTLS(ln, publicKeyFile.Name(), privateKeyFile.Name())
 
 	// Use ffresty to test the mTLS client as well
 	var restyConfig = config.RootSection("resty")
 	InitConfig(restyConfig)
 	clientTLSSection := restyConfig.SubSection("tls")
-	restyConfig.Set(HTTPConfigURL, "https://127.0.0.1")
+	restyConfig.Set(HTTPConfigURL, ln.Addr())
 	clientTLSSection.Set(fftls.HTTPConfTLSEnabled, true)
 	clientTLSSection.Set(fftls.HTTPConfTLSKeyFile, privateKeyFile.Name())
 	clientTLSSection.Set(fftls.HTTPConfTLSCertFile, publicKeyFile.Name())
@@ -336,8 +342,9 @@ func TestMTLSClientWithServer(t *testing.T) {
 	c, err := New(context.Background(), restyConfig)
 	assert.Nil(t, err)
 
-	//httpsAddr := fmt.Sprintf("https://localhost:8443/hello", server.Addr)
-	res, err := c.R().Get("https://127.0.0.1:8443/hello")
+	httpsAddr := fmt.Sprintf("https://%s/hello", ln.Addr())
+	fmt.Println(httpsAddr)
+	res, err := c.R().Get(httpsAddr)
 	assert.NoError(t, err)
 
 	assert.NoError(t, err)
