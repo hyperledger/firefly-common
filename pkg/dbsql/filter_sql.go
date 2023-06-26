@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -44,7 +44,18 @@ func (s *Database) FilterSelect(ctx context.Context, tableName string, sel sq.Se
 		}
 	}
 	fop, err := s.filterSelectFinalized(ctx, tableName, fi, typeMap, preconditions...)
+
 	sel = sel.Where(fop)
+
+	if len(fi.GroupBy) > 0 {
+		groupByWithResolvedFieldName := make([]string, len(fi.GroupBy))
+		for i, gb := range fi.GroupBy {
+			groupByWithResolvedFieldName[i] = s.mapField(tableName, gb, typeMap)
+		}
+		groupByString := strings.Join(groupByWithResolvedFieldName, ",")
+		sel = sel.GroupBy(groupByString)
+	}
+
 	sort := make([]string, len(fi.Sort))
 	var sortString string
 	for i, sf := range fi.Sort {
