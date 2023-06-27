@@ -126,3 +126,19 @@ func TestResetCachesForNamespace(t *testing.T) {
 	assert.Nil(t, cacheNS1_b.Get("key1"))
 
 }
+
+func TestGetUnexpired(t *testing.T) {
+	ctx := context.Background()
+	cacheManager := NewCacheManager(ctx, true)
+	cache0, _ := cacheManager.GetCache(ctx, "ns1", "cacheA", 1, time.Nanosecond, true)
+	cache1, _ := cacheManager.GetCache(ctx, "ns1", "cacheB", 1, time.Hour, true)
+
+	cache0.Set("test", "will expire")
+	cache1.Set("test", "will not expire")
+
+	for cache0.GetUnexpired("test") != nil {
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	assert.NotNil(t, cache1.GetUnexpired("test"))
+}
