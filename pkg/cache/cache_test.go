@@ -38,6 +38,25 @@ func TestGetCacheReturnsSameCacheForSameConfig(t *testing.T) {
 	assert.Equal(t, 2, len(cacheManager.ListCacheNames("ns1")))
 }
 
+func TestIncludeExpired(t *testing.T) {
+	ctx := context.Background()
+	cacheManager := NewCacheManager(ctx, true)
+	cache0, _ := cacheManager.GetCache(ctx, "ns1", "cacheA", 85, time.Second/2, true)
+	cache0.Set("int0", 100)
+
+	assert.Equal(t, 100, cache0.Get("int0", true))
+	assert.Equal(t, 100, cache0.Get("int0", false))
+
+	time.Sleep(time.Second / 3)
+	assert.Equal(t, 100, cache0.Get("int0", true))
+	assert.Equal(t, 100, cache0.Get("int0", false))
+
+	time.Sleep(time.Second / 3)
+
+	assert.Equal(t, 100, cache0.Get("int0", true))
+	assert.Nil(t, cache0.Get("int0", false))
+}
+
 func TestTwoSeparateCacheWorksIndependently(t *testing.T) {
 	ctx := context.Background()
 	cacheManager := NewCacheManager(ctx, true)
@@ -45,19 +64,19 @@ func TestTwoSeparateCacheWorksIndependently(t *testing.T) {
 	cache1, _ := cacheManager.GetCache(ctx, "ns1", "cacheB", 85, time.Second, true)
 
 	cache0.SetInt("int0", 100)
-	assert.Equal(t, 100, cache0.GetInt("int0"))
-	assert.Equal(t, 100, cache0.Get("int0").(int))
-	assert.Equal(t, 0, cache1.GetInt("int0"))
-	assert.Equal(t, nil, cache1.Get("int0"))
+	assert.Equal(t, 100, cache0.GetInt("int0", false))
+	assert.Equal(t, 100, cache0.Get("int0", false).(int))
+	assert.Equal(t, 0, cache1.GetInt("int0", false))
+	assert.Equal(t, nil, cache1.Get("int0", false))
 
 	cache1.SetString("string1", "val1")
-	assert.Equal(t, "", cache0.GetString("string1"))
-	assert.Equal(t, nil, cache0.Get("string1"))
-	assert.Equal(t, "val1", cache1.GetString("string1"))
-	assert.Equal(t, "val1", cache1.Get("string1").(string))
+	assert.Equal(t, "", cache0.GetString("string1", false))
+	assert.Equal(t, nil, cache0.Get("string1", false))
+	assert.Equal(t, "val1", cache1.GetString("string1", false))
+	assert.Equal(t, "val1", cache1.Get("string1", false).(string))
 	deleted := cache1.Delete("string1")
 	assert.True(t, deleted)
-	assert.Equal(t, nil, cache1.Get("string1"))
+	assert.Equal(t, nil, cache1.Get("string1", false))
 }
 
 func TestCacheEnablement(t *testing.T) {
@@ -70,7 +89,7 @@ func TestCacheEnablement(t *testing.T) {
 	assert.Equal(t, false, cache0.IsEnabled())
 
 	cache0.SetInt64("int0", hundred)
-	assert.Equal(t, nil, cache0.Get("int0"))
+	assert.Equal(t, nil, cache0.Get("int0", false))
 
 	// check individual cache cannot be turned on when the cache manager is disabled
 	cache1, _ := disabledCacheManager.GetCache(ctx, "ns1", "cache1", 85, time.Second, true)
@@ -84,7 +103,7 @@ func TestCacheEnablement(t *testing.T) {
 	assert.Equal(t, false, cache0.IsEnabled())
 
 	cache0.SetInt64("int0", hundred)
-	assert.Equal(t, zero, cache0.GetInt64("int0"))
+	assert.Equal(t, zero, cache0.GetInt64("int0", false))
 	deleted := cache0.Delete("int0")
 	assert.False(t, deleted)
 
@@ -92,7 +111,7 @@ func TestCacheEnablement(t *testing.T) {
 	assert.Equal(t, true, cache1.IsEnabled())
 
 	cache1.SetInt64("int0", hundred)
-	assert.Equal(t, hundred, cache1.GetInt64("int0"))
+	assert.Equal(t, hundred, cache1.GetInt64("int0", false))
 
 }
 
@@ -113,32 +132,16 @@ func TestResetCachesForNamespace(t *testing.T) {
 
 	cacheNS1_a, _ := cacheManager.GetCache(ctx, "ns1", "cache1", 85, time.Second, true)
 	assert.Equal(t, cacheNS1, cacheNS1_a)
-	assert.Equal(t, "value1", cacheNS1_a.Get("key1"))
+	assert.Equal(t, "value1", cacheNS1_a.Get("key1", false))
 
 	cacheManager.ResetCaches("ns1")
 
 	cacheNS2_a, _ := cacheManager.GetCache(ctx, "ns2", "cache1", 85, time.Second, true)
 	assert.Equal(t, cacheNS2, cacheNS2_a)
-	assert.Equal(t, "value2", cacheNS2_a.Get("key2"))
+	assert.Equal(t, "value2", cacheNS2_a.Get("key2", false))
 
 	cacheNS1_b, _ := cacheManager.GetCache(ctx, "ns1", "cache1", 85, time.Second, true)
 	assert.NotEqual(t, cacheNS1, cacheNS1_b)
-	assert.Nil(t, cacheNS1_b.Get("key1"))
+	assert.Nil(t, cacheNS1_b.Get("key1", false))
 
-}
-
-func TestGetUnexpired(t *testing.T) {
-	ctx := context.Background()
-	cacheManager := NewCacheManager(ctx, true)
-	cache0, _ := cacheManager.GetCache(ctx, "ns1", "cacheA", 1, time.Nanosecond, true)
-	cache1, _ := cacheManager.GetCache(ctx, "ns1", "cacheB", 1, time.Hour, true)
-
-	cache0.Set("test", "will expire")
-	cache1.Set("test", "will not expire")
-
-	for cache0.GetUnexpired("test") != nil {
-		time.Sleep(1 * time.Millisecond)
-	}
-
-	assert.NotNil(t, cache1.GetUnexpired("test"))
 }
