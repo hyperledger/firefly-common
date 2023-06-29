@@ -49,19 +49,6 @@ const (
 // Manager contains functions to manage cache instances.
 // It provides functions for creating new cache instances and list all of the names of existing cache instances
 // Each cache instance has unique name and its own cache size and TTL configuration.
-//
-// Two modes of operation are available
-//
-//	Default behavior (when the normal Get() methods are used to access the cache):
-//	    - Item is added to the cache
-//	    - After the expiry time, it is automatically purged from the cache to release memory
-//	       - ** THIS PART IS NOT IMPLEMENTED, AND A REAPER NEEDS TO BE ADDED **
-//	    - While it's in memory, it is returned from the Get() methods
-//	    - The TTL is extended on each access, so it's time-to-live since last access
-//
-//	Optional behavior (when calling code uses GetUnexpired() to access the cache):
-//	    - The value is only returned if it has not expired yet (regardless of whether it has been reaped)
-//	    - The TTL is NOT extended on each access
 type Manager interface {
 	// Get a cache by name, if a cache already exists with the same name, it will be returned as is without checking maxSize, ttl and enabled matches
 	GetCache(ctx context.Context, namespace, name string, maxSize int64, ttl time.Duration, enabled bool, behaviorOptions ...BehaviorOption) (CInterface, error)
