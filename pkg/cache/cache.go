@@ -25,25 +25,33 @@ import (
 	"github.com/karlseguin/ccache"
 )
 
+type BehaviorOption int
+
+const (
+	// StrictExpiry sets the behavior so that an expired item will never be returned by the cache.
+	//
+	// The default behavior is that items are returned until they have been purged from the cache by an
+	// synchronous reaper
+	// NOTE: see issue https://github.com/hyperledger/firefly-common/issues/85 on operation of the async reaper.
+	StrictExpiry BehaviorOption = iota
+
+	// TTLFromInitialAdd sets the behavior so that the time-to-live for a cache entry is set when
+	// it is added, and not extended when the item is accessed.
+	// This is useful if you have code that wants to rely on a cache-miss as a way to force regular
+	// synchronization of cached data with a remote source of truth
+	//
+	// The default behavior is that the TTL is extended each time a cache entry is accessed.
+	// This is useful if you're managing the cache such that the data inside it is always valid,
+	// and want to keep the most frequently accessed data in the cache indefinitely.
+	TTLFromInitialAdd
+)
+
 // Manager contains functions to manage cache instances.
 // It provides functions for creating new cache instances and list all of the names of existing cache instances
 // Each cache instance has unique name and its own cache size and TTL configuration.
-//
-// Two modes of operation are available
-//
-//	Default behavior (when the normal Get() methods are used to access the cache):
-//	    - Item is added to the cache
-//	    - After the expiry time, it is automatically purged from the cache to release memory
-//	       - ** THIS PART IS NOT IMPLEMENTED, AND A REAPER NEEDS TO BE ADDED **
-//	    - While it's in memory, it is returned from the Get() methods
-//	    - The TTL is extended on each access, so it's time-to-live since last access
-//
-//	Optional behavior (when calling code uses GetUnexpired() to access the cache):
-//	    - The value is only returned if it has not expired yet (regardless of whether it has been reaped)
-//	    - The TTL is NOT extended on each access
 type Manager interface {
 	// Get a cache by name, if a cache already exists with the same name, it will be returned as is without checking maxSize, ttl and enabled matches
-	GetCache(ctx context.Context, namespace, name string, maxSize int64, ttl time.Duration, enabled bool) (CInterface, error)
+	GetCache(ctx context.Context, namespace, name string, maxSize int64, ttl time.Duration, enabled bool, behaviorOptions ...BehaviorOption) (CInterface, error)
 	ListCacheNames(namespace string) []string
 	ResetCaches(namespace string)
 	IsEnabled() bool
@@ -55,7 +63,6 @@ type CInterface interface {
 	Delete(key string) bool
 
 	Get(key string) interface{}
-	GetUnexpired(key string) interface{}
 	Set(key string, val interface{})
 
 	GetString(key string) string
@@ -69,12 +76,14 @@ type CInterface interface {
 }
 
 type CCache struct {
-	enabled   bool
-	ctx       context.Context
-	namespace string
-	name      string
-	cache     *ccache.Cache
-	cacheTTL  time.Duration
+	enabled           bool
+	ctx               context.Context
+	namespace         string
+	name              string
+	cache             *ccache.Cache
+	cacheTTL          time.Duration
+	strictExpiry      bool
+	ttlFromInitialAdd bool
 }
 
 func (c *CCache) Set(key string, val interface{}) {
@@ -85,19 +94,13 @@ func (c *CCache) Set(key string, val interface{}) {
 func (c *CCache) Get(key string) interface{} {
 	if c.enabled {
 		if cached := c.cache.Get(key); cached != nil {
-			cached.Extend(c.cacheTTL)
-			return cached.Value()
-		}
-	}
-	return nil
-}
-
-// GetNotExpired retrieves from the cache, without extending the expiry time, and
-// if the existing TTL has already popped (but the item has not yet been reaped)
-// we will return nil.
-func (c *CCache) GetUnexpired(key string) interface{} {
-	if c.enabled {
-		if cached := c.cache.Get(key); cached != nil && !cached.Expired() {
+			if c.strictExpiry && cached.Expired() {
+				c.Delete(key)
+				return nil
+			}
+			if !c.ttlFromInitialAdd {
+				cached.Extend(c.cacheTTL)
+			}
 			return cached.Value()
 		}
 	}
@@ -170,7 +173,7 @@ type cacheManager struct {
 	configuredCaches map[string]*CCache // Cache manager maintain a list of named configured CCache, the names are unique
 }
 
-func (cm *cacheManager) GetCache(ctx context.Context, namespace, name string, maxSize int64, ttl time.Duration, enabled bool) (CInterface, error) {
+func (cm *cacheManager) GetCache(ctx context.Context, namespace, name string, maxSize int64, ttl time.Duration, enabled bool, behaviors ...BehaviorOption) (CInterface, error) {
 	cm.m.Lock()
 	defer cm.m.Unlock()
 	fqName := fmt.Sprintf("%s:%s", namespace, name)
@@ -188,6 +191,14 @@ func (cm *cacheManager) GetCache(ctx context.Context, namespace, name string, ma
 			cache:     ccache.New(ccache.Configure().MaxSize(maxSize)),
 			cacheTTL:  ttl,
 			enabled:   enabledValue,
+		}
+		for _, b := range behaviors {
+			switch b {
+			case StrictExpiry:
+				cache.strictExpiry = true
+			case TTLFromInitialAdd:
+				cache.ttlFromInitialAdd = true
+			}
 		}
 		cm.configuredCaches[fqName] = cache
 	}

@@ -127,18 +127,22 @@ func TestResetCachesForNamespace(t *testing.T) {
 
 }
 
-func TestGetUnexpired(t *testing.T) {
+func TestGetStrictExpiry(t *testing.T) {
 	ctx := context.Background()
-	cacheManager := NewCacheManager(ctx, true)
-	cache0, _ := cacheManager.GetCache(ctx, "ns1", "cacheA", 1, time.Nanosecond, true)
-	cache1, _ := cacheManager.GetCache(ctx, "ns1", "cacheB", 1, time.Hour, true)
+	cm := NewCacheManager(ctx, true)
+	cache0, _ := cm.GetCache(ctx, "ns1", "cacheA", 1, time.Nanosecond, true, StrictExpiry, TTLFromInitialAdd)
+	assert.True(t, cache0.(*CCache).strictExpiry)
+	assert.True(t, cache0.(*CCache).ttlFromInitialAdd)
+	cache1, _ := cm.GetCache(ctx, "ns1", "cacheB", 1, time.Nanosecond, true)
+	assert.False(t, cache1.(*CCache).strictExpiry)
+	assert.False(t, cache1.(*CCache).ttlFromInitialAdd)
 
-	cache0.Set("test", "will expire")
-	cache1.Set("test", "will not expire")
+	cache0.Set("test", "will not be returned after expiry")
+	cache1.Set("test", "will be returned after expiry")
 
-	for cache0.GetUnexpired("test") != nil {
+	for cache0.Get("test") != nil {
 		time.Sleep(1 * time.Millisecond)
 	}
 
-	assert.NotNil(t, cache1.GetUnexpired("test"))
+	assert.NotNil(t, cache1.Get("test"))
 }
