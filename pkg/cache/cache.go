@@ -42,35 +42,31 @@ type CInterface interface {
 	Delete(key string) bool
 
 	// Get a cached value by key name
-	//    - when includeExpired set to true, items existed longer than TTL will be returned, this can be useful if you cannot get the new value and need a backup. Or you need a cached without expiry.
-	//    - when includeExpired set to false, items existed longer than TTL won't be returned.
-	//
-	// **NOTE: if you used the old Get function without the includeExpired parameter, you were getting expired items, and there wasn't a way to determine unexpired items.
-	Get(key string, includeExpired bool) interface{}
+	//    - when extendTTL set to true, TTL of an item will be extended as part of this get call.
+	//       This was the default behavior before the extendTTL parameter was introduced
+	//    - when extendTTL set to false, the TTL of an item will not be extended.
+	Get(key string, extendTTL bool) interface{}
 	Set(key string, val interface{})
 
 	// Get a cached string value by key name
-	//    - when includeExpired set to true, items existed longer than TTL will be returned, this can be useful if you cannot get the new value and need a backup. Or you need a cached without expiry.
-	//    - when includeExpired set to false, items existed longer than TTL won't be returned.
-	//
-	// **NOTE: if you used the old Get function without the includeExpired parameter, you were getting expired items, and there wasn't a way to determine unexpired items.
-	GetString(key string, includeExpired bool) string
+	//    - when extendTTL set to true, TTL of an item will be extended as part of this get call.
+	//       This was the default behavior before the extendTTL parameter was introduced
+	//    - when extendTTL set to false, the TTL of an item will not be extended.
+	GetString(key string, extendTTL bool) string
 	SetString(key string, val string)
 
 	// Get a cached int32 value by key name
-	//    - when includeExpired set to true, items existed longer than TTL will be returned, this can be useful if you cannot get the new value and need a backup. Or you need a cached without expiry.
-	//    - when includeExpired set to false, items existed longer than TTL won't be returned.
-	//
-	// **NOTE: if you used the old Get function without the includeExpired parameter, you were getting expired items, and there wasn't a way to determine unexpired items.
-	GetInt(key string, includeExpired bool) int
+	//    - when extendTTL set to true, TTL of an item will be extended as part of this get call.
+	//       This was the default behavior before the extendTTL parameter was introduced
+	//    - when extendTTL set to false, the TTL of an item will not be extended.
+	GetInt(key string, extendTTL bool) int
 	SetInt(key string, val int)
 
 	// Get a cached int64 value by key name
-	//    - when includeExpired set to true, items existed longer than TTL will be returned, this can be useful if you cannot get the new value and need a backup. Or you need a cached without expiry.
-	//    - when includeExpired set to false, items existed longer than TTL won't be returned.
-	//
-	// **NOTE: if you used the old Get function without the includeExpired parameter, you were getting expired items, and there wasn't a way to determine unexpired items.
-	GetInt64(key string, includeExpired bool) int64
+	//    - when extendTTL set to true, TTL of an item will be extended as part of this get call.
+	//       This was the default behavior before the extendTTL parameter was introduced
+	//    - when extendTTL set to false, the TTL of an item will not be extended.
+	GetInt64(key string, extendTTL bool) int64
 	SetInt64(key string, val int64)
 }
 
@@ -88,11 +84,17 @@ func (c *CCache) Set(key string, val interface{}) {
 		c.cache.Set(key, val, c.cacheTTL)
 	}
 }
-func (c *CCache) Get(key string, includeExpired bool) interface{} {
+func (c *CCache) Get(key string, extendTTL bool) interface{} {
 	if c.enabled {
 		if cached := c.cache.Get(key); cached != nil {
-			if !includeExpired && cached.Expired() {
+			if cached.Expired() {
+				// TODO: need to implement a better reaper logic to remove other expired keys that weren't actively accessed using Get method.
+				// Without the reaper, our cache will use up to the configured cache size.
+				c.cache.Delete(key)
 				return nil
+			}
+			if extendTTL {
+				cached.Extend(c.cacheTTL)
 			}
 			return cached.Value()
 		}
@@ -113,9 +115,9 @@ func (c *CCache) SetString(key string, val string) {
 	}
 }
 
-func (c *CCache) GetString(key string, includeExpired bool) string {
+func (c *CCache) GetString(key string, extendTTL bool) string {
 	if c.enabled {
-		val := c.Get(key, includeExpired)
+		val := c.Get(key, extendTTL)
 		if val != nil {
 			return val.(string)
 		}
@@ -129,9 +131,9 @@ func (c *CCache) SetInt(key string, val int) {
 	}
 }
 
-func (c *CCache) GetInt(key string, includeExpired bool) int {
+func (c *CCache) GetInt(key string, extendTTL bool) int {
 	if c.enabled {
-		val := c.Get(key, includeExpired)
+		val := c.Get(key, extendTTL)
 		if val != nil {
 			return val.(int)
 		}
@@ -145,9 +147,9 @@ func (c *CCache) SetInt64(key string, val int64) {
 	}
 }
 
-func (c *CCache) GetInt64(key string, includeExpired bool) int64 {
+func (c *CCache) GetInt64(key string, extendTTL bool) int64 {
 	if c.enabled {
-		val := c.Get(key, includeExpired)
+		val := c.Get(key, extendTTL)
 		if val != nil {
 			return val.(int64)
 		}

@@ -38,23 +38,36 @@ func TestGetCacheReturnsSameCacheForSameConfig(t *testing.T) {
 	assert.Equal(t, 2, len(cacheManager.ListCacheNames("ns1")))
 }
 
-func TestIncludeExpired(t *testing.T) {
+func TestTTL(t *testing.T) {
+	ctx := context.Background()
+	cacheManager := NewCacheManager(ctx, true)
+	cache0, _ := cacheManager.GetCache(ctx, "ns1", "cacheA", 85, time.Second/2, true)
+	cache0.Set("int0", 100)
+
+	assert.Equal(t, 100, cache0.Get("int0", false))
+
+	time.Sleep(time.Second / 3)
+	assert.Equal(t, 100, cache0.Get("int0", false))
+
+	time.Sleep(time.Second / 3)
+
+	assert.Nil(t, cache0.Get("int0", false))
+}
+
+func TestExtendTTL(t *testing.T) {
 	ctx := context.Background()
 	cacheManager := NewCacheManager(ctx, true)
 	cache0, _ := cacheManager.GetCache(ctx, "ns1", "cacheA", 85, time.Second/2, true)
 	cache0.Set("int0", 100)
 
 	assert.Equal(t, 100, cache0.Get("int0", true))
-	assert.Equal(t, 100, cache0.Get("int0", false))
 
 	time.Sleep(time.Second / 3)
 	assert.Equal(t, 100, cache0.Get("int0", true))
-	assert.Equal(t, 100, cache0.Get("int0", false))
 
 	time.Sleep(time.Second / 3)
 
 	assert.Equal(t, 100, cache0.Get("int0", true))
-	assert.Nil(t, cache0.Get("int0", false))
 }
 
 func TestTwoSeparateCacheWorksIndependently(t *testing.T) {
