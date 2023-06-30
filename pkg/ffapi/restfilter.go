@@ -125,9 +125,8 @@ func (hs *HandlerFactory) buildFilter(req *http.Request, ff QueryFactory) (AndFi
 	return filter, nil
 }
 
-func (hs *HandlerFactory) checkNoMods(ctx context.Context, mods filterModifiers, field, op string, filter Filter) (Filter, error) {
-	emptyModifiers := filterModifiers{}
-	if mods != emptyModifiers {
+func (hs *HandlerFactory) checkNoModsExceptAnd(ctx context.Context, mods filterModifiers, field, op string, filter Filter) (Filter, error) {
+	if mods.caseInsensitive || mods.emptyIsNull || mods.negate {
 		return nil, i18n.NewError(ctx, i18n.MsgQueryOpUnsupportedMod, op, field)
 	}
 	return filter, nil
@@ -192,13 +191,13 @@ func (hs *HandlerFactory) mapOperation(ctx context.Context, fb FilterBuilder, fi
 
 	switch op {
 	case ">=":
-		return hs.checkNoMods(ctx, mods, field, op, fb.Gte(field, matchString))
+		return hs.checkNoModsExceptAnd(ctx, mods, field, op, fb.Gte(field, matchString))
 	case "<=":
-		return hs.checkNoMods(ctx, mods, field, op, fb.Lte(field, matchString))
+		return hs.checkNoModsExceptAnd(ctx, mods, field, op, fb.Lte(field, matchString))
 	case ">", ">>":
-		return hs.checkNoMods(ctx, mods, field, op, fb.Gt(field, matchString))
+		return hs.checkNoModsExceptAnd(ctx, mods, field, op, fb.Gt(field, matchString))
 	case "<", "<<":
-		return hs.checkNoMods(ctx, mods, field, op, fb.Lt(field, matchString))
+		return hs.checkNoModsExceptAnd(ctx, mods, field, op, fb.Lt(field, matchString))
 	case "@":
 		if mods.caseInsensitive {
 			if mods.negate {
