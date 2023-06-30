@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -63,11 +63,27 @@ func NewFFBigInt(x int64) *FFBigInt {
 
 func (i FFBigInt) Value() (driver.Value, error) {
 	// Represent as base 16 string in database, to allow a 64 character limit
-	res := (*big.Int)(&i).Text(16)
-	if len(res) > MaxFFBigIntHexLength {
-		return nil, i18n.NewError(context.Background(), i18n.MsgBigIntTooLarge, len(res), MaxFFBigIntHexLength)
+	hexValue := (*big.Int)(&i).Text(16)
+	if len(hexValue) > MaxFFBigIntHexLength {
+		return nil, i18n.NewError(context.Background(), i18n.MsgBigIntTooLarge, len(hexValue), MaxFFBigIntHexLength)
 	}
-	return res, nil
+	// Pad left after the sign digit to the max len to allow alphabetical sorting to work correctly
+	targetLen := MaxFFBigIntHexLength - 1
+	src := []byte(hexValue)
+	buff := make([]byte, 0, MaxFFBigIntHexLength)
+	if len(src) > 0 && src[0] == '-' {
+		buff = append(buff, '-')
+		src = src[1:]
+		targetLen++
+	}
+	padLen := targetLen - len(hexValue)
+	for i := 0; i < padLen; i++ {
+		buff = append(buff, '0')
+	}
+	for i := 0; i < len(src); i++ {
+		buff = append(buff, src[i])
+	}
+	return string(buff), nil
 }
 
 func (i *FFBigInt) Scan(src interface{}) error {

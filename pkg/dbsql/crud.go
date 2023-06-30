@@ -61,19 +61,26 @@ const (
 type PostCompletionHook func()
 
 type Resource interface {
-	GetID() *fftypes.UUID
+	GetID() string
 	SetCreated(*fftypes.FFTime)
 	SetUpdated(*fftypes.FFTime)
 }
 
+type ResourceSequence interface {
+	SetSequence(int64)
+}
+
+// Resource is the default implementation of the Resource interface, but consumers of this
+// package can implement the interface directly if they want to use different field names
+// or field types for the fields.
 type ResourceBase struct {
 	ID      *fftypes.UUID   `ffstruct:"ResourceBase" json:"id"`
 	Created *fftypes.FFTime `ffstruct:"ResourceBase" json:"created"`
 	Updated *fftypes.FFTime `ffstruct:"ResourceBase" json:"updated"`
 }
 
-func (r *ResourceBase) GetID() *fftypes.UUID {
-	return r.ID
+func (r *ResourceBase) GetID() string {
+	return r.ID.String() // nil safe
 }
 
 func (r *ResourceBase) SetCreated(t *fftypes.FFTime) {
@@ -90,12 +97,15 @@ type CRUD[T Resource] interface {
 	InsertMany(ctx context.Context, instances []T, allowPartialSuccess bool, hooks ...PostCompletionHook) (err error)
 	Insert(ctx context.Context, inst T, hooks ...PostCompletionHook) (err error)
 	Replace(ctx context.Context, inst T, hooks ...PostCompletionHook) (err error)
-	GetByID(ctx context.Context, id *fftypes.UUID, getOpts ...GetOption) (inst T, err error)
+	GetByID(ctx context.Context, id string, getOpts ...GetOption) (inst T, err error)
+	GetSequenceForID(ctx context.Context, id string) (seq int64, err error)
 	GetMany(ctx context.Context, filter ffapi.Filter) (instances []T, fr *ffapi.FilterResult, err error)
-	Update(ctx context.Context, id *fftypes.UUID, update ffapi.Update, hooks ...PostCompletionHook) (err error)
+	Count(ctx context.Context, filter ffapi.Filter) (count int64, err error)
+	Update(ctx context.Context, id string, update ffapi.Update, hooks ...PostCompletionHook) (err error)
 	UpdateSparse(ctx context.Context, sparseUpdate T, hooks ...PostCompletionHook) (err error)
 	UpdateMany(ctx context.Context, filter ffapi.Filter, update ffapi.Update, hooks ...PostCompletionHook) (err error)
-	Delete(ctx context.Context, id *fftypes.UUID, hooks ...PostCompletionHook) (err error)
+	Delete(ctx context.Context, id string, hooks ...PostCompletionHook) (err error)
+	DeleteMany(ctx context.Context, filter ffapi.Filter, hooks ...PostCompletionHook) (err error) // no events
 }
 
 type CrudBase[T Resource] struct {
@@ -103,12 +113,14 @@ type CrudBase[T Resource] struct {
 	Table            string
 	Columns          []string
 	FilterFieldMap   map[string]string
+	TimesDisabled    bool // no management of the time columns
+	PatchDisabled    bool // allows non-pointer fields, but prevents UpdateSparse function
 	ImmutableColumns []string
 
 	NilValue     func() T // nil value typed to T
 	NewInstance  func() T
 	ScopedFilter func() sq.Eq
-	EventHandler func(id *fftypes.UUID, eventType ChangeEventType)
+	EventHandler func(id string, eventType ChangeEventType)
 	GetFieldPtr  func(inst T, col string) interface{}
 
 	// Optional extensions
@@ -132,9 +144,11 @@ func (c *CrudBase[T]) Validate() {
 	ptrs := map[string]interface{}{}
 	fieldMap := map[string]bool{
 		// Mandatory column checks
-		ColumnID:      false,
-		ColumnCreated: false,
-		ColumnUpdated: false,
+		ColumnID: false,
+	}
+	if !c.TimesDisabled {
+		fieldMap[ColumnCreated] = false
+		fieldMap[ColumnUpdated] = false
 	}
 	for _, col := range c.Columns {
 		if ok, set := fieldMap[col]; ok && set {
@@ -148,7 +162,9 @@ func (c *CrudBase[T]) Validate() {
 		fieldPtr := c.GetFieldPtr(inst, col)
 		ptrVal := reflect.ValueOf(fieldPtr)
 		if ptrVal.Kind() != reflect.Ptr || !isNil(ptrVal.Elem().Interface()) {
-			panic(fmt.Sprintf("field %s does not seem to be a pointer type - prevents null-check for PATCH semantics functioning", col))
+			if !c.PatchDisabled {
+				panic(fmt.Sprintf("field %s does not seem to be a pointer type - prevents null-check for PATCH semantics functioning", col))
+			}
 		}
 		ptrs[col] = fieldPtr
 	}
@@ -160,16 +176,18 @@ func (c *CrudBase[T]) Validate() {
 	if !isNil(c.NilValue()) {
 		panic("NilValue() value must be nil")
 	}
-	if isNil(c.ScopedFilter()) {
-		panic("ScopedFilter() value must not be nil")
-	}
 	if !isNil(c.GetFieldPtr(inst, fftypes.NewUUID().String())) {
 		panic("GetFieldPtr() must return nil for unknown column")
 	}
 }
 
-func (c *CrudBase[T]) idFilter(id *fftypes.UUID) sq.Eq {
-	filter := c.ScopedFilter()
+func (c *CrudBase[T]) idFilter(id string) sq.Eq {
+	var filter sq.Eq
+	if c.ScopedFilter != nil {
+		filter = c.ScopedFilter()
+	} else {
+		filter = sq.Eq{}
+	}
 	if c.ReadTableAlias != "" {
 		filter[fmt.Sprintf("%s.id", c.ReadTableAlias)] = id
 	} else {
@@ -191,13 +209,17 @@ colLoop:
 			update = update.Set(col, value)
 		}
 	}
-	update = update.Set(ColumnUpdated, fftypes.Now())
+	if !c.TimesDisabled {
+		update = update.Set(ColumnUpdated, fftypes.Now())
+	}
 	return update
 }
 
 func (c *CrudBase[T]) updateFromInstance(ctx context.Context, tx *TXWrapper, inst T, includeNil bool) (int64, error) {
 	update := sq.Update(c.Table)
-	inst.SetUpdated(fftypes.Now())
+	if !c.TimesDisabled {
+		inst.SetUpdated(fftypes.Now())
+	}
 	update = c.buildUpdateList(ctx, update, inst, includeNil)
 	update = update.Where(c.idFilter(inst.GetID()))
 	return c.DB.UpdateTx(ctx, c.Table, tx,
@@ -214,22 +236,37 @@ func (c *CrudBase[T]) getFieldValue(inst T, col string) interface{} {
 	return reflect.ValueOf(c.GetFieldPtr(inst, col)).Elem().Interface()
 }
 
+func (c *CrudBase[T]) setInsertTimestamps(inst T) {
+	if !c.TimesDisabled {
+		now := fftypes.Now()
+		inst.SetCreated(now)
+		inst.SetUpdated(now)
+	}
+}
+
+func (c *CrudBase[T]) attemptSetSequence(inst interface{}, seq int64) {
+	if rs, ok := inst.(ResourceSequence); ok {
+		rs.SetSequence(seq)
+	}
+}
+
 func (c *CrudBase[T]) attemptInsert(ctx context.Context, tx *TXWrapper, inst T, requestConflictEmptyResult bool) (err error) {
-	now := fftypes.Now()
-	inst.SetCreated(now)
-	inst.SetUpdated(now)
+	c.setInsertTimestamps(inst)
 	insert := sq.Insert(c.Table).Columns(c.Columns...)
 	values := make([]interface{}, len(c.Columns))
 	for i, col := range c.Columns {
 		values[i] = c.getFieldValue(inst, col)
 	}
 	insert = insert.Values(values...)
-	_, err = c.DB.InsertTxExt(ctx, c.Table, tx, insert,
+	seq, err := c.DB.InsertTxExt(ctx, c.Table, tx, insert,
 		func() {
 			if c.EventHandler != nil {
 				c.EventHandler(inst.GetID(), Created)
 			}
 		}, requestConflictEmptyResult)
+	if err == nil {
+		c.attemptSetSequence(inst, seq)
+	}
 	return err
 }
 
@@ -297,6 +334,7 @@ func (c *CrudBase[T]) InsertMany(ctx context.Context, instances []T, allowPartia
 	if c.DB.Features().MultiRowInsert {
 		insert := sq.Insert(c.Table).Columns(c.Columns...)
 		for _, inst := range instances {
+			c.setInsertTimestamps(inst)
 			values := make([]interface{}, len(c.Columns))
 			for i, col := range c.Columns {
 				values[i] = c.getFieldValue(inst, col)
@@ -315,6 +353,11 @@ func (c *CrudBase[T]) InsertMany(ctx context.Context, instances []T, allowPartia
 		}, sequences, allowPartialSuccess)
 		if err != nil {
 			return err
+		}
+		if len(sequences) == len(instances) {
+			for i, seq := range sequences {
+				c.attemptSetSequence(instances[i], seq)
+			}
 		}
 	} else {
 		// Fall back to individual inserts grouped in a TX
@@ -375,19 +418,24 @@ func (c *CrudBase[T]) Replace(ctx context.Context, inst T, hooks ...PostCompleti
 
 func (c *CrudBase[T]) scanRow(ctx context.Context, cols []string, row *sql.Rows) (T, error) {
 	inst := c.NewInstance()
+	var seq int64
 	fieldPointers := make([]interface{}, len(cols))
+	fieldPointers[0] = &seq // The first column is alway the sequence
 	for i, col := range cols {
-		fieldPointers[i] = c.GetFieldPtr(inst, col)
+		if i != 0 {
+			fieldPointers[i] = c.GetFieldPtr(inst, col)
+		}
 	}
 	err := row.Scan(fieldPointers...)
 	if err != nil {
 		return c.NilValue(), i18n.WrapError(ctx, err, i18n.MsgDBReadErr, c.Table)
 	}
+	c.attemptSetSequence(inst, seq)
 	return inst, nil
 }
 
 func (c *CrudBase[T]) getReadCols() (tableFrom string, cols, readCols []string) {
-	cols = append([]string{}, c.Columns...)
+	cols = append([]string{c.DB.SequenceColumn()}, c.Columns...)
 	if c.ReadOnlyColumns != nil {
 		cols = append(cols, c.ReadOnlyColumns...)
 	}
@@ -407,7 +455,23 @@ func (c *CrudBase[T]) getReadCols() (tableFrom string, cols, readCols []string) 
 	return tableFrom, cols, readCols
 }
 
-func (c *CrudBase[T]) GetByID(ctx context.Context, id *fftypes.UUID, getOpts ...GetOption) (inst T, err error) {
+func (c *CrudBase[T]) GetSequenceForID(ctx context.Context, id string) (seq int64, err error) {
+	query := sq.Select(c.DB.SequenceColumn()).From(c.Table).Where(c.idFilter(id))
+	rows, _, err := c.DB.Query(ctx, c.Table, query)
+	if err != nil {
+		return -1, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return -1, i18n.NewError(ctx, i18n.Msg404NoResult)
+	}
+	if err = rows.Scan(&seq); err != nil {
+		return -1, i18n.WrapError(ctx, err, i18n.MsgDBReadErr, c.Table)
+	}
+	return seq, nil
+}
+
+func (c *CrudBase[T]) GetByID(ctx context.Context, id string, getOpts ...GetOption) (inst T, err error) {
 
 	failNotFound := false
 	for _, o := range getOpts {
@@ -450,10 +514,14 @@ func (c *CrudBase[T]) GetByID(ctx context.Context, id *fftypes.UUID, getOpts ...
 
 func (c *CrudBase[T]) GetMany(ctx context.Context, filter ffapi.Filter) (instances []T, fr *ffapi.FilterResult, err error) {
 	tableFrom, cols, readCols := c.getReadCols()
+	var preconditions []sq.Sqlizer
+	if c.ScopedFilter != nil {
+		preconditions = []sq.Sqlizer{c.ScopedFilter()}
+	}
 	query, fop, fi, err := c.DB.FilterSelect(ctx, c.ReadTableAlias, sq.Select(readCols...).From(tableFrom), filter, c.FilterFieldMap,
 		[]interface{}{
 			&ffapi.SortField{Field: c.DB.sequenceColumn, Descending: true},
-		}, c.ScopedFilter())
+		}, preconditions...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -478,7 +546,26 @@ func (c *CrudBase[T]) GetMany(ctx context.Context, filter ffapi.Filter) (instanc
 	return instances, c.DB.QueryRes(ctx, c.Table, tx, fop, fi), err
 }
 
-func (c *CrudBase[T]) Update(ctx context.Context, id *fftypes.UUID, update ffapi.Update, hooks ...PostCompletionHook) (err error) {
+func (c *CrudBase[T]) Count(ctx context.Context, filter ffapi.Filter) (count int64, err error) {
+	var fop sq.Sqlizer
+	fi, err := filter.Finalize()
+	if err == nil {
+		fop, err = c.DB.filterOp(ctx, c.Table, fi, c.FilterFieldMap)
+	}
+	if err != nil {
+		return -1, err
+	}
+
+	if c.ScopedFilter != nil {
+		fop = sq.And{
+			c.ScopedFilter(),
+			fop,
+		}
+	}
+	return c.DB.CountQuery(ctx, c.Table, nil, fop, "*")
+}
+
+func (c *CrudBase[T]) Update(ctx context.Context, id string, update ffapi.Update, hooks ...PostCompletionHook) (err error) {
 	return c.attemptUpdate(ctx, func(query sq.UpdateBuilder) (sq.UpdateBuilder, error) {
 		return query.Where(sq.Eq{"id": id}), nil
 	}, update, true, hooks...)
@@ -516,6 +603,10 @@ func isNil(o interface{}) bool {
 }
 
 func (c *CrudBase[T]) UpdateSparse(ctx context.Context, sparseUpdate T, hooks ...PostCompletionHook) (err error) {
+	if c.PatchDisabled {
+		return i18n.NewError(ctx, i18n.MsgDBPatchNotSupportedForCollection, c.Table)
+	}
+
 	ctx, tx, autoCommit, err := c.DB.BeginOrUseTx(ctx)
 	if err != nil {
 		return err
@@ -550,11 +641,17 @@ func (c *CrudBase[T]) attemptUpdate(ctx context.Context, filterFn func(sq.Update
 	}
 	defer c.DB.RollbackTx(ctx, tx, autoCommit)
 
-	query, err := c.DB.BuildUpdate(sq.Update(c.Table).Where(c.ScopedFilter()), update, c.FilterFieldMap)
+	baseQuery := sq.Update(c.Table)
+	if c.ScopedFilter != nil {
+		baseQuery = baseQuery.Where(c.ScopedFilter())
+	}
+	query, err := c.DB.BuildUpdate(baseQuery, update, c.FilterFieldMap)
 	if err == nil {
 		query, err = filterFn(query)
 	}
-	query = query.Set(ColumnUpdated, fftypes.Now())
+	if !c.TimesDisabled {
+		query = query.Set(ColumnUpdated, fftypes.Now())
+	}
 	if err != nil {
 		return err
 	}
@@ -575,7 +672,7 @@ func (c *CrudBase[T]) attemptUpdate(ctx context.Context, filterFn func(sq.Update
 	return c.DB.CommitTx(ctx, tx, autoCommit)
 }
 
-func (c *CrudBase[T]) Delete(ctx context.Context, id *fftypes.UUID, hooks ...PostCompletionHook) (err error) {
+func (c *CrudBase[T]) Delete(ctx context.Context, id string, hooks ...PostCompletionHook) (err error) {
 
 	ctx, tx, autoCommit, err := c.DB.BeginOrUseTx(ctx)
 	if err != nil {
@@ -591,6 +688,42 @@ func (c *CrudBase[T]) Delete(ctx context.Context, id *fftypes.UUID, hooks ...Pos
 		}
 	})
 	if err != nil {
+		return err
+	}
+
+	for _, hook := range hooks {
+		tx.AddPostCommitHook(hook)
+	}
+
+	return c.DB.CommitTx(ctx, tx, autoCommit)
+
+}
+
+func (c *CrudBase[T]) DeleteMany(ctx context.Context, filter ffapi.Filter, hooks ...PostCompletionHook) (err error) {
+
+	ctx, tx, autoCommit, err := c.DB.BeginOrUseTx(ctx)
+	if err != nil {
+		return err
+	}
+	defer c.DB.RollbackTx(ctx, tx, autoCommit)
+
+	var fop sq.Sqlizer
+	fi, err := filter.Finalize()
+	if err == nil {
+		fop, err = c.DB.filterOp(ctx, c.Table, fi, c.FilterFieldMap)
+	}
+	if err != nil {
+		return err
+	}
+
+	if c.ScopedFilter != nil {
+		fop = sq.And{
+			c.ScopedFilter(),
+			fop,
+		}
+	}
+	err = c.DB.DeleteTx(ctx, c.Table, tx, sq.Delete(c.Table).Where(fop), nil /* no event hooks support for DeleteMany */)
+	if err != nil && err != fftypes.DeleteRecordNotFound /* no entries is fine */ {
 		return err
 	}
 

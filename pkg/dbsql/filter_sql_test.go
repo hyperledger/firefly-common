@@ -41,6 +41,29 @@ var TestQueryFactory = &ffapi.QueryFields{
 	"type":     &ffapi.StringField{},
 }
 
+func TestSQLQueryFactoryIgnoreInvalidFilterFields(t *testing.T) {
+	s, _ := NewMockProvider().UTInit()
+	s.IndividualSort = true
+	fb := TestQueryFactory.NewFilter(context.Background())
+	f := fb.And(
+		fb.Eq("tag", "tag1"),
+	).
+		Sort("-notvalid").
+		Sort("notvalid").
+		GroupBy("notvalid")
+
+	sel := squirrel.Select("*").From("mytable")
+	sel, _, _, err := s.FilterSelect(context.Background(), "", sel, f, map[string]string{
+		"namespace": "ns",
+	}, []interface{}{"sequence"})
+	assert.NoError(t, err)
+
+	sqlFilter, args, err := sel.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "SELECT * FROM mytable WHERE (tag = ?) ORDER BY seq DESC", sqlFilter)
+	assert.Equal(t, "tag1", args[0])
+}
+
 func TestSQLQueryFactory(t *testing.T) {
 	s, _ := NewMockProvider().UTInit()
 	s.IndividualSort = true
@@ -58,7 +81,8 @@ func TestSQLQueryFactory(t *testing.T) {
 		Limit(25).
 		Sort("-id").
 		Sort("tag").
-		Sort("-sequence")
+		Sort("-sequence").
+		GroupBy("type")
 
 	sel := squirrel.Select("*").From("mytable")
 	sel, _, _, err := s.FilterSelect(context.Background(), "", sel, f, map[string]string{
@@ -68,7 +92,7 @@ func TestSQLQueryFactory(t *testing.T) {
 
 	sqlFilter, args, err := sel.ToSql()
 	assert.NoError(t, err)
-	assert.Equal(t, "SELECT * FROM mytable WHERE (tag = ? AND (id = ? OR id = ?) AND seq > ? AND created IS NULL) ORDER BY id DESC, tag, seq DESC LIMIT 25 OFFSET 50", sqlFilter)
+	assert.Equal(t, "SELECT * FROM mytable WHERE (tag = ? AND (id = ? OR id = ?) AND seq > ? AND created IS NULL) GROUP BY type ORDER BY id DESC, tag, seq DESC LIMIT 25 OFFSET 50", sqlFilter)
 	assert.Equal(t, "tag1", args[0])
 	assert.Equal(t, "35c11cba-adff-4a4d-970a-02e3a0858dc8", args[1])
 	assert.Equal(t, "caefb9d1-9fc9-4d6a-a155-514d3139adf7", args[2])

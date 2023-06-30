@@ -281,7 +281,7 @@ func (f *bigIntField) Scan(src interface{}) (err error) {
 	}
 	return nil
 }
-func (f *bigIntField) Value() (driver.Value, error)         { return f.i.Int().Text(16), nil } // Hex string in DB
+func (f *bigIntField) Value() (driver.Value, error)         { return f.i.Value() } // Hex string in DB is a padded hex string that's text sortable
 func (f *bigIntField) String() string                       { return f.i.Int().Text(10) }
 func (f *BigIntField) GetSerialization() FieldSerialization { return &bigIntField{} }
 func (f *BigIntField) FilterAsString() bool                 { return false }

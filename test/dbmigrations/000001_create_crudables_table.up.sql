@@ -8,4 +8,4 @@ CREATE TABLE crudables (
   field2      VARCHAR(65),
   field3      TEXT
 );
-CREATE UNIQUE INDEX crudables_id ON crudables(ns, id)
+CREATE UNIQUE INDEX crudables_id ON crudables(ns, id);

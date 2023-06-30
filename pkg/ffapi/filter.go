@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -31,6 +31,9 @@ import (
 type Filter interface {
 	// Sort adds a set of sort conditions (all in a single sort order)
 	Sort(...string) Filter
+
+	// GroupBy adds a set of fields to group rows that have the same values into summary rows
+	GroupBy(...string) Filter
 
 	// Ascending sort order
 	Ascending() Filter
@@ -216,6 +219,7 @@ type SortField struct {
 // FilterInfo is the structure returned by Finalize to the plugin, to serialize this filter
 // into the underlying database mechanism's filter language
 type FilterInfo struct {
+	GroupBy   []string
 	Sort      []*SortField
 	Skip      uint64
 	Limit     uint64
@@ -274,6 +278,9 @@ func (f *FilterInfo) String() string {
 
 	val.WriteString(f.filterString())
 
+	if len(f.GroupBy) > 0 {
+		val.WriteString(fmt.Sprintf(" groupBy=%s", strings.Join(f.GroupBy, ",")))
+	}
 	if len(f.Sort) > 0 {
 		fields := make([]string, len(f.Sort))
 		for i, s := range f.Sort {
@@ -311,6 +318,7 @@ type filterBuilder struct {
 	ctx             context.Context
 	queryFields     QueryFields
 	sort            []*SortField
+	groupBy         []string
 	skip            uint64
 	limit           uint64
 	count           bool
@@ -407,6 +415,7 @@ func (f *baseFilter) Finalize() (fi *FilterInfo, err error) {
 		Values:   values,
 		Value:    value,
 		Sort:     f.fb.sort,
+		GroupBy:  f.fb.groupBy,
 		Skip:     f.fb.skip,
 		Limit:    f.fb.limit,
 		Count:    f.fb.count,
@@ -425,6 +434,15 @@ func (f *baseFilter) Sort(fields ...string) Filter {
 				Field:      field,
 				Descending: descending,
 			})
+		}
+	}
+	return f
+}
+
+func (f *baseFilter) GroupBy(fields ...string) Filter {
+	for _, field := range fields {
+		if _, ok := f.fb.queryFields[field]; ok {
+			f.fb.groupBy = append(f.fb.groupBy, field)
 		}
 	}
 	return f

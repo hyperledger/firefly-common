@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -172,6 +172,9 @@ func ParseToDuration(durationString string) time.Duration {
 
 // ParseDurationString is a standard handling of any duration string, in config or API options
 func ParseDurationString(durationString string, def time.Duration) (FFDuration, error) {
+	if durationString == "" {
+		return 0, nil
+	}
 	duration, err := time.ParseDuration(durationString)
 	if err != nil {
 		intVal, err := strconv.ParseInt(durationString, 10, 64)

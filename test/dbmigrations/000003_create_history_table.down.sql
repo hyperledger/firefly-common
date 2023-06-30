@@ -1,0 +1,3 @@
+DROP INDEX IF EXISTS history_id;
+DROP INDEX IF EXISTS history_subject;
+DROP TABLE IF EXISTS history;
