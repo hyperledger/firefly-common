@@ -128,7 +128,7 @@ func TestSQLQueryFactoryExtraOps(t *testing.T) {
 
 	sqlFilter, _, err := sel.ToSql()
 	assert.NoError(t, err)
-	assert.Equal(t, "SELECT * FROM mytable AS mt WHERE (mt.created IN (?,?,?) AND mt.created NOT IN (?,?,?) AND mt.id = ? AND mt.id IN (?) AND mt.id IS NOT NULL AND mt.created < ? AND mt.created <= ? AND mt.created >= ? AND mt.created <> ? AND mt.seq > ? AND mt.topics LIKE ? AND mt.topics NOT LIKE ? AND mt.topics ILIKE ? AND mt.topics NOT ILIKE ?) ORDER BY mt.seq DESC", sqlFilter)
+	assert.Equal(t, "SELECT * FROM mytable AS mt WHERE (mt.created IN (?,?,?) AND mt.created NOT IN (?,?,?) AND mt.id = ? AND mt.id IN (?) AND mt.id IS NOT NULL AND mt.created < ? AND mt.created <= ? AND mt.created >= ? AND mt.created <> ? AND mt.seq > ? AND mt.topics LIKE ? ESCAPE '[' AND mt.topics NOT LIKE ? ESCAPE '[' AND mt.topics ILIKE ? ESCAPE '[' AND mt.topics NOT ILIKE ? ESCAPE '[') ORDER BY mt.seq DESC", sqlFilter)
 }
 
 func TestSQLQueryFactoryEvenMoreOps(t *testing.T) {
@@ -154,9 +154,37 @@ func TestSQLQueryFactoryEvenMoreOps(t *testing.T) {
 	sel, _, _, err := s.FilterSelect(context.Background(), "mt", sel, f, nil, []interface{}{"sequence"})
 	assert.NoError(t, err)
 
-	sqlFilter, _, err := sel.ToSql()
+	sqlFilter, args, err := sel.ToSql()
 	assert.NoError(t, err)
-	assert.Equal(t, "SELECT * FROM mytable AS mt WHERE (mt.id ILIKE ? AND mt.id NOT ILIKE ? AND mt.topics LIKE ? AND mt.topics NOT LIKE ? AND mt.topics ILIKE ? AND mt.topics NOT ILIKE ? AND mt.topics LIKE ? AND mt.topics NOT LIKE ? AND mt.topics ILIKE ? AND mt.topics NOT ILIKE ?) ORDER BY mt.seq DESC", sqlFilter)
+	assert.Equal(t, "SELECT * FROM mytable AS mt WHERE (mt.id ILIKE ? ESCAPE '[' AND mt.id NOT ILIKE ? ESCAPE '[' AND mt.topics LIKE ? ESCAPE '[' AND mt.topics NOT LIKE ? ESCAPE '[' AND mt.topics ILIKE ? ESCAPE '[' AND mt.topics NOT ILIKE ? ESCAPE '[' AND mt.topics LIKE ? ESCAPE '[' AND mt.topics NOT LIKE ? ESCAPE '[' AND mt.topics ILIKE ? ESCAPE '[' AND mt.topics NOT ILIKE ? ESCAPE '[') ORDER BY mt.seq DESC", sqlFilter)
+	assert.Equal(t, []interface{}{
+		"4066abdc-8bbd-4472-9d29-1a55b467f9b9",
+		"",
+		"abc%",
+		"def%",
+		"ghi%",
+		"jkl%",
+		"%mno",
+		"%pqr",
+		"%sty",
+		"%vwx",
+	}, args)
+}
+
+func TestSQLQueryFactoryEscapeLike(t *testing.T) {
+
+	s, _ := NewMockProvider().UTInit()
+	fb := TestQueryFactory.NewFilter(context.Background())
+	f := fb.And(fb.Contains("topics", "[%test_topic%]"))
+
+	sel := squirrel.Select("*").From("mytable AS mt")
+	sel, _, _, err := s.FilterSelect(context.Background(), "mt", sel, f, nil, []interface{}{"sequence"})
+	assert.NoError(t, err)
+
+	sqlFilter, args, err := sel.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "SELECT * FROM mytable AS mt WHERE (mt.topics LIKE ? ESCAPE '[') ORDER BY mt.seq DESC", sqlFilter)
+	assert.Equal(t, []interface{}{"%[[[%test[_topic[%]%"}, args)
 }
 
 func TestSQLQueryFactoryFinalizeFail(t *testing.T) {
