@@ -19,6 +19,7 @@ package dbsql
 import (
 	"context"
 	"database/sql/driver"
+	"sort"
 	"testing"
 
 	"github.com/Masterminds/squirrel"
@@ -139,8 +140,8 @@ func TestSQLQueryFactoryEvenMoreOps(t *testing.T) {
 	f := fb.And(
 		fb.IEq("id", u),
 		fb.NIeq("id", nil),
-		fb.StartsWith("topics", "abc"),
-		fb.NotStartsWith("topics", "def"),
+		fb.StartsWith("topics", "abc_"),
+		fb.NotStartsWith("topics", "def%"),
 		fb.IStartsWith("topics", "ghi"),
 		fb.NotIStartsWith("topics", "jkl"),
 		fb.EndsWith("topics", "mno"),
@@ -160,8 +161,8 @@ func TestSQLQueryFactoryEvenMoreOps(t *testing.T) {
 	assert.Equal(t, []interface{}{
 		"4066abdc-8bbd-4472-9d29-1a55b467f9b9",
 		"",
-		"abc%",
-		"def%",
+		"abc[_%",
+		"def[%%",
 		"ghi%",
 		"jkl%",
 		"%mno",
@@ -173,18 +174,18 @@ func TestSQLQueryFactoryEvenMoreOps(t *testing.T) {
 
 func TestSQLQueryFactoryEscapeLike(t *testing.T) {
 
-	s, _ := NewMockProvider().UTInit()
-	fb := TestQueryFactory.NewFilter(context.Background())
-	f := fb.And(fb.Contains("topics", "[%test_topic%]"))
+	sel := squirrel.Select("*").From("mytable AS mt").
+		Where(LikeEscape{"a": 1, "b": 2}).
+		Where(NotLikeEscape{"a": 1, "b": 2}).
+		Where(ILikeEscape{"a": 1, "b": 2}).
+		Where(NotILikeEscape{"a": 1, "b": 2})
 
-	sel := squirrel.Select("*").From("mytable AS mt")
-	sel, _, _, err := s.FilterSelect(context.Background(), "mt", sel, f, nil, []interface{}{"sequence"})
+	sql, args, err := sel.ToSql()
 	assert.NoError(t, err)
-
-	sqlFilter, args, err := sel.ToSql()
-	assert.NoError(t, err)
-	assert.Equal(t, "SELECT * FROM mytable AS mt WHERE (mt.topics LIKE ? ESCAPE '[') ORDER BY mt.seq DESC", sqlFilter)
-	assert.Equal(t, []interface{}{"%[[[%test[_topic[%]%"}, args)
+	assert.Regexp(t, `SELECT \* FROM mytable AS mt WHERE \([ab] LIKE \? ESCAPE '\[' AND [ab] LIKE \? ESCAPE '\['\) AND \([ab] NOT LIKE \? ESCAPE '\[' AND [ab] NOT LIKE \? ESCAPE '\['\) AND \([ab] ILIKE \? ESCAPE '\[' AND [ab] ILIKE \? ESCAPE '\['\) AND \([ab] NOT ILIKE \? ESCAPE '\[' AND [ab] NOT ILIKE \? ESCAPE '\['\)`, sql)
+	assert.Len(t, args, 8)
+	sort.Slice(args, func(i, j int) bool { return args[i].(int) < args[j].(int) })
+	assert.Equal(t, []interface{}{1, 1, 1, 1, 2, 2, 2, 2}, args)
 }
 
 func TestSQLQueryFactoryFinalizeFail(t *testing.T) {

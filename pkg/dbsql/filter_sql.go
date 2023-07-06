@@ -33,24 +33,52 @@ type NotLikeEscape sq.NotLike
 type ILikeEscape sq.ILike
 type NotILikeEscape sq.NotILike
 
-func (lke LikeEscape) ToSql() (sql string, args []interface{}, err error) {
-	sql, args, err = sq.Like(lke).ToSql()
-	return fmt.Sprintf("%s ESCAPE '%s'", sql, escapeChar), args, err
+// Split a map into a list of maps with a single entry each
+func splitMap[T ~map[string]interface{}](m T) (exprs []T) {
+	for key, val := range m {
+		exprs = append(exprs, T{key: val})
+	}
+	return exprs
 }
 
-func (lke NotLikeEscape) ToSql() (sql string, args []interface{}, err error) {
-	sql, args, err = sq.NotLike(lke).ToSql()
-	return fmt.Sprintf("%s ESCAPE '%s'", sql, escapeChar), args, err
+// Convert a list of Sqlizer operations to sq.And
+func toAnd[T sq.Sqlizer](ops []T) (and sq.And) {
+	for _, op := range ops {
+		and = append(and, op)
+	}
+	return and
 }
 
-func (lke ILikeEscape) ToSql() (sql string, args []interface{}, err error) {
-	sql, args, err = sq.ILike(lke).ToSql()
-	return fmt.Sprintf("%s ESCAPE '%s'", sql, escapeChar), args, err
+func (lk LikeEscape) ToSql() (sql string, args []interface{}, err error) {
+	if len(lk) == 1 {
+		sql, args, err = sq.Like(lk).ToSql()
+		return fmt.Sprintf("%s ESCAPE '%s'", sql, escapeChar), args, err
+	}
+	return toAnd(splitMap(lk)).ToSql()
 }
 
-func (lke NotILikeEscape) ToSql() (sql string, args []interface{}, err error) {
-	sql, args, err = sq.NotILike(lke).ToSql()
-	return fmt.Sprintf("%s ESCAPE '%s'", sql, escapeChar), args, err
+func (lk NotLikeEscape) ToSql() (sql string, args []interface{}, err error) {
+	if len(lk) == 1 {
+		sql, args, err = sq.NotLike(lk).ToSql()
+		return fmt.Sprintf("%s ESCAPE '%s'", sql, escapeChar), args, err
+	}
+	return toAnd(splitMap(lk)).ToSql()
+}
+
+func (lk ILikeEscape) ToSql() (sql string, args []interface{}, err error) {
+	if len(lk) == 1 {
+		sql, args, err = sq.ILike(lk).ToSql()
+		return fmt.Sprintf("%s ESCAPE '%s'", sql, escapeChar), args, err
+	}
+	return toAnd(splitMap(lk)).ToSql()
+}
+
+func (lk NotILikeEscape) ToSql() (sql string, args []interface{}, err error) {
+	if len(lk) == 1 {
+		sql, args, err = sq.NotILike(lk).ToSql()
+		return fmt.Sprintf("%s ESCAPE '%s'", sql, escapeChar), args, err
+	}
+	return toAnd(splitMap(lk)).ToSql()
 }
 
 func (s *Database) escapeLike(value ffapi.FieldSerialization) string {
