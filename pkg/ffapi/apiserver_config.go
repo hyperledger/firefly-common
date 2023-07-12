@@ -30,6 +30,7 @@ var (
 	ConfAPIMaxFilterSkip      = "maxFilterSkip"
 	ConfAPIRequestTimeout     = "requestTimeout"
 	ConfAPIRequestMaxTimeout  = "requestMaxTimeout"
+	ConfAPIAlwaysPaginate     = "alwaysPaginate"
 )
 
 func InitAPIServerConfig(apiConfig, metricsConfig, corsConfig config.Section) {
@@ -39,6 +40,7 @@ func InitAPIServerConfig(apiConfig, metricsConfig, corsConfig config.Section) {
 	apiConfig.AddKnownKey(ConfAPIMaxFilterSkip, 100000)
 	apiConfig.AddKnownKey(ConfAPIRequestTimeout, "30s")
 	apiConfig.AddKnownKey(ConfAPIRequestMaxTimeout, "10m")
+	apiConfig.AddKnownKey(ConfAPIAlwaysPaginate, false)
 
 	httpserver.InitCORSConfig(corsConfig)
 

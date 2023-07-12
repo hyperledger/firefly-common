@@ -59,6 +59,7 @@ type apiServer[T any] struct {
 	requestTimeout     time.Duration
 	requestMaxTimeout  time.Duration
 	apiPublicURL       string
+	alwaysPaginate     bool
 	metricsEnabled     bool
 	metricsPath        string
 	metricsPublicURL   string
@@ -93,6 +94,7 @@ func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APISe
 		maxFilterSkip:      options.APIConfig.GetUint64(ConfAPIMaxFilterSkip),
 		requestTimeout:     options.APIConfig.GetDuration(ConfAPIRequestTimeout),
 		requestMaxTimeout:  options.APIConfig.GetDuration(ConfAPIRequestMaxTimeout),
+		alwaysPaginate:     options.APIConfig.GetBool(ConfAPIAlwaysPaginate),
 		metricsEnabled:     options.MetricsConfig.GetBool(ConfMetricsServerEnabled),
 		metricsPath:        options.MetricsConfig.GetString(ConfMetricsServerPath),
 		APIServerOptions:   options,
@@ -236,6 +238,7 @@ func (as *apiServer[T]) handlerFactory() *HandlerFactory {
 	return &HandlerFactory{
 		DefaultRequestTimeout: as.requestTimeout,
 		MaxTimeout:            as.requestMaxTimeout,
+		AlwaysPaginate:        as.alwaysPaginate,
 	}
 }
 

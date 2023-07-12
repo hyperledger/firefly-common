@@ -42,3 +42,36 @@ func TestFilterResultPlain(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, []string{"test"}, f)
 }
+
+func TestFilterResultWithCountNoTotal(t *testing.T) {
+	r := &APIRequest{
+		AlwaysPaginate: true,
+	}
+	f, err := r.FilterResult([]string{"test"}, &FilterResult{}, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, &FilterResultsWithCount{
+		Count: 1,
+		Items: []string{"test"},
+	}, f)
+}
+
+func TestFilterResultAlwyasPaginateNoSlice(t *testing.T) {
+	r := &APIRequest{
+		AlwaysPaginate: true,
+	}
+	f, err := r.FilterResult("test", &FilterResult{}, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "test", f)
+}
+
+func TestFilterResultAlwaysPaginateNoFilterResult(t *testing.T) {
+	r := &APIRequest{
+		AlwaysPaginate: true,
+	}
+	f, err := r.FilterResult([]string{"test"}, nil, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, &FilterResultsWithCount{
+		Count: 1,
+		Items: []string{"test"},
+	}, f)
+}
