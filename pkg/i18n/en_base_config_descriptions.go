@@ -79,6 +79,7 @@ var (
 	ConfigGlobalHeaders                   = ffc("config.global.headers", "Adds custom headers to HTTP requests", MapStringStringType)
 	ConfigGlobalIdleTimeout               = ffc("config.global.idleTimeout", "The max duration to hold a HTTP keepalive connection between calls", TimeDurationType)
 	ConfigGlobalMaxIdleConns              = ffc("config.global.maxIdleConns", "The max number of idle connections to hold pooled", IntType)
+	ConfigGlobalMaxConnsPerHost           = ffc("config.global.maxConnsPerHost", "The max number of connections, per unique hostname. Zero means no limit", IntType)
 	ConfigGlobalMethod                    = ffc("config.global.method", "The HTTP method to use when making requests to the Address Resolver", StringType)
 	ConfigGlobalAuthType                  = ffc("config.global.auth.type", "The auth plugin to use for server side authentication of requests", StringType)
 	ConfigGlobalPassthroughHeadersEnabled = ffc("config.global.passthroughHeadersEnabled", "Enable passing through the set of allowed HTTP request headers", BooleanType)

@@ -59,6 +59,7 @@ type Config struct {
 	RetryInitialDelay             time.Duration                             `json:"retryInitialDelay,omitempty"`
 	RetryMaximumDelay             time.Duration                             `json:"retryMaximumDelay,omitempty"`
 	HTTPMaxIdleConns              int                                       `json:"maxIdleConns,omitempty"`
+	HTTPMaxConnsPerHost           int                                       `json:"maxConnsPerHost,omitempty"`
 	HTTPPassthroughHeadersEnabled bool                                      `json:"httpPassthroughHeadersEnabled,omitempty"`
 	HTTPHeaders                   fftypes.JSONObject                        `json:"headers,omitempty"`
 	TLSClientConfig               *tls.Config                               `json:"tlsClientConfig,omitempty"`
@@ -123,6 +124,7 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 			}).DialContext,
 			ForceAttemptHTTP2:     true,
 			MaxIdleConns:          ffrestyConfig.HTTPMaxIdleConns,
+			MaxConnsPerHost:       ffrestyConfig.HTTPMaxConnsPerHost,
 			IdleConnTimeout:       ffrestyConfig.HTTPIdleConnTimeout,
 			TLSHandshakeTimeout:   ffrestyConfig.HTTPTLSHandshakeTimeout,
 			ExpectContinueTimeout: ffrestyConfig.HTTPExpectContinueTimeout,
