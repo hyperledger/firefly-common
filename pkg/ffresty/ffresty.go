@@ -226,8 +226,8 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 					log.L(rCtx).Debugf("retry cancelled after %d attempts", rc.attempts)
 					return false
 				}
-				log.L(rCtx).Infof("retry %d/%d (min=%dms/max=%dms) status=%d", rc.attempts, retryCount, minTimeout.Milliseconds(), maxTimeout.Milliseconds(), r.StatusCode())
 				rc.attempts++
+				log.L(rCtx).Infof("retry %d/%d (min=%dms/max=%dms) status=%d", rc.attempts, retryCount, minTimeout.Milliseconds(), maxTimeout.Milliseconds(), r.StatusCode())
 				return true
 			})
 	}
