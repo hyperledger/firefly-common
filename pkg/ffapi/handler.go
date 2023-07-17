@@ -48,6 +48,7 @@ type HandlerFactory struct {
 	MaxFilterSkip         uint64
 	MaxFilterLimit        uint64
 	PassthroughHeaders    []string
+	SupportFieldRedaction bool
 }
 
 var ffMsgCodeExtractor = regexp.MustCompile(`^(FF\d+):`)

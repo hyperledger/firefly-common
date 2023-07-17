@@ -31,6 +31,10 @@ func (s *Database) FilterSelect(ctx context.Context, tableName string, sel sq.Se
 	if err != nil {
 		return sel, nil, nil, err
 	}
+	return s.filterSelectFinalized(ctx, tableName, sel, fi, typeMap, defaultSort, preconditions...)
+}
+
+func (s *Database) filterSelectFinalized(ctx context.Context, tableName string, sel sq.SelectBuilder, fi *ffapi.FilterInfo, typeMap map[string]string, defaultSort []interface{}, preconditions ...sq.Sqlizer) (sq.SelectBuilder, sq.Sqlizer, *ffapi.FilterInfo, error) {
 	if len(fi.Sort) == 0 {
 		for _, s := range defaultSort {
 			switch v := s.(type) {
@@ -43,7 +47,10 @@ func (s *Database) FilterSelect(ctx context.Context, tableName string, sel sq.Se
 			}
 		}
 	}
-	fop, err := s.filterSelectFinalized(ctx, tableName, fi, typeMap, preconditions...)
+	fop, err := s.refineQuery(ctx, tableName, fi, typeMap, preconditions...)
+	if err != nil {
+		return sel, nil, nil, err
+	}
 
 	sel = sel.Where(fop)
 
@@ -73,18 +80,16 @@ func (s *Database) FilterSelect(ctx context.Context, tableName string, sel sq.Se
 	}
 	sortString = strings.Join(sort, ", ")
 	sel = sel.OrderBy(sortString)
-	if err == nil {
-		if fi.Skip > 0 {
-			sel = sel.Offset(fi.Skip)
-		}
-		if fi.Limit > 0 {
-			sel = sel.Limit(fi.Limit)
-		}
+	if fi.Skip > 0 {
+		sel = sel.Offset(fi.Skip)
+	}
+	if fi.Limit > 0 {
+		sel = sel.Limit(fi.Limit)
 	}
 	return sel, fop, fi, err
 }
 
-func (s *Database) filterSelectFinalized(ctx context.Context, tableName string, fi *ffapi.FilterInfo, tm map[string]string, preconditions ...sq.Sqlizer) (sq.Sqlizer, error) {
+func (s *Database) refineQuery(ctx context.Context, tableName string, fi *ffapi.FilterInfo, tm map[string]string, preconditions ...sq.Sqlizer) (sq.Sqlizer, error) {
 	fop, err := s.filterOp(ctx, tableName, fi, tm)
 	if err != nil {
 		return nil, err

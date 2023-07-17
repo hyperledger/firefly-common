@@ -170,7 +170,7 @@ func TestSQLQueryFactoryFinalizeFail(t *testing.T) {
 func TestSQLQueryFactoryBadOp(t *testing.T) {
 
 	s, _ := NewMockProvider().UTInit()
-	_, err := s.filterSelectFinalized(context.Background(), "", &ffapi.FilterInfo{
+	_, err := s.refineQuery(context.Background(), "", &ffapi.FilterInfo{
 		Op: ffapi.FilterOp("wrong"),
 	}, nil)
 	assert.Regexp(t, "FF00190.*wrong", err)
@@ -179,7 +179,7 @@ func TestSQLQueryFactoryBadOp(t *testing.T) {
 func TestSQLQueryFactoryBadOpInOr(t *testing.T) {
 
 	s, _ := NewMockProvider().UTInit()
-	_, err := s.filterSelectFinalized(context.Background(), "", &ffapi.FilterInfo{
+	_, err := s.refineQuery(context.Background(), "", &ffapi.FilterInfo{
 		Op: ffapi.FilterOpOr,
 		Children: []*ffapi.FilterInfo{
 			{Op: ffapi.FilterOp("wrong")},
@@ -191,7 +191,7 @@ func TestSQLQueryFactoryBadOpInOr(t *testing.T) {
 func TestSQLQueryFactoryBadOpInAnd(t *testing.T) {
 
 	s, _ := NewMockProvider().UTInit()
-	_, err := s.filterSelectFinalized(context.Background(), "", &ffapi.FilterInfo{
+	_, err := s.refineQuery(context.Background(), "", &ffapi.FilterInfo{
 		Op: ffapi.FilterOpAnd,
 		Children: []*ffapi.FilterInfo{
 			{Op: ffapi.FilterOp("wrong")},

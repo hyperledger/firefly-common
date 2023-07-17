@@ -113,6 +113,18 @@ func (hs *HandlerFactory) buildFilter(req *http.Request, ff QueryFactory) (AndFi
 			}
 		}
 	}
+	if hs.SupportFieldRedaction {
+		requiredFieldVals := hs.getValues(req.Form, "fields")
+		for _, rf := range requiredFieldVals {
+			subRequiredFieldVals := strings.Split(rf, ",")
+			for _, srf := range subRequiredFieldVals {
+				srf = strings.TrimSpace(srf)
+				if srf != "" {
+					filter.RequiredFields(srf)
+				}
+			}
+		}
+	}
 	descendingVals := hs.getValues(req.Form, "descending")
 	ascendingVals := hs.getValues(req.Form, "ascending")
 	if len(descendingVals) > 0 && (descendingVals[0] == "" || strings.EqualFold(descendingVals[0], "true")) {

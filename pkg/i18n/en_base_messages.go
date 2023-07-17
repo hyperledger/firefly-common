@@ -34,6 +34,7 @@ var (
 	APIFilterSkipDesc       = ffm("api.filterSkip", "The number of records to skip (max: %d). Unsuitable for bulk operations")
 	APIFilterLimitDesc      = ffm("api.filterLimit", "The maximum number of records to return (max: %d)")
 	APIFilterCountDesc      = ffm("api.filterCount", "Return a total count as well as items (adds extra database processing)")
+	APIFilterFieldsDesc     = ffm("api.filterFields", "Comma separated list of fields to return")
 
 	ResourceBaseID      = ffm("ResourceBase.id", "The UUID of the service")
 	ResourceBaseCreated = ffm("ResourceBase.created", "The time the resource was created")

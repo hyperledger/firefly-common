@@ -31,7 +31,7 @@ type FilterModifiers[T any] interface {
 	// Sort adds a set of sort conditions (all in a single sort order)
 	Sort(...string) T
 
-	// GroupBy adds a set of fields to group rows that have the same values into summary rows
+	// GroupBy adds a set of fields to group rows that have the same values into summary rows. Not assured every persistence implementation will support this (doc DBs cannot)
 	GroupBy(...string) T
 
 	// Ascending sort order
@@ -48,6 +48,10 @@ type FilterModifiers[T any] interface {
 
 	// Request a count to be returned on the total number that match the query
 	Count(c bool) T
+
+	// Which fields we require to be returned. Only supported when using CRUD layer on top of underlying DB.
+	// Might allow optimization of the query (in the case of SQL DBs, where it can be combined with GroupBy), or request post-query redaction (in the case of document DBs).
+	RequiredFields(...string) T
 }
 
 // Filter is the output of the builder
@@ -225,17 +229,18 @@ type SortField struct {
 // FilterInfo is the structure returned by Finalize to the plugin, to serialize this filter
 // into the underlying database mechanism's filter language
 type FilterInfo struct {
-	GroupBy   []string
-	Sort      []*SortField
-	Skip      uint64
-	Limit     uint64
-	Count     bool
-	CountExpr string
-	Field     string
-	Op        FilterOp
-	Values    []FieldSerialization
-	Value     FieldSerialization
-	Children  []*FilterInfo
+	GroupBy        []string
+	RequiredFields []string
+	Sort           []*SortField
+	Skip           uint64
+	Limit          uint64
+	Count          bool
+	CountExpr      string
+	Field          string
+	Op             FilterOp
+	Values         []FieldSerialization
+	Value          FieldSerialization
+	Children       []*FilterInfo
 }
 
 // FilterResult is has additional info if requested on the query - currently only the total count
@@ -287,6 +292,9 @@ func (f *FilterInfo) String() string {
 	if len(f.GroupBy) > 0 {
 		val.WriteString(fmt.Sprintf(" groupBy=%s", strings.Join(f.GroupBy, ",")))
 	}
+	if len(f.RequiredFields) > 0 {
+		val.WriteString(fmt.Sprintf(" requiredFields=%s", strings.Join(f.RequiredFields, ",")))
+	}
 	if len(f.Sort) > 0 {
 		fields := make([]string, len(f.Sort))
 		for i, s := range f.Sort {
@@ -325,6 +333,7 @@ type filterBuilder struct {
 	queryFields     QueryFields
 	sort            []*SortField
 	groupBy         []string
+	requiredFields  []string
 	skip            uint64
 	limit           uint64
 	count           bool
@@ -415,16 +424,17 @@ func (f *baseFilter) Finalize() (fi *FilterInfo, err error) {
 	}
 
 	return &FilterInfo{
-		Children: children,
-		Op:       f.op,
-		Field:    f.field,
-		Values:   values,
-		Value:    value,
-		Sort:     f.fb.sort,
-		GroupBy:  f.fb.groupBy,
-		Skip:     f.fb.skip,
-		Limit:    f.fb.limit,
-		Count:    f.fb.count,
+		Children:       children,
+		Op:             f.op,
+		Field:          f.field,
+		Values:         values,
+		Value:          value,
+		Sort:           f.fb.sort,
+		GroupBy:        f.fb.groupBy,
+		RequiredFields: f.fb.requiredFields,
+		Skip:           f.fb.skip,
+		Limit:          f.fb.limit,
+		Count:          f.fb.count,
 	}, nil
 }
 
@@ -461,6 +471,20 @@ func (fb *filterBuilder) GroupBy(fields ...string) FilterBuilder {
 
 func (f *baseFilter) GroupBy(fields ...string) Filter {
 	_ = f.fb.GroupBy(fields...)
+	return f
+}
+
+func (fb *filterBuilder) RequiredFields(fields ...string) FilterBuilder {
+	for _, field := range fields {
+		if _, ok := fb.queryFields[field]; ok {
+			fb.requiredFields = append(fb.requiredFields, field)
+		}
+	}
+	return fb
+}
+
+func (f *baseFilter) RequiredFields(fields ...string) Filter {
+	_ = f.fb.RequiredFields(fields...)
 	return f
 }
 

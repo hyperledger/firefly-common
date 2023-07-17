@@ -149,3 +149,18 @@ func TestBuildFilterLimitLimit(t *testing.T) {
 	_, err := as.buildFilter(req, TestQueryFactory)
 	assert.Regexp(t, "FF00192.*500", err)
 }
+
+func TestBuildFilterRequiredFields(t *testing.T) {
+	as := &HandlerFactory{
+		MaxFilterLimit:        250,
+		SupportFieldRedaction: true,
+	}
+
+	req := httptest.NewRequest("GET", "/things?created=0&fields=tag,sequence", nil)
+	filter, err := as.buildFilter(req, TestQueryFactory)
+	assert.NoError(t, err)
+	fi, err := filter.Finalize()
+	assert.NoError(t, err)
+
+	assert.Equal(t, "( created == 0 ) requiredFields=tag,sequence", fi.String())
+}

@@ -434,10 +434,25 @@ func (c *CrudBase[T]) scanRow(ctx context.Context, cols []string, row *sql.Rows)
 	return inst, nil
 }
 
-func (c *CrudBase[T]) getReadCols() (tableFrom string, cols, readCols []string) {
+func (c *CrudBase[T]) getReadCols(f *ffapi.FilterInfo) (tableFrom string, cols, readCols []string) {
 	cols = append([]string{c.DB.SequenceColumn()}, c.Columns...)
 	if c.ReadOnlyColumns != nil {
 		cols = append(cols, c.ReadOnlyColumns...)
+	}
+	if f != nil && len(f.RequiredFields) > 0 {
+		newCols := []string{cols[0] /* first column is always the sequence, and must be */}
+		for _, requiredFieldName := range f.RequiredFields {
+			requiredColName := c.FilterFieldMap[requiredFieldName]
+			if requiredColName == "" {
+				requiredColName = requiredFieldName
+			}
+			for i, col := range cols {
+				if i > 0 /* idx==0 handled above */ && col == requiredColName {
+					newCols = append(newCols, col)
+				}
+			}
+		}
+		cols = newCols
 	}
 	tableFrom = c.Table
 	readCols = cols
@@ -483,7 +498,7 @@ func (c *CrudBase[T]) GetByID(ctx context.Context, id string, getOpts ...GetOpti
 		}
 	}
 
-	tableFrom, cols, readCols := c.getReadCols()
+	tableFrom, cols, readCols := c.getReadCols(nil)
 	query := sq.Select(readCols...).
 		From(tableFrom).
 		Where(c.idFilter(id))
@@ -513,12 +528,20 @@ func (c *CrudBase[T]) GetByID(ctx context.Context, id string, getOpts ...GetOpti
 }
 
 func (c *CrudBase[T]) GetMany(ctx context.Context, filter ffapi.Filter) (instances []T, fr *ffapi.FilterResult, err error) {
-	tableFrom, cols, readCols := c.getReadCols()
+	fi, err := filter.Finalize()
+	if err != nil {
+		return nil, nil, err
+	}
+	tableFrom, cols, readCols := c.getReadCols(fi)
 	var preconditions []sq.Sqlizer
 	if c.ScopedFilter != nil {
 		preconditions = []sq.Sqlizer{c.ScopedFilter()}
 	}
-	query, fop, fi, err := c.DB.FilterSelect(ctx, c.ReadTableAlias, sq.Select(readCols...).From(tableFrom), filter, c.FilterFieldMap,
+	return c.getManyScoped(ctx, tableFrom, fi, cols, readCols, preconditions)
+}
+
+func (c *CrudBase[T]) getManyScoped(ctx context.Context, tableFrom string, fi *ffapi.FilterInfo, cols, readCols []string, preconditions []sq.Sqlizer) (instances []T, fr *ffapi.FilterResult, err error) {
+	query, fop, fi, err := c.DB.filterSelectFinalized(ctx, c.ReadTableAlias, sq.Select(readCols...).From(tableFrom), fi, c.FilterFieldMap,
 		[]interface{}{
 			&ffapi.SortField{Field: c.DB.sequenceColumn, Descending: true},
 		}, preconditions...)
