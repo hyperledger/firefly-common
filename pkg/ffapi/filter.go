@@ -27,28 +27,32 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 )
 
-// Filter is the output of the builder
-type Filter interface {
+type FilterModifiers[T any] interface {
 	// Sort adds a set of sort conditions (all in a single sort order)
-	Sort(...string) Filter
+	Sort(...string) T
 
 	// GroupBy adds a set of fields to group rows that have the same values into summary rows
-	GroupBy(...string) Filter
+	GroupBy(...string) T
 
 	// Ascending sort order
-	Ascending() Filter
+	Ascending() T
 
 	// Descending sort order
-	Descending() Filter
+	Descending() T
 
 	// Skip for pagination
-	Skip(uint64) Filter
+	Skip(uint64) T
 
 	// Limit for pagination
-	Limit(uint64) Filter
+	Limit(uint64) T
 
 	// Request a count to be returned on the total number that match the query
-	Count(c bool) Filter
+	Count(c bool) T
+}
+
+// Filter is the output of the builder
+type Filter interface {
+	FilterModifiers[Filter]
 
 	// Finalize completes the filter, and for the plugin to validated output structure to convert
 	Finalize() (*FilterInfo, error)
@@ -148,6 +152,8 @@ func filterCannotAcceptNull(op FilterOp) bool {
 
 // FilterBuilder is the syntax used to build the filter, where And() and Or() can be nested
 type FilterBuilder interface {
+	FilterModifiers[FilterBuilder]
+
 	// Fields is the list of available fields
 	Fields() []string
 	// And requires all sub-filters to match
@@ -422,55 +428,90 @@ func (f *baseFilter) Finalize() (fi *FilterInfo, err error) {
 	}, nil
 }
 
-func (f *baseFilter) Sort(fields ...string) Filter {
+func (fb *filterBuilder) Sort(fields ...string) FilterBuilder {
 	for _, field := range fields {
 		descending := false
 		if strings.HasPrefix(field, "-") {
 			field = strings.TrimPrefix(field, "-")
 			descending = true
 		}
-		if _, ok := f.fb.queryFields[field]; ok {
-			f.fb.sort = append(f.fb.sort, &SortField{
+		if _, ok := fb.queryFields[field]; ok {
+			fb.sort = append(fb.sort, &SortField{
 				Field:      field,
 				Descending: descending,
 			})
 		}
 	}
+	return fb
+}
+
+func (f *baseFilter) Sort(fields ...string) Filter {
+	_ = f.fb.Sort(fields...)
 	return f
+}
+
+func (fb *filterBuilder) GroupBy(fields ...string) FilterBuilder {
+	for _, field := range fields {
+		if _, ok := fb.queryFields[field]; ok {
+			fb.groupBy = append(fb.groupBy, field)
+		}
+	}
+	return fb
 }
 
 func (f *baseFilter) GroupBy(fields ...string) Filter {
-	for _, field := range fields {
-		if _, ok := f.fb.queryFields[field]; ok {
-			f.fb.groupBy = append(f.fb.groupBy, field)
-		}
-	}
+	_ = f.fb.GroupBy(fields...)
 	return f
+}
+
+func (fb *filterBuilder) Skip(skip uint64) FilterBuilder {
+	fb.skip = skip
+	return fb
 }
 
 func (f *baseFilter) Skip(skip uint64) Filter {
-	f.fb.skip = skip
+	_ = f.fb.Skip(skip)
 	return f
+}
+
+func (fb *filterBuilder) Limit(limit uint64) FilterBuilder {
+	fb.limit = limit
+	return fb
 }
 
 func (f *baseFilter) Limit(limit uint64) Filter {
-	f.fb.limit = limit
+	_ = f.fb.Limit(limit)
 	return f
+}
+
+func (fb *filterBuilder) Count(c bool) FilterBuilder {
+	fb.count = c
+	return fb
 }
 
 func (f *baseFilter) Count(c bool) Filter {
-	f.fb.count = c
+	_ = f.fb.Count(c)
 	return f
 }
 
+func (fb *filterBuilder) Ascending() FilterBuilder {
+	fb.forceAscending = true
+	return fb
+}
+
 func (f *baseFilter) Ascending() Filter {
-	f.fb.forceAscending = true
+	_ = f.fb.Ascending()
 	return f
 }
 
 func (f *baseFilter) Descending() Filter {
-	f.fb.forceDescending = true
+	_ = f.fb.Descending()
 	return f
+}
+
+func (fb *filterBuilder) Descending() FilterBuilder {
+	fb.forceDescending = true
+	return fb
 }
 
 type andFilter struct {
