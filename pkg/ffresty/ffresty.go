@@ -45,25 +45,28 @@ type retryCtx struct {
 }
 
 type Config struct {
-	URL                           string             `json:"httpURL,omitempty"`
-	ProxyURL                      string             `json:"proxyURL,omitempty"`
-	HTTPRequestTimeout            time.Duration      `json:"requestTimeout,omitempty"`
-	HTTPIdleConnTimeout           time.Duration      `json:"idleTimeout,omitempty"`
-	HTTPMaxIdleTimeout            time.Duration      `json:"maxIdleTimeout,omitempty"`
-	HTTPConnectionTimeout         time.Duration      `json:"connectionTimeout,omitempty"`
-	HTTPExpectContinueTimeout     time.Duration      `json:"expectContinueTimeout,omitempty"`
-	AuthUsername                  string             `json:"authUsername,omitempty"`
-	AuthPassword                  string             `json:"authPassword,omitempty"`
-	Retry                         bool               `json:"retry,omitempty"`
-	RetryCount                    int                `json:"retryCount,omitempty"`
-	RetryInitialDelay             time.Duration      `json:"retryInitialDelay,omitempty"`
-	RetryMaximumDelay             time.Duration      `json:"retryMaximumDelay,omitempty"`
-	HTTPMaxIdleConns              int                `json:"maxIdleConns,omitempty"`
-	HTTPPassthroughHeadersEnabled bool               `json:"httpPassthroughHeadersEnabled,omitempty"`
-	HTTPHeaders                   fftypes.JSONObject `json:"headers,omitempty"`
-	TLSClientConfig               *tls.Config        `json:"tlsClientConfig,omitempty"`
-	HTTPTLSHandshakeTimeout       time.Duration      `json:"tlsHandshakeTimeout,omitempty"`
-	HTTPCustomClient              interface{}        `json:"httpCustomClient,omitempty"`
+	URL                           string                                    `json:"httpURL,omitempty"`
+	ProxyURL                      string                                    `json:"proxyURL,omitempty"`
+	HTTPRequestTimeout            time.Duration                             `json:"requestTimeout,omitempty"`
+	HTTPIdleConnTimeout           time.Duration                             `json:"idleTimeout,omitempty"`
+	HTTPMaxIdleTimeout            time.Duration                             `json:"maxIdleTimeout,omitempty"`
+	HTTPConnectionTimeout         time.Duration                             `json:"connectionTimeout,omitempty"`
+	HTTPExpectContinueTimeout     time.Duration                             `json:"expectContinueTimeout,omitempty"`
+	AuthUsername                  string                                    `json:"authUsername,omitempty"`
+	AuthPassword                  string                                    `json:"authPassword,omitempty"`
+	Retry                         bool                                      `json:"retry,omitempty"`
+	RetryCount                    int                                       `json:"retryCount,omitempty"`
+	RetryInitialDelay             time.Duration                             `json:"retryInitialDelay,omitempty"`
+	RetryMaximumDelay             time.Duration                             `json:"retryMaximumDelay,omitempty"`
+	HTTPMaxIdleConns              int                                       `json:"maxIdleConns,omitempty"`
+	HTTPMaxConnsPerHost           int                                       `json:"maxConnsPerHost,omitempty"`
+	HTTPPassthroughHeadersEnabled bool                                      `json:"httpPassthroughHeadersEnabled,omitempty"`
+	HTTPHeaders                   fftypes.JSONObject                        `json:"headers,omitempty"`
+	TLSClientConfig               *tls.Config                               `json:"tlsClientConfig,omitempty"`
+	HTTPTLSHandshakeTimeout       time.Duration                             `json:"tlsHandshakeTimeout,omitempty"`
+	HTTPCustomClient              interface{}                               `json:"httpCustomClient,omitempty"`
+	OnCheckRetry                  func(res *resty.Response, err error) bool `json:"-"` // response could be nil on err
+	OnBeforeRequest               func(req *resty.Request) error            `json:"-"` // called before each request, even retry
 }
 
 // OnAfterResponse when using SetDoNotParseResponse(true) for streaming binary replies,
@@ -121,6 +124,7 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 			}).DialContext,
 			ForceAttemptHTTP2:     true,
 			MaxIdleConns:          ffrestyConfig.HTTPMaxIdleConns,
+			MaxConnsPerHost:       ffrestyConfig.HTTPMaxConnsPerHost,
 			IdleConnTimeout:       ffrestyConfig.HTTPIdleConnTimeout,
 			TLSHandshakeTimeout:   ffrestyConfig.HTTPTLSHandshakeTimeout,
 			ExpectContinueTimeout: ffrestyConfig.HTTPExpectContinueTimeout,
@@ -181,6 +185,12 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 			req.Header.Set(ffapi.FFRequestIDHeader, ffRequestID.(string))
 		}
 
+		if ffrestyConfig.OnBeforeRequest != nil {
+			if err := ffrestyConfig.OnBeforeRequest(req); err != nil {
+				return err
+			}
+		}
+
 		log.L(rCtx).Debugf("==> %s %s%s", req.Method, url, req.URL)
 		return nil
 	})
@@ -212,8 +222,12 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 				}
 				rCtx := r.Request.Context()
 				rc := rCtx.Value(retryCtxKey{}).(*retryCtx)
-				log.L(rCtx).Infof("retry %d/%d (min=%dms/max=%dms) status=%d", rc.attempts, retryCount, minTimeout.Milliseconds(), maxTimeout.Milliseconds(), r.StatusCode())
+				if ffrestyConfig.OnCheckRetry != nil && !ffrestyConfig.OnCheckRetry(r, err) {
+					log.L(rCtx).Debugf("retry cancelled after %d attempts", rc.attempts)
+					return false
+				}
 				rc.attempts++
+				log.L(rCtx).Infof("retry %d/%d (min=%dms/max=%dms) status=%d", rc.attempts, retryCount, minTimeout.Milliseconds(), maxTimeout.Milliseconds(), r.StatusCode())
 				return true
 			})
 	}

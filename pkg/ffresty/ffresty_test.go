@@ -35,6 +35,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
 	"github.com/hyperledger/firefly-common/pkg/fftls"
@@ -175,6 +176,110 @@ func TestErrResponse(t *testing.T) {
 	resp, err := c.R().Get("/test")
 	err = WrapRestErr(ctx, resp, err, i18n.MsgConfigFailed)
 	assert.Error(t, err)
+}
+
+func TestErrResponseBlockRetry(t *testing.T) {
+
+	ctx := context.Background()
+
+	resetConf()
+	utConf.Set(HTTPConfigURL, "http://localhost:12345")
+	utConf.Set(HTTPConfigRetryEnabled, true)
+	utConf.Set(HTTPConfigRetryInitDelay, "1ms")
+	utConf.Set(HTTPConfigRetryCount, 10000)
+
+	ffrestyConfig, err := GenerateConfig(ctx, utConf)
+	assert.NoError(t, err)
+	called := make(chan bool, 1)
+	ffrestyConfig.OnCheckRetry = func(res *resty.Response, err error) bool {
+		assert.NotNil(t, res) // We expect a response object, even though it was an error
+		assert.NotNil(t, err)
+		called <- true
+		return false
+	}
+
+	c := NewWithConfig(ctx, *ffrestyConfig)
+	httpmock.ActivateNonDefault(c.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	resText := strings.Builder{}
+	for i := 0; i < 512; i++ {
+		resText.WriteByte(byte('a' + (i % 26)))
+	}
+	httpmock.RegisterResponder("POST", "http://localhost:12345/test",
+		httpmock.NewErrorResponder(fmt.Errorf("pop")))
+
+	resp, err := c.R().SetBody("stuff").Post("/test")
+	err = WrapRestErr(ctx, resp, err, i18n.MsgConfigFailed)
+	assert.Error(t, err)
+
+	<-called
+}
+
+func TestRetryReGenHeaderOnEachRequest(t *testing.T) {
+
+	ctx := context.Background()
+
+	resetConf()
+	utConf.Set(HTTPConfigURL, "http://localhost:12345")
+	utConf.Set(HTTPConfigRetryEnabled, true)
+	utConf.Set(HTTPConfigRetryInitDelay, "1ms")
+	utConf.Set(HTTPConfigRetryCount, 1)
+
+	ffrestyConfig, err := GenerateConfig(ctx, utConf)
+	assert.NoError(t, err)
+	reqCount := 0
+	ffrestyConfig.OnBeforeRequest = func(req *resty.Request) error {
+		reqCount++
+		req.Header.Set("utheader", fmt.Sprintf("request_%d", reqCount))
+		return nil
+	}
+
+	c := NewWithConfig(ctx, *ffrestyConfig)
+	httpmock.ActivateNonDefault(c.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	resText := strings.Builder{}
+	for i := 0; i < 512; i++ {
+		resText.WriteByte(byte('a' + (i % 26)))
+	}
+	utHeaders := make(chan string, 2)
+	httpmock.RegisterResponder("POST", "http://localhost:12345/test", func(req *http.Request) (*http.Response, error) {
+		utHeaders <- req.Header.Get("utheader")
+		return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
+	})
+
+	resp, err := c.R().SetBody("stuff").Post("/test")
+	err = WrapRestErr(ctx, resp, err, i18n.MsgConfigFailed)
+	assert.Error(t, err)
+
+	assert.Equal(t, "request_1", <-utHeaders)
+	assert.Equal(t, "request_2", <-utHeaders)
+}
+
+func TestRetryReGenHeaderOnEachRequestFail(t *testing.T) {
+
+	ctx := context.Background()
+
+	resetConf()
+	utConf.Set(HTTPConfigURL, "http://localhost:12345")
+	utConf.Set(HTTPConfigRetryEnabled, true)
+	utConf.Set(HTTPConfigRetryInitDelay, "1ms")
+	utConf.Set(HTTPConfigRetryCount, 1)
+
+	ffrestyConfig, err := GenerateConfig(ctx, utConf)
+	assert.NoError(t, err)
+	ffrestyConfig.OnBeforeRequest = func(req *resty.Request) error {
+		return fmt.Errorf("pop")
+	}
+
+	c := NewWithConfig(ctx, *ffrestyConfig)
+	httpmock.ActivateNonDefault(c.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	resp, err := c.R().SetBody("stuff").Post("/test")
+	err = WrapRestErr(ctx, resp, err, i18n.MsgConfigFailed)
+	assert.Regexp(t, "pop", err)
 }
 
 func TestOnAfterResponseNil(t *testing.T) {

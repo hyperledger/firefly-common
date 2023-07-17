@@ -31,6 +31,7 @@ const (
 	defaultRequestTimeout                = "30s"
 	defaultHTTPIdleTimeout               = "475ms" // Node.js default keepAliveTimeout is 5 seconds, so we have to set a base below this
 	defaultHTTPMaxIdleConns              = 100     // match Go's default
+	defaultHTTPMaxConnsPerHost           = 0
 	defaultHTTPConnectionTimeout         = "30s"
 	defaultHTTPTLSHandshakeTimeout       = "10s" // match Go's default
 	defaultHTTPExpectContinueTimeout     = "1s"  // match Go's default
@@ -62,6 +63,8 @@ const (
 	HTTPIdleTimeout = "idleTimeout"
 	// HTTPMaxIdleConns the max number of idle connections to hold pooled
 	HTTPMaxIdleConns = "maxIdleConns"
+	// HTTPMaxConnsPerHost the max number of concurrent connections
+	HTTPMaxConnsPerHost = "maxConnsPerHost"
 	// HTTPConnectionTimeout the connection timeout for new connections
 	HTTPConnectionTimeout = "connectionTimeout"
 	// HTTPTLSHandshakeTimeout the TLS handshake connection timeout
@@ -88,6 +91,7 @@ func InitConfig(conf config.Section) {
 	conf.AddKnownKey(HTTPConfigRequestTimeout, defaultRequestTimeout)
 	conf.AddKnownKey(HTTPIdleTimeout, defaultHTTPIdleTimeout)
 	conf.AddKnownKey(HTTPMaxIdleConns, defaultHTTPMaxIdleConns)
+	conf.AddKnownKey(HTTPMaxConnsPerHost, defaultHTTPMaxConnsPerHost)
 	conf.AddKnownKey(HTTPConnectionTimeout, defaultHTTPConnectionTimeout)
 	conf.AddKnownKey(HTTPTLSHandshakeTimeout, defaultHTTPTLSHandshakeTimeout)
 	conf.AddKnownKey(HTTPExpectContinueTimeout, defaultHTTPExpectContinueTimeout)
