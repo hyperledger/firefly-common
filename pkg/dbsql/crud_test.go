@@ -41,6 +41,7 @@ type TestCRUDable struct {
 }
 
 var CRUDableQueryFactory = &ffapi.QueryFields{
+	"ns":      &ffapi.StringField{},
 	"id":      &ffapi.UUIDField{},
 	"created": &ffapi.TimeField{},
 	"updated": &ffapi.TimeField{},
@@ -370,6 +371,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	// Cannot replace something that doesn't exist
 	c2 := *c1
 	c2.ID = fftypes.NewUUID()
+	c2.NS = strPtr("ns1")
 	c2.Field1 = strPtr("bonjour")
 	err = iCrud.Replace(ctx, &c2, collection.postCommit)
 	assert.Regexp(t, "FF00205", err)
@@ -389,6 +391,18 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, cs, 1)
 	checkEqualExceptTimes(t, c2, *cs[0])
+
+	// Check we can grab just a couple of fields
+	cs, _, err = iCrud.GetMany(ctx, CRUDableQueryFactory.NewFilter(ctx).Eq(
+		"f1", "bonjour",
+	).RequiredFields("ns", "f2", "f3"))
+	assert.NoError(t, err)
+	assert.Len(t, cs, 1)
+	assert.Empty(t, cs[0].ID)   // yes - we didn't even request the ID! (feature needed for group-by use cases)
+	assert.Nil(t, cs[0].Field1) // yes - we didn't request this, even though we filtered on it
+	assert.Equal(t, c2.Field2, cs[0].Field2)
+	assert.Equal(t, c2.Field3, cs[0].Field3)
+	assert.Equal(t, *c2.NS, *cs[0].NS)
 
 	// Insert a bunch in a batch
 	bunchOfCRUDables := make([]*TestCRUDable, 10)
@@ -759,7 +773,15 @@ func TestGetByIDScanFail(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestGetByManySelectFail(t *testing.T) {
+func TestGetManyInvalidOp(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	_, _, err := tc.getManyScoped(context.Background(), "", &ffapi.FilterInfo{Op: ffapi.FilterOp("!wrong")}, nil, nil, nil)
+	assert.Regexp(t, "FF00190", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetManySelectFail(t *testing.T) {
 	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectQuery("SELECT.*").WillReturnError(fmt.Errorf("pop"))

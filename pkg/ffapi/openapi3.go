@@ -45,6 +45,7 @@ type Options struct {
 	APIMaxFilterSkip          uint
 	APIDefaultFilterLimit     string
 	APIMaxFilterLimit         uint
+	SupportFieldRedaction     bool
 
 	RouteCustomizations func(ctx context.Context, sg *SwaggerGen, route *Route, op *openapi3.Operation)
 }
@@ -323,6 +324,9 @@ func (sg *SwaggerGen) addFilters(ctx context.Context, route *Route, op *openapi3
 		sg.AddParam(ctx, op, "query", "skip", "", "", i18n.APIFilterSkipDesc, false, sg.options.APIMaxFilterSkip)
 		sg.AddParam(ctx, op, "query", "limit", "", sg.options.APIDefaultFilterLimit, i18n.APIFilterLimitDesc, false, sg.options.APIMaxFilterLimit)
 		sg.AddParam(ctx, op, "query", "count", "", "", i18n.APIFilterCountDesc, false)
+		if sg.options.SupportFieldRedaction {
+			sg.AddParam(ctx, op, "query", "fields", "", "", i18n.APIFilterFieldsDesc, false)
+		}
 	}
 }
 

@@ -166,6 +166,7 @@ func TestOpenAPI3SwaggerGen(t *testing.T) {
 		RouteCustomizations: func(ctx context.Context, sg *SwaggerGen, route *Route, op *openapi3.Operation) {
 			sg.AddParam(ctx, op, "header", "x-my-param", "thing", "stuff", ExampleDesc, false)
 		},
+		SupportFieldRedaction: true,
 	}).Generate(context.Background(), testRoutes)
 	err := doc.Validate(context.Background())
 	assert.NoError(t, err)
