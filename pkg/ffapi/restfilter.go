@@ -31,7 +31,7 @@ import (
 
 type FilterResultsWithCount struct {
 	Count int64       `json:"count"`
-	Total int64       `json:"total"`
+	Total *int64      `json:"total,omitempty"` // omitted if a count was not calculated (AlwaysPaginate enabled, and count not specified)
 	Items interface{} `json:"items"`
 }
 

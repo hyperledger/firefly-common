@@ -59,6 +59,7 @@ type apiServer[T any] struct {
 	requestTimeout     time.Duration
 	requestMaxTimeout  time.Duration
 	apiPublicURL       string
+	alwaysPaginate     bool
 	metricsEnabled     bool
 	metricsPath        string
 	metricsPublicURL   string
@@ -89,12 +90,16 @@ type APIServerRouteExt[T any] struct {
 // the supplied wrapper function - which will inject
 func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APIServer {
 	as := &apiServer[T]{
-		requestTimeout:    options.APIConfig.GetDuration(ConfAPIRequestTimeout),
-		requestMaxTimeout: options.APIConfig.GetDuration(ConfAPIRequestMaxTimeout),
-		metricsEnabled:    options.MetricsConfig.GetBool(ConfMetricsServerEnabled),
-		metricsPath:       options.MetricsConfig.GetString(ConfMetricsServerPath),
-		APIServerOptions:  options,
-		started:           make(chan struct{}),
+		defaultFilterLimit: options.APIConfig.GetUint64(ConfAPIDefaultFilterLimit),
+		maxFilterLimit:     options.APIConfig.GetUint64(ConfAPIMaxFilterLimit),
+		maxFilterSkip:      options.APIConfig.GetUint64(ConfAPIMaxFilterSkip),
+		requestTimeout:     options.APIConfig.GetDuration(ConfAPIRequestTimeout),
+		requestMaxTimeout:  options.APIConfig.GetDuration(ConfAPIRequestMaxTimeout),
+		metricsEnabled:     options.MetricsConfig.GetBool(ConfMetricsServerEnabled),
+		metricsPath:        options.MetricsConfig.GetString(ConfMetricsServerPath),
+		alwaysPaginate:     options.APIConfig.GetBool(ConfAPIAlwaysPaginate),
+		APIServerOptions:   options,
+		started:            make(chan struct{}),
 	}
 	if as.FavIcon16 == nil {
 		as.FavIcon16 = ffLogo16
@@ -239,6 +244,7 @@ func (as *apiServer[T]) handlerFactory() *HandlerFactory {
 		MaxFilterSkip:         as.maxFilterSkip,
 		MaxFilterLimit:        as.maxFilterLimit,
 		SupportFieldRedaction: as.SupportFieldRedaction,
+		AlwaysPaginate:        as.alwaysPaginate,
 	}
 }
 

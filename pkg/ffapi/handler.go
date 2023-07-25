@@ -48,6 +48,7 @@ type HandlerFactory struct {
 	MaxFilterSkip         uint64
 	MaxFilterLimit        uint64
 	PassthroughHeaders    []string
+	AlwaysPaginate        bool
 	SupportFieldRedaction bool
 }
 
@@ -172,6 +173,7 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 				Input:           jsonInput,
 				SuccessStatus:   http.StatusOK,
 				ResponseHeaders: res.Header(),
+				AlwaysPaginate:  hs.AlwaysPaginate,
 			}
 			if len(route.JSONOutputCodes) > 0 {
 				r.SuccessStatus = route.JSONOutputCodes[0]

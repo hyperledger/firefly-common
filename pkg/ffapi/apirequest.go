@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -31,17 +31,24 @@ type APIRequest struct {
 	Part            *Multipart
 	SuccessStatus   int
 	ResponseHeaders http.Header
+	AlwaysPaginate  bool
 }
 
 // FilterResult is a helper to transform a filter result into a REST API standard payload
 func (r *APIRequest) FilterResult(items interface{}, res *FilterResult, err error) (interface{}, error) {
 	itemsVal := reflect.ValueOf(items)
-	if err != nil || res == nil || res.TotalCount == nil || itemsVal.Kind() != reflect.Slice {
-		return items, err
+	if itemsVal.Kind() == reflect.Slice && (r.AlwaysPaginate || (res != nil && res.TotalCount != nil)) {
+		response := &FilterResultsWithCount{
+			Items: items,
+		}
+		if res != nil {
+			response.Total = res.TotalCount
+		}
+		if itemsVal.Kind() == reflect.Slice {
+			response.Count = int64(itemsVal.Len())
+		}
+		return response, err
 	}
-	return &FilterResultsWithCount{
-		Total: *res.TotalCount,
-		Count: int64(itemsVal.Len()),
-		Items: items,
-	}, nil
+	return items, err
+
 }
