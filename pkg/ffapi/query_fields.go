@@ -39,6 +39,17 @@ type QueryFactory interface {
 	NewUpdate(ctx context.Context) UpdateBuilder
 }
 
+type FieldMod int
+
+const (
+	FieldModLower FieldMod = iota
+)
+
+// HasFieldMods can be set on a QueryField to do special things that a DB might support - like lowercase index filtering
+type HasFieldMods interface {
+	FieldMods() []FieldMod
+}
+
 type QueryFields map[string]Field
 
 func (qf *QueryFields) NewFilterLimit(ctx context.Context, defLimit uint64) FilterBuilder {
@@ -130,6 +141,13 @@ func (f *stringField) String() string                       { return f.s }
 func (f *StringField) GetSerialization() FieldSerialization { return &stringField{} }
 func (f *StringField) FilterAsString() bool                 { return true }
 func (f *StringField) Description() string                  { return "String" }
+
+type StringFieldLower struct {
+	StringField
+}
+
+func (f *StringFieldLower) GetSerialization() FieldSerialization { return &stringField{} }
+func (f *StringFieldLower) FieldMods() []FieldMod                { return []FieldMod{FieldModLower} }
 
 type UUIDField struct{}
 type uuidField struct{ u *fftypes.UUID }

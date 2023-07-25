@@ -180,6 +180,18 @@ func TestBuildMessageTimeConvert(t *testing.T) {
 	assert.Equal(t, "( created >> 1621112824000000000 ) && ( created >> 0 ) && ( created == 1621112874123456789 ) && ( created == null ) && ( created << 1621112824000000000 ) && ( created << 1621112824000000000 )", f.String())
 }
 
+func TestLowerField(t *testing.T) {
+	fb := TestQueryFactory.NewFilter(context.Background())
+	addr1 := "0xf698D78272a0bCD63A3feb097B24a866f6b8a5a0"
+	addr2 := "0xb9B919763dBC54D4D634150446Bf3991A9ef5eD7"
+	f, err := fb.And(
+		fb.Eq("address", addr1),
+		fb.In("address", []driver.Value{addr1, addr2}),
+	).Finalize()
+	assert.NoError(t, err)
+	assert.Equal(t, "( lower(address) == '0xf698D78272a0bCD63A3feb097B24a866f6b8a5a0' ) && ( lower(address) IN ['0xf698D78272a0bCD63A3feb097B24a866f6b8a5a0','0xb9B919763dBC54D4D634150446Bf3991A9ef5eD7'] )", f.String())
+}
+
 func TestBuildMessageStringConvert(t *testing.T) {
 	fb := TestQueryFactory.NewFilter(context.Background())
 	u := fftypes.MustParseUUID("3f96e0d5-a10e-47c6-87a0-f2e7604af179")

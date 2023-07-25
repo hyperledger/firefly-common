@@ -35,6 +35,7 @@ var TestQueryFactory = &QueryFields{
 	"tag":      &StringField{},
 	"topics":   &FFStringArrayField{},
 	"type":     &StringField{},
+	"address":  &StringFieldLower{},
 }
 
 func TestUpdateBuilderOK(t *testing.T) {

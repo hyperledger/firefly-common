@@ -40,6 +40,7 @@ var TestQueryFactory = &ffapi.QueryFields{
 	"tag":      &ffapi.StringField{},
 	"topics":   &ffapi.FFStringArrayField{},
 	"type":     &ffapi.StringField{},
+	"address":  &ffapi.StringFieldLower{},
 }
 
 func TestSQLQueryFactoryIgnoreInvalidFilterFields(t *testing.T) {
@@ -170,6 +171,26 @@ func TestSQLQueryFactoryEvenMoreOps(t *testing.T) {
 		"%sty",
 		"%vwx",
 	}, args)
+}
+
+func TestSQLQueryFactoryLowerCaseIndexSearch(t *testing.T) {
+
+	s, _ := NewMockProvider().UTInit()
+	fb := TestQueryFactory.NewFilter(context.Background())
+	addr1 := "0xf698D78272a0bCD63A3feb097B24a866f6b8a5a0"
+	addr2 := "0xb9B919763dBC54D4D634150446Bf3991A9ef5eD7"
+	f := fb.And(
+		fb.IEq("address", addr1),
+		fb.In("address", []driver.Value{addr1, addr2}),
+	)
+
+	sel := squirrel.Select("*").From("mytable AS mt")
+	sel, _, _, err := s.FilterSelect(context.Background(), "mt", sel, f, nil, []interface{}{"sequence"})
+	assert.NoError(t, err)
+
+	sqlFilter, _, err := sel.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "SELECT * FROM mytable AS mt WHERE (lower(mt.address) ILIKE ? ESCAPE '[' AND lower(mt.address) IN (?,?)) ORDER BY mt.seq DESC", sqlFilter)
 }
 
 func TestSQLQueryFactoryEscapeLike(t *testing.T) {
