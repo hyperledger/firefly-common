@@ -61,7 +61,7 @@ func (jd JSONObject) GetString(key string) string {
 func (jd JSONObject) GetInteger(key string) *big.Int {
 	s := jd.GetString(key)
 	if s == "" {
-		log.L(context.Background()).Debugf("Int value unset for key '%s'", key)
+		log.L(context.Background()).Tracef("Int value unset for key '%s'", key)
 		return big.NewInt(0)
 	}
 	i, ok := big.NewInt(0).SetString(s, 0)
