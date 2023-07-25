@@ -78,6 +78,7 @@ type APIServerOptions[T any] struct {
 	FavIcon16                 []byte
 	FavIcon32                 []byte
 	PanicOnMissingDescription bool
+	SupportFieldRedaction     bool
 }
 
 type APIServerRouteExt[T any] struct {
@@ -94,9 +95,9 @@ func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APISe
 		maxFilterSkip:      options.APIConfig.GetUint64(ConfAPIMaxFilterSkip),
 		requestTimeout:     options.APIConfig.GetDuration(ConfAPIRequestTimeout),
 		requestMaxTimeout:  options.APIConfig.GetDuration(ConfAPIRequestMaxTimeout),
-		alwaysPaginate:     options.APIConfig.GetBool(ConfAPIAlwaysPaginate),
 		metricsEnabled:     options.MetricsConfig.GetBool(ConfMetricsServerEnabled),
 		metricsPath:        options.MetricsConfig.GetString(ConfMetricsServerPath),
+		alwaysPaginate:     options.APIConfig.GetBool(ConfAPIAlwaysPaginate),
 		APIServerOptions:   options,
 		started:            make(chan struct{}),
 	}
@@ -191,6 +192,7 @@ func (as *apiServer[T]) swaggerGenConf(apiBaseURL string) *Options {
 		Version:                   "1.0",
 		PanicOnMissingDescription: as.PanicOnMissingDescription,
 		DefaultRequestTimeout:     as.requestTimeout,
+		SupportFieldRedaction:     as.SupportFieldRedaction,
 	}
 }
 
@@ -238,6 +240,10 @@ func (as *apiServer[T]) handlerFactory() *HandlerFactory {
 	return &HandlerFactory{
 		DefaultRequestTimeout: as.requestTimeout,
 		MaxTimeout:            as.requestMaxTimeout,
+		DefaultFilterLimit:    as.defaultFilterLimit,
+		MaxFilterSkip:         as.maxFilterSkip,
+		MaxFilterLimit:        as.maxFilterLimit,
+		SupportFieldRedaction: as.SupportFieldRedaction,
 		AlwaysPaginate:        as.alwaysPaginate,
 	}
 }

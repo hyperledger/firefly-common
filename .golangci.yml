@@ -54,3 +54,6 @@ linters:
     - unconvert
     - unparam
     - unused
+issues:
+  exclude:
+    - "method ToSql should be ToSQL"

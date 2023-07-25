@@ -31,7 +31,7 @@ import (
 
 type FilterResultsWithCount struct {
 	Count int64       `json:"count"`
-	Total int64       `json:"total"`
+	Total *int64      `json:"total,omitempty"` // omitted if a count was not calculated (AlwaysPaginate enabled, and count not specified)
 	Items interface{} `json:"items"`
 }
 
@@ -110,6 +110,18 @@ func (hs *HandlerFactory) buildFilter(req *http.Request, ff QueryFactory) (AndFi
 			ssv = strings.TrimSpace(ssv)
 			if ssv != "" {
 				filter.Sort(ssv)
+			}
+		}
+	}
+	if hs.SupportFieldRedaction {
+		requiredFieldVals := hs.getValues(req.Form, "fields")
+		for _, rf := range requiredFieldVals {
+			subRequiredFieldVals := strings.Split(rf, ",")
+			for _, srf := range subRequiredFieldVals {
+				srf = strings.TrimSpace(srf)
+				if srf != "" {
+					filter.RequiredFields(srf)
+				}
 			}
 		}
 	}

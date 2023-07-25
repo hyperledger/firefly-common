@@ -31,7 +31,7 @@ func TestFilterResultWithCount(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, &FilterResultsWithCount{
 		Count: 1,
-		Total: 10,
+		Total: &ten,
 		Items: []string{"test"},
 	}, f)
 }

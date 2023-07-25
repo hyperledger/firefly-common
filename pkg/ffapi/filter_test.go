@@ -41,9 +41,10 @@ func TestBuildMessageFilter(t *testing.T) {
 		Sort("tag").
 		Descending().
 		GroupBy("type").
+		RequiredFields("type", "created").
 		Finalize()
 	assert.NoError(t, err)
-	assert.Equal(t, "( tag == 'tag1' ) && ( ( id == '35c11cba-adff-4a4d-970a-02e3a0858dc8' ) || ( id == 'caefb9d1-9fc9-4d6a-a155-514d3139adf7' ) ) && ( sequence >> 12345 ) && ( created == null ) groupBy=type sort=-tag skip=50 limit=25 count=true", f.String())
+	assert.Equal(t, "( tag == 'tag1' ) && ( ( id == '35c11cba-adff-4a4d-970a-02e3a0858dc8' ) || ( id == 'caefb9d1-9fc9-4d6a-a155-514d3139adf7' ) ) && ( sequence >> 12345 ) && ( created == null ) groupBy=type requiredFields=type,created sort=-tag skip=50 limit=25 count=true", f.String())
 }
 
 func TestBuildMessageFilter2(t *testing.T) {
@@ -59,22 +60,23 @@ func TestBuildMessageFilter2(t *testing.T) {
 
 func TestBuildMessageFilter3(t *testing.T) {
 	fb := TestQueryFactory.NewFilter(context.Background())
-	f, err := fb.And(
-		fb.In("created", []driver.Value{1, 2, 3}),
-		fb.NotIn("created", []driver.Value{1, 2, 3}),
-		fb.Lt("created", "0"),
-		fb.Lte("created", "0"),
-		fb.Gte("created", "0"),
-		fb.Neq("created", "0"),
-		fb.Gt("sequence", 12345),
-		fb.Contains("topics", "abc"),
-		fb.NotContains("topics", "def"),
-		fb.IContains("topics", "ghi"),
-		fb.NotIContains("topics", "jkl"),
-	).
+	f, err := fb.
 		Sort("-created").
 		Sort("topics").
 		Sort("-sequence").
+		And(
+			fb.In("created", []driver.Value{1, 2, 3}),
+			fb.NotIn("created", []driver.Value{1, 2, 3}),
+			fb.Lt("created", "0"),
+			fb.Lte("created", "0"),
+			fb.Gte("created", "0"),
+			fb.Neq("created", "0"),
+			fb.Gt("sequence", 12345),
+			fb.Contains("topics", "abc"),
+			fb.NotContains("topics", "def"),
+			fb.IContains("topics", "ghi"),
+			fb.NotIContains("topics", "jkl"),
+		).
 		Finalize()
 	assert.NoError(t, err)
 	assert.Equal(t, "( created IN [1000000000,2000000000,3000000000] ) && ( created NI [1000000000,2000000000,3000000000] ) && ( created << 0 ) && ( created <= 0 ) && ( created >= 0 ) && ( created != 0 ) && ( sequence >> 12345 ) && ( topics %= 'abc' ) && ( topics !% 'def' ) && ( topics :% 'ghi' ) && ( topics ;% 'jkl' ) sort=-created,topics,-sequence", f.String())

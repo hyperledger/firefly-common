@@ -19,6 +19,7 @@ package dbsql
 import (
 	"context"
 	"database/sql/driver"
+	"sort"
 	"testing"
 
 	"github.com/Masterminds/squirrel"
@@ -128,7 +129,7 @@ func TestSQLQueryFactoryExtraOps(t *testing.T) {
 
 	sqlFilter, _, err := sel.ToSql()
 	assert.NoError(t, err)
-	assert.Equal(t, "SELECT * FROM mytable AS mt WHERE (mt.created IN (?,?,?) AND mt.created NOT IN (?,?,?) AND mt.id = ? AND mt.id IN (?) AND mt.id IS NOT NULL AND mt.created < ? AND mt.created <= ? AND mt.created >= ? AND mt.created <> ? AND mt.seq > ? AND mt.topics LIKE ? AND mt.topics NOT LIKE ? AND mt.topics ILIKE ? AND mt.topics NOT ILIKE ?) ORDER BY mt.seq DESC", sqlFilter)
+	assert.Equal(t, "SELECT * FROM mytable AS mt WHERE (mt.created IN (?,?,?) AND mt.created NOT IN (?,?,?) AND mt.id = ? AND mt.id IN (?) AND mt.id IS NOT NULL AND mt.created < ? AND mt.created <= ? AND mt.created >= ? AND mt.created <> ? AND mt.seq > ? AND mt.topics LIKE ? ESCAPE '[' AND mt.topics NOT LIKE ? ESCAPE '[' AND mt.topics ILIKE ? ESCAPE '[' AND mt.topics NOT ILIKE ? ESCAPE '[') ORDER BY mt.seq DESC", sqlFilter)
 }
 
 func TestSQLQueryFactoryEvenMoreOps(t *testing.T) {
@@ -139,8 +140,8 @@ func TestSQLQueryFactoryEvenMoreOps(t *testing.T) {
 	f := fb.And(
 		fb.IEq("id", u),
 		fb.NIeq("id", nil),
-		fb.StartsWith("topics", "abc"),
-		fb.NotStartsWith("topics", "def"),
+		fb.StartsWith("topics", "abc_"),
+		fb.NotStartsWith("topics", "def%"),
 		fb.IStartsWith("topics", "ghi"),
 		fb.NotIStartsWith("topics", "jkl"),
 		fb.EndsWith("topics", "mno"),
@@ -154,9 +155,37 @@ func TestSQLQueryFactoryEvenMoreOps(t *testing.T) {
 	sel, _, _, err := s.FilterSelect(context.Background(), "mt", sel, f, nil, []interface{}{"sequence"})
 	assert.NoError(t, err)
 
-	sqlFilter, _, err := sel.ToSql()
+	sqlFilter, args, err := sel.ToSql()
 	assert.NoError(t, err)
-	assert.Equal(t, "SELECT * FROM mytable AS mt WHERE (mt.id ILIKE ? AND mt.id NOT ILIKE ? AND mt.topics LIKE ? AND mt.topics NOT LIKE ? AND mt.topics ILIKE ? AND mt.topics NOT ILIKE ? AND mt.topics LIKE ? AND mt.topics NOT LIKE ? AND mt.topics ILIKE ? AND mt.topics NOT ILIKE ?) ORDER BY mt.seq DESC", sqlFilter)
+	assert.Equal(t, "SELECT * FROM mytable AS mt WHERE (mt.id ILIKE ? ESCAPE '[' AND mt.id NOT ILIKE ? ESCAPE '[' AND mt.topics LIKE ? ESCAPE '[' AND mt.topics NOT LIKE ? ESCAPE '[' AND mt.topics ILIKE ? ESCAPE '[' AND mt.topics NOT ILIKE ? ESCAPE '[' AND mt.topics LIKE ? ESCAPE '[' AND mt.topics NOT LIKE ? ESCAPE '[' AND mt.topics ILIKE ? ESCAPE '[' AND mt.topics NOT ILIKE ? ESCAPE '[') ORDER BY mt.seq DESC", sqlFilter)
+	assert.Equal(t, []interface{}{
+		"4066abdc-8bbd-4472-9d29-1a55b467f9b9",
+		"",
+		"abc[_%",
+		"def[%%",
+		"ghi%",
+		"jkl%",
+		"%mno",
+		"%pqr",
+		"%sty",
+		"%vwx",
+	}, args)
+}
+
+func TestSQLQueryFactoryEscapeLike(t *testing.T) {
+
+	sel := squirrel.Select("*").From("mytable AS mt").
+		Where(LikeEscape{"a": 1, "b": 2}).
+		Where(NotLikeEscape{"a": 1, "b": 2}).
+		Where(ILikeEscape{"a": 1, "b": 2}).
+		Where(NotILikeEscape{"a": 1, "b": 2})
+
+	sql, args, err := sel.ToSql()
+	assert.NoError(t, err)
+	assert.Regexp(t, `SELECT \* FROM mytable AS mt WHERE \([ab] LIKE \? ESCAPE '\[' AND [ab] LIKE \? ESCAPE '\['\) AND \([ab] NOT LIKE \? ESCAPE '\[' AND [ab] NOT LIKE \? ESCAPE '\['\) AND \([ab] ILIKE \? ESCAPE '\[' AND [ab] ILIKE \? ESCAPE '\['\) AND \([ab] NOT ILIKE \? ESCAPE '\[' AND [ab] NOT ILIKE \? ESCAPE '\['\)`, sql)
+	assert.Len(t, args, 8)
+	sort.Slice(args, func(i, j int) bool { return args[i].(int) < args[j].(int) })
+	assert.Equal(t, []interface{}{1, 1, 1, 1, 2, 2, 2, 2}, args)
 }
 
 func TestSQLQueryFactoryFinalizeFail(t *testing.T) {
@@ -170,7 +199,7 @@ func TestSQLQueryFactoryFinalizeFail(t *testing.T) {
 func TestSQLQueryFactoryBadOp(t *testing.T) {
 
 	s, _ := NewMockProvider().UTInit()
-	_, err := s.filterSelectFinalized(context.Background(), "", &ffapi.FilterInfo{
+	_, err := s.refineQuery(context.Background(), "", &ffapi.FilterInfo{
 		Op: ffapi.FilterOp("wrong"),
 	}, nil)
 	assert.Regexp(t, "FF00190.*wrong", err)
@@ -179,7 +208,7 @@ func TestSQLQueryFactoryBadOp(t *testing.T) {
 func TestSQLQueryFactoryBadOpInOr(t *testing.T) {
 
 	s, _ := NewMockProvider().UTInit()
-	_, err := s.filterSelectFinalized(context.Background(), "", &ffapi.FilterInfo{
+	_, err := s.refineQuery(context.Background(), "", &ffapi.FilterInfo{
 		Op: ffapi.FilterOpOr,
 		Children: []*ffapi.FilterInfo{
 			{Op: ffapi.FilterOp("wrong")},
@@ -191,7 +220,7 @@ func TestSQLQueryFactoryBadOpInOr(t *testing.T) {
 func TestSQLQueryFactoryBadOpInAnd(t *testing.T) {
 
 	s, _ := NewMockProvider().UTInit()
-	_, err := s.filterSelectFinalized(context.Background(), "", &ffapi.FilterInfo{
+	_, err := s.refineQuery(context.Background(), "", &ffapi.FilterInfo{
 		Op: ffapi.FilterOpAnd,
 		Children: []*ffapi.FilterInfo{
 			{Op: ffapi.FilterOp("wrong")},
