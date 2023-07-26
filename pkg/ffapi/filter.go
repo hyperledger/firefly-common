@@ -237,6 +237,7 @@ type FilterInfo struct {
 	Count          bool
 	CountExpr      string
 	Field          string
+	FieldMods      []FieldMod
 	Op             FilterOp
 	Values         []FieldSerialization
 	Value          FieldSerialization
@@ -265,6 +266,12 @@ func ValueString(f FieldSerialization) string {
 }
 
 func (f *FilterInfo) filterString() string {
+	fieldName := f.Field
+	for _, fm := range f.FieldMods {
+		if fm == FieldModLower {
+			fieldName = fmt.Sprintf("lower(%s)", fieldName)
+		}
+	}
 	switch f.Op {
 	case FilterOpAnd, FilterOpOr:
 		cs := make([]string, len(f.Children))
@@ -277,9 +284,9 @@ func (f *FilterInfo) filterString() string {
 		for i, v := range f.Values {
 			strValues[i] = ValueString(v)
 		}
-		return fmt.Sprintf("%s %s [%s]", f.Field, f.Op, strings.Join(strValues, ","))
+		return fmt.Sprintf("%s %s [%s]", fieldName, f.Op, strings.Join(strValues, ","))
 	default:
-		return fmt.Sprintf("%s %s %s", f.Field, f.Op, ValueString(f.Value))
+		return fmt.Sprintf("%s %s %s", fieldName, f.Op, ValueString(f.Value))
 	}
 }
 
@@ -353,10 +360,18 @@ func (f *baseFilter) Builder() FilterBuilder {
 	return f.fb
 }
 
+func fieldMods(f Field) []FieldMod {
+	if hfm, ok := f.(HasFieldMods); ok {
+		return hfm.FieldMods()
+	}
+	return nil
+}
+
 func (f *baseFilter) Finalize() (fi *FilterInfo, err error) {
 	var children []*FilterInfo
 	var value FieldSerialization
 	var values []FieldSerialization
+	var mods []FieldMod
 
 	switch f.op {
 	case FilterOpAnd, FilterOpOr:
@@ -374,6 +389,7 @@ func (f *baseFilter) Finalize() (fi *FilterInfo, err error) {
 		if !ok {
 			return nil, i18n.NewError(f.fb.ctx, i18n.MsgInvalidFilterField, name)
 		}
+		mods = fieldMods(field)
 		for i, fv := range fValues {
 			values[i] = field.GetSerialization()
 			if err = values[i].Scan(fv); err != nil {
@@ -386,6 +402,7 @@ func (f *baseFilter) Finalize() (fi *FilterInfo, err error) {
 		if !ok {
 			return nil, i18n.NewError(f.fb.ctx, i18n.MsgInvalidFilterField, name)
 		}
+		mods = fieldMods(field)
 		skipScan := false
 		switch f.value.(type) {
 		case nil:
@@ -427,6 +444,7 @@ func (f *baseFilter) Finalize() (fi *FilterInfo, err error) {
 		Children:       children,
 		Op:             f.op,
 		Field:          f.field,
+		FieldMods:      mods,
 		Values:         values,
 		Value:          value,
 		Sort:           f.fb.sort,

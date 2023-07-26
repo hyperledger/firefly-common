@@ -121,7 +121,7 @@ func (s *Database) filterSelectFinalized(ctx context.Context, tableName string, 
 	if len(fi.GroupBy) > 0 {
 		groupByWithResolvedFieldName := make([]string, len(fi.GroupBy))
 		for i, gb := range fi.GroupBy {
-			groupByWithResolvedFieldName[i] = s.mapField(tableName, gb, typeMap)
+			groupByWithResolvedFieldName[i] = s.mapFieldName(tableName, gb, typeMap)
 		}
 		groupByString := strings.Join(groupByWithResolvedFieldName, ",")
 		sel = sel.GroupBy(groupByString)
@@ -140,7 +140,7 @@ func (s *Database) filterSelectFinalized(ctx context.Context, tableName string, 
 		} else if sf.Nulls == ffapi.NullsLast {
 			nulls = " NULLS LAST"
 		}
-		sort[i] = fmt.Sprintf("%s%s%s", s.mapField(tableName, sf.Field, typeMap), direction, nulls)
+		sort[i] = fmt.Sprintf("%s%s%s", s.mapFieldName(tableName, sf.Field, typeMap), direction, nulls)
 	}
 	sortString = strings.Join(sort, ", ")
 	sel = sel.OrderBy(sortString)
@@ -174,7 +174,7 @@ func (s *Database) BuildUpdate(sel sq.UpdateBuilder, update ffapi.Update, typeMa
 	}
 	for _, so := range ui.SetOperations {
 
-		sel = sel.Set(s.mapField("", so.Field, typeMap), so.Value)
+		sel = sel.Set(s.mapFieldName("", so.Field, typeMap), so.Value)
 	}
 	return sel, nil
 }
@@ -191,7 +191,7 @@ func (s *Database) FilterUpdate(ctx context.Context, update sq.UpdateBuilder, fi
 	return update.Where(fop), nil
 }
 
-func (s *Database) mapField(tableName, fieldName string, tm map[string]string) string {
+func (s *Database) mapFieldName(tableName, fieldName string, tm map[string]string) string {
 	if fieldName == "sequence" {
 		if tableName == "" {
 			return s.sequenceColumn
@@ -208,6 +208,16 @@ func (s *Database) mapField(tableName, fieldName string, tm map[string]string) s
 		field = fmt.Sprintf("%s.%s", tableName, field)
 	}
 	return field
+}
+
+func (s *Database) mapField(tableName string, op *ffapi.FilterInfo, tm map[string]string) string {
+	fieldName := s.mapFieldName(tableName, op.Field, tm)
+	for _, m := range op.FieldMods {
+		if m == ffapi.FieldModLower {
+			fieldName = fmt.Sprintf("lower(%s)", fieldName)
+		}
+	}
+	return fieldName
 }
 
 // newILike uses ILIKE if supported by DB, otherwise the "lower" approach
@@ -233,49 +243,49 @@ func (s *Database) filterOp(ctx context.Context, tableName string, op *ffapi.Fil
 	case ffapi.FilterOpAnd:
 		return s.filterAnd(ctx, tableName, op, tm)
 	case ffapi.FilterOpEq:
-		return sq.Eq{s.mapField(tableName, op.Field, tm): op.Value}, nil
+		return sq.Eq{s.mapField(tableName, op, tm): op.Value}, nil
 	case ffapi.FilterOpIEq:
-		return s.newILike(s.mapField(tableName, op.Field, tm), s.escapeLike(op.Value)), nil
+		return s.newILike(s.mapField(tableName, op, tm), s.escapeLike(op.Value)), nil
 	case ffapi.FilterOpIn:
-		return sq.Eq{s.mapField(tableName, op.Field, tm): op.Values}, nil
+		return sq.Eq{s.mapField(tableName, op, tm): op.Values}, nil
 	case ffapi.FilterOpNeq:
-		return sq.NotEq{s.mapField(tableName, op.Field, tm): op.Value}, nil
+		return sq.NotEq{s.mapField(tableName, op, tm): op.Value}, nil
 	case ffapi.FilterOpNIeq:
-		return s.newNotILike(s.mapField(tableName, op.Field, tm), s.escapeLike(op.Value)), nil
+		return s.newNotILike(s.mapField(tableName, op, tm), s.escapeLike(op.Value)), nil
 	case ffapi.FilterOpNotIn:
-		return sq.NotEq{s.mapField(tableName, op.Field, tm): op.Values}, nil
+		return sq.NotEq{s.mapField(tableName, op, tm): op.Values}, nil
 	case ffapi.FilterOpCont:
-		return LikeEscape{s.mapField(tableName, op.Field, tm): fmt.Sprintf("%%%s%%", s.escapeLike(op.Value))}, nil
+		return LikeEscape{s.mapField(tableName, op, tm): fmt.Sprintf("%%%s%%", s.escapeLike(op.Value))}, nil
 	case ffapi.FilterOpNotCont:
-		return NotLikeEscape{s.mapField(tableName, op.Field, tm): fmt.Sprintf("%%%s%%", s.escapeLike(op.Value))}, nil
+		return NotLikeEscape{s.mapField(tableName, op, tm): fmt.Sprintf("%%%s%%", s.escapeLike(op.Value))}, nil
 	case ffapi.FilterOpICont:
-		return s.newILike(s.mapField(tableName, op.Field, tm), fmt.Sprintf("%%%s%%", s.escapeLike(op.Value))), nil
+		return s.newILike(s.mapField(tableName, op, tm), fmt.Sprintf("%%%s%%", s.escapeLike(op.Value))), nil
 	case ffapi.FilterOpNotICont:
-		return s.newNotILike(s.mapField(tableName, op.Field, tm), fmt.Sprintf("%s%%", s.escapeLike(op.Value))), nil
+		return s.newNotILike(s.mapField(tableName, op, tm), fmt.Sprintf("%s%%", s.escapeLike(op.Value))), nil
 	case ffapi.FilterOpStartsWith:
-		return LikeEscape{s.mapField(tableName, op.Field, tm): fmt.Sprintf("%s%%", s.escapeLike(op.Value))}, nil
+		return LikeEscape{s.mapField(tableName, op, tm): fmt.Sprintf("%s%%", s.escapeLike(op.Value))}, nil
 	case ffapi.FilterOpNotStartsWith:
-		return NotLikeEscape{s.mapField(tableName, op.Field, tm): fmt.Sprintf("%s%%", s.escapeLike(op.Value))}, nil
+		return NotLikeEscape{s.mapField(tableName, op, tm): fmt.Sprintf("%s%%", s.escapeLike(op.Value))}, nil
 	case ffapi.FilterOpIStartsWith:
-		return s.newILike(s.mapField(tableName, op.Field, tm), fmt.Sprintf("%s%%", s.escapeLike(op.Value))), nil
+		return s.newILike(s.mapField(tableName, op, tm), fmt.Sprintf("%s%%", s.escapeLike(op.Value))), nil
 	case ffapi.FilterOpNotIStartsWith:
-		return s.newNotILike(s.mapField(tableName, op.Field, tm), fmt.Sprintf("%s%%", s.escapeLike(op.Value))), nil
+		return s.newNotILike(s.mapField(tableName, op, tm), fmt.Sprintf("%s%%", s.escapeLike(op.Value))), nil
 	case ffapi.FilterOpEndsWith:
-		return LikeEscape{s.mapField(tableName, op.Field, tm): fmt.Sprintf("%%%s", s.escapeLike(op.Value))}, nil
+		return LikeEscape{s.mapField(tableName, op, tm): fmt.Sprintf("%%%s", s.escapeLike(op.Value))}, nil
 	case ffapi.FilterOpNotEndsWith:
-		return NotLikeEscape{s.mapField(tableName, op.Field, tm): fmt.Sprintf("%%%s", s.escapeLike(op.Value))}, nil
+		return NotLikeEscape{s.mapField(tableName, op, tm): fmt.Sprintf("%%%s", s.escapeLike(op.Value))}, nil
 	case ffapi.FilterOpIEndsWith:
-		return s.newILike(s.mapField(tableName, op.Field, tm), fmt.Sprintf("%%%s", s.escapeLike(op.Value))), nil
+		return s.newILike(s.mapField(tableName, op, tm), fmt.Sprintf("%%%s", s.escapeLike(op.Value))), nil
 	case ffapi.FilterOpNotIEndsWith:
-		return s.newNotILike(s.mapField(tableName, op.Field, tm), fmt.Sprintf("%%%s", s.escapeLike(op.Value))), nil
+		return s.newNotILike(s.mapField(tableName, op, tm), fmt.Sprintf("%%%s", s.escapeLike(op.Value))), nil
 	case ffapi.FilterOpGt:
-		return sq.Gt{s.mapField(tableName, op.Field, tm): op.Value}, nil
+		return sq.Gt{s.mapField(tableName, op, tm): op.Value}, nil
 	case ffapi.FilterOpGte:
-		return sq.GtOrEq{s.mapField(tableName, op.Field, tm): op.Value}, nil
+		return sq.GtOrEq{s.mapField(tableName, op, tm): op.Value}, nil
 	case ffapi.FilterOpLt:
-		return sq.Lt{s.mapField(tableName, op.Field, tm): op.Value}, nil
+		return sq.Lt{s.mapField(tableName, op, tm): op.Value}, nil
 	case ffapi.FilterOpLte:
-		return sq.LtOrEq{s.mapField(tableName, op.Field, tm): op.Value}, nil
+		return sq.LtOrEq{s.mapField(tableName, op, tm): op.Value}, nil
 	default:
 		return nil, i18n.NewError(ctx, i18n.MsgUnsupportedSQLOpInFilter, op.Op)
 	}
