@@ -329,6 +329,11 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	assert.NoError(t, err)
 	checkEqualExceptTimes(t, *c1, *c1copy)
 
+	// Check we don't get it back by name if we scope to a different ns
+	c1NotFound, err := iCrud.Scoped(sq.Eq{"ns": "ns2"}).GetByName(ctx, *c1.Name)
+	assert.NoError(t, err)
+	assert.Nil(t, c1NotFound)
+
 	// Check we get it back by name, in name or UUID
 	c1copy, err = iCrud.GetByUUIDOrName(ctx, *c1.Name)
 	assert.NoError(t, err)
