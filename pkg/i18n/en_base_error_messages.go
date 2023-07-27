@@ -146,4 +146,5 @@ var (
 	MsgInvalidTLSDnMismatch                        = ffe("FF00211", "Certificate subject does not meet requirements")
 	MsgDBUnknownGetOption                          = ffe("FF00212", "Unknown get option (%d)", 400)
 	MsgDBPatchNotSupportedForCollection            = ffe("FF00213", "Patch not supported for collection '%s'", 405)
+	MsgCollectionNotConfiguredWithName             = ffe("FF00214", "Name based queries not supported for collection '%s'", 405)
 )

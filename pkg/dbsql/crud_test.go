@@ -35,6 +35,7 @@ import (
 type TestCRUDable struct {
 	ResourceBase
 	NS     *string           `json:"namespace"`
+	Name   *string           `json:"name"`
 	Field1 *string           `json:"f1"`
 	Field2 *fftypes.FFBigInt `json:"f2"`
 	Field3 *fftypes.JSONAny  `json:"f3"`
@@ -42,6 +43,7 @@ type TestCRUDable struct {
 
 var CRUDableQueryFactory = &ffapi.QueryFields{
 	"ns":      &ffapi.StringField{},
+	"name":    &ffapi.StringField{},
 	"id":      &ffapi.UUIDField{},
 	"created": &ffapi.TimeField{},
 	"updated": &ffapi.TimeField{},
@@ -127,6 +129,7 @@ func newCRUDCollection(db *Database, ns string) *TestCRUD {
 				ColumnCreated,
 				ColumnUpdated,
 				"ns",
+				"name",
 				"field1",
 				"field2",
 				"field3",
@@ -140,6 +143,9 @@ func newCRUDCollection(db *Database, ns string) *TestCRUD {
 			NewInstance:  func() *TestCRUDable { return &TestCRUDable{} },
 			ScopedFilter: func() squirrel.Eq { return sq.Eq{"ns": ns} },
 			EventHandler: nil, // set below
+			NameField:    "name",
+			QueryFactory: CRUDableQueryFactory,
+			IDValidator:  UUIDValidator,
 			GetFieldPtr: func(inst *TestCRUDable, col string) interface{} {
 				switch col {
 				case ColumnID:
@@ -150,6 +156,8 @@ func newCRUDCollection(db *Database, ns string) *TestCRUD {
 					return &inst.Updated
 				case "ns":
 					return &inst.NS
+				case "name":
+					return &inst.Name
 				case "field1":
 					return &inst.Field1
 				case "field2":
@@ -293,6 +301,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 		ResourceBase: ResourceBase{
 			ID: fftypes.NewUUID(),
 		},
+		Name:   strPtr("bob"),
 		NS:     strPtr("ns1"),
 		Field1: strPtr("hello1"),
 		Field2: fftypes.NewFFBigInt(12345),
@@ -312,6 +321,21 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 
 	// Check we get it back
 	c1copy, err := iCrud.GetByID(ctx, c1.ID.String())
+	assert.NoError(t, err)
+	checkEqualExceptTimes(t, *c1, *c1copy)
+
+	// Check we get it back by name
+	c1copy, err = iCrud.GetByName(ctx, *c1.Name)
+	assert.NoError(t, err)
+	checkEqualExceptTimes(t, *c1, *c1copy)
+
+	// Check we get it back by name, in name or UUID
+	c1copy, err = iCrud.GetByUUIDOrName(ctx, *c1.Name)
+	assert.NoError(t, err)
+	checkEqualExceptTimes(t, *c1, *c1copy)
+
+	// Check we get it back by UUID, in name or UUID
+	c1copy, err = iCrud.GetByUUIDOrName(ctx, c1.GetID())
 	assert.NoError(t, err)
 	checkEqualExceptTimes(t, *c1, *c1copy)
 
@@ -628,7 +652,11 @@ func TestUpsertFailInsert(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT.*").WillReturnRows(mock.NewRows([]string{db.sequenceColumn}))
 	mock.ExpectExec("INSERT.*").WillReturnError(fmt.Errorf("pop"))
-	_, err := tc.Upsert(context.Background(), &TestCRUDable{}, UpsertOptimizationSkip)
+	_, err := tc.Upsert(context.Background(), &TestCRUDable{
+		ResourceBase: ResourceBase{
+			ID: fftypes.NewUUID(),
+		},
+	}, UpsertOptimizationSkip)
 	assert.Regexp(t, "FF00177", err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -715,8 +743,21 @@ func TestInsertInsertFail(t *testing.T) {
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
 	mock.ExpectExec("INSERT.*").WillReturnError(fmt.Errorf("pop"))
-	err := tc.Insert(context.Background(), &TestCRUDable{})
+	err := tc.Insert(context.Background(), &TestCRUDable{
+		ResourceBase: ResourceBase{
+			ID: fftypes.NewUUID(),
+		},
+	})
 	assert.Regexp(t, "FF00177", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestInsertMissingUUID(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	err := tc.Insert(context.Background(), &TestCRUDable{})
+	assert.Regexp(t, "FF00138", err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -770,6 +811,52 @@ func TestGetByIDScanFail(t *testing.T) {
 	mock.ExpectQuery("SELECT.*").WillReturnRows(sqlmock.NewRows([]string{}).AddRow())
 	_, err := tc.GetByID(context.Background(), fftypes.NewUUID().String())
 	assert.Regexp(t, "FF00182", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetByNameNoNameSemantics(t *testing.T) {
+	db, _ := NewMockProvider().UTInit()
+	tc := newLinkableCollection(&db.Database, "ns1")
+	_, err := tc.GetByName(context.Background(), "any")
+	assert.Regexp(t, "FF00214", err)
+}
+
+func TestGetByUUIDOrNameNotUUIDNilResult(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectQuery("SELECT.*name =.*").WillReturnRows(sqlmock.NewRows([]string{}))
+	res, err := tc.GetByUUIDOrName(context.Background(), "something")
+	assert.NoError(t, err)
+	assert.Nil(t, res)
+}
+
+func TestGetByUUIDOrNameErrNotFoundUUIDParsableString(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectQuery("SELECT.*id =.*").WillReturnRows(sqlmock.NewRows([]string{}))
+	mock.ExpectQuery("SELECT.*name =.*").WillReturnRows(sqlmock.NewRows([]string{}))
+	res, err := tc.GetByUUIDOrName(context.Background(), fftypes.NewUUID().String(), FailIfNotFound)
+	assert.Regexp(t, "FF00164", err)
+	assert.Nil(t, res)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetFirstBadGetOpts(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	res, err := tc.GetFirst(context.Background(), CRUDableQueryFactory.NewFilter(context.Background()).And(), GetOption(-99))
+	assert.Regexp(t, "FF00212", err)
+	assert.Nil(t, res)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetFirstQueryFail(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectQuery("SELECT.*").WillReturnError(fmt.Errorf("pop"))
+	res, err := tc.GetFirst(context.Background(), CRUDableQueryFactory.NewFilter(context.Background()).And())
+	assert.Regexp(t, "FF00176", err)
+	assert.Nil(t, res)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -1072,6 +1159,29 @@ func TestValidateGetFieldPtrNotNilForUnknown(t *testing.T) {
 		ScopedFilter: func() sq.Eq { return sq.Eq{} },
 	}
 	assert.PanicsWithValue(t, "GetFieldPtr() must return nil for unknown column", func() {
+		tc.Validate()
+	})
+}
+
+func TestValidateNameSemanticsWithoutQueryFactory(t *testing.T) {
+	db, _ := NewMockProvider().UTInit()
+	tc := &CrudBase[*TestCRUDable]{
+		DB:            &db.Database,
+		NewInstance:   func() *TestCRUDable { return &TestCRUDable{} },
+		Columns:       []string{ColumnID},
+		TimesDisabled: true,
+		GetFieldPtr: func(inst *TestCRUDable, col string) interface{} {
+			if col == "id" {
+				var t *string
+				return &t
+			}
+			return nil
+		},
+		NilValue:     func() *TestCRUDable { return nil },
+		ScopedFilter: func() sq.Eq { return sq.Eq{} },
+		NameField:    "name",
+	}
+	assert.PanicsWithValue(t, "QueryFactory must be set when name semantics are enabled", func() {
 		tc.Validate()
 	})
 }

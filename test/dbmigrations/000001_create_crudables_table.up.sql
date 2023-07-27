@@ -4,6 +4,7 @@ CREATE TABLE crudables (
   created     BIGINT          NOT NULL,
   updated     BIGINT          NOT NULL,
   ns          VARCHAR(64)     NOT NULL,
+  name        TEXT,
   field1      TEXT,
   field2      VARCHAR(65),
   field3      TEXT
