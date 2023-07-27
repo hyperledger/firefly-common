@@ -98,6 +98,9 @@ type CRUD[T Resource] interface {
 	Insert(ctx context.Context, inst T, hooks ...PostCompletionHook) (err error)
 	Replace(ctx context.Context, inst T, hooks ...PostCompletionHook) (err error)
 	GetByID(ctx context.Context, id string, getOpts ...GetOption) (inst T, err error)
+	GetByUUIDOrName(ctx context.Context, uuidOrName string, getOpts ...GetOption) (result T, err error)
+	GetByName(ctx context.Context, name string, getOpts ...GetOption) (instance T, err error)
+	GetFirst(ctx context.Context, filter ffapi.Filter, getOpts ...GetOption) (instance T, err error)
 	GetSequenceForID(ctx context.Context, id string) (seq int64, err error)
 	GetMany(ctx context.Context, filter ffapi.Filter) (instances []T, fr *ffapi.FilterResult, err error)
 	Count(ctx context.Context, filter ffapi.Filter) (count int64, err error)
@@ -116,6 +119,9 @@ type CrudBase[T Resource] struct {
 	TimesDisabled    bool // no management of the time columns
 	PatchDisabled    bool // allows non-pointer fields, but prevents UpdateSparse function
 	ImmutableColumns []string
+	NameField        string                                        // If supporting name semantics
+	QueryFactory     ffapi.QueryFactory                            // Must be set when name is set
+	IDValidator      func(ctx context.Context, idStr string) error // if IDs must conform to a pattern, such as a UUID (prebuilt UUIDValidator provided for that)
 
 	NilValue     func() T // nil value typed to T
 	NewInstance  func() T
@@ -127,6 +133,11 @@ type CrudBase[T Resource] struct {
 	ReadTableAlias    string
 	ReadOnlyColumns   []string
 	ReadQueryModifier func(sq.SelectBuilder) sq.SelectBuilder
+}
+
+func UUIDValidator(ctx context.Context, idStr string) error {
+	_, err := fftypes.ParseUUID(ctx, idStr)
+	return err
 }
 
 // Validate checks things that must be true about a CRUD collection using this framework.
@@ -178,6 +189,9 @@ func (c *CrudBase[T]) Validate() {
 	}
 	if !isNil(c.GetFieldPtr(inst, fftypes.NewUUID().String())) {
 		panic("GetFieldPtr() must return nil for unknown column")
+	}
+	if c.NameField != "" && c.QueryFactory == nil {
+		panic("QueryFactory must be set when name semantics are enabled")
 	}
 }
 
@@ -251,6 +265,12 @@ func (c *CrudBase[T]) attemptSetSequence(inst interface{}, seq int64) {
 }
 
 func (c *CrudBase[T]) attemptInsert(ctx context.Context, tx *TXWrapper, inst T, requestConflictEmptyResult bool) (err error) {
+	if c.IDValidator != nil {
+		if err := c.IDValidator(ctx, inst.GetID()); err != nil {
+			return err
+		}
+	}
+
 	c.setInsertTimestamps(inst)
 	insert := sq.Insert(c.Table).Columns(c.Columns...)
 	values := make([]interface{}, len(c.Columns))
@@ -486,16 +506,23 @@ func (c *CrudBase[T]) GetSequenceForID(ctx context.Context, id string) (seq int6
 	return seq, nil
 }
 
-func (c *CrudBase[T]) GetByID(ctx context.Context, id string, getOpts ...GetOption) (inst T, err error) {
-
-	failNotFound := false
+func processGetOpts(ctx context.Context, getOpts []GetOption) (failNotFound bool, err error) {
 	for _, o := range getOpts {
 		switch o {
 		case FailIfNotFound:
 			failNotFound = true
 		default:
-			return c.NilValue(), i18n.NewError(ctx, i18n.MsgDBUnknownGetOption, o)
+			return false, i18n.NewError(ctx, i18n.MsgDBUnknownGetOption, o)
 		}
+	}
+	return failNotFound, nil
+}
+
+func (c *CrudBase[T]) GetByID(ctx context.Context, id string, getOpts ...GetOption) (inst T, err error) {
+
+	failNotFound, err := processGetOpts(ctx, getOpts)
+	if err != nil {
+		return c.NilValue(), err
 	}
 
 	tableFrom, cols, readCols := c.getReadCols(nil)
@@ -538,6 +565,62 @@ func (c *CrudBase[T]) GetMany(ctx context.Context, filter ffapi.Filter) (instanc
 		preconditions = []sq.Sqlizer{c.ScopedFilter()}
 	}
 	return c.getManyScoped(ctx, tableFrom, fi, cols, readCols, preconditions)
+}
+
+// GetFirst returns a single match (like GetByID), but using a generic filter
+func (c *CrudBase[T]) GetFirst(ctx context.Context, filter ffapi.Filter, getOpts ...GetOption) (instance T, err error) {
+	failNotFound, err := processGetOpts(ctx, getOpts)
+	if err != nil {
+		return c.NilValue(), err
+	}
+
+	results, _, err := c.GetMany(ctx, filter.Limit(1))
+	if err != nil {
+		return c.NilValue(), err
+	}
+	if len(results) == 0 {
+		if failNotFound {
+			return c.NilValue(), i18n.NewError(ctx, i18n.Msg404NoResult)
+		}
+		return c.NilValue(), nil
+	}
+
+	return results[0], nil
+}
+
+// GetByName is a special case of GetFirst, for the designated name column
+func (c *CrudBase[T]) GetByName(ctx context.Context, name string, getOpts ...GetOption) (instance T, err error) {
+	if c.NameField == "" {
+		return c.NilValue(), i18n.NewError(ctx, i18n.MsgCollectionNotConfiguredWithName, c.Table)
+	}
+	return c.GetFirst(ctx, c.QueryFactory.NewFilter(ctx).Eq(c.NameField, name), getOpts...)
+}
+
+// GetByUUIDOrName provides the following semantic, for resolving strings in a URL path to a resource that
+// for convenience are able to be a UUID or a name of an object:
+// - If the string is valid according to the IDValidator, we attempt a lookup by ID first
+// - If not found by ID, or not a valid ID, then continue to find by name
+//
+// Note: The ID wins in the above logic. If resource1 has a name that matches the ID of resource2, then
+//
+//	resource2 will be returned (not resource1).
+func (c *CrudBase[T]) GetByUUIDOrName(ctx context.Context, uuidOrName string, getOpts ...GetOption) (result T, err error) {
+	validID := true
+	if c.IDValidator != nil {
+		idErr := c.IDValidator(ctx, uuidOrName)
+		validID = idErr == nil
+	}
+	if validID {
+		// Do a get with failure on not found - so that if this works,
+		// we return the value that was retrieved (and don't need a
+		// complex generic-friendly nil check).
+		// Regardless of the error type, we continue to do a lookup by name
+		result, err = c.GetByID(ctx, uuidOrName, FailIfNotFound)
+		if err == nil {
+			return result, nil
+		}
+	}
+	return c.GetByName(ctx, uuidOrName, getOpts...)
 }
 
 func (c *CrudBase[T]) getManyScoped(ctx context.Context, tableFrom string, fi *ffapi.FilterInfo, cols, readCols []string, preconditions []sq.Sqlizer) (instances []T, fr *ffapi.FilterResult, err error) {
