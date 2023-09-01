@@ -37,6 +37,7 @@ import (
 
 type Options struct {
 	BaseURL                   string
+	BaseURLVariables          map[string]BaseURLVariable
 	Title                     string
 	Version                   string
 	Description               string
@@ -48,6 +49,11 @@ type Options struct {
 	SupportFieldRedaction     bool
 
 	RouteCustomizations func(ctx context.Context, sg *SwaggerGen, route *Route, op *openapi3.Operation)
+}
+
+type BaseURLVariable struct {
+	Default     string
+	Description string
 }
 
 var customRegexRemoval = regexp.MustCompile(`{(\w+)\:[^}]+}`)
@@ -64,10 +70,24 @@ func NewSwaggerGen(options *Options) *SwaggerGen {
 
 func (sg *SwaggerGen) Generate(ctx context.Context, routes []*Route) *openapi3.T {
 
+	server := &openapi3.Server{
+		URL: sg.options.BaseURL,
+	}
+
+	if sg.options.BaseURLVariables != nil {
+		server.Variables = map[string]*openapi3.ServerVariable{}
+		for variableName, variable := range sg.options.BaseURLVariables {
+			server.Variables[variableName] = &openapi3.ServerVariable{
+				Default:     variable.Default,
+				Description: variable.Description,
+			}
+		}
+	}
+
 	doc := &openapi3.T{
 		OpenAPI: "3.0.2",
 		Servers: openapi3.Servers{
-			{URL: sg.options.BaseURL},
+			server,
 		},
 		Info: &openapi3.Info{
 			Title:       sg.options.Title,

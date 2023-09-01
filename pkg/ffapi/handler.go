@@ -23,6 +23,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"path"
 	"reflect"
 	"regexp"
 	"strings"
@@ -50,6 +51,8 @@ type HandlerFactory struct {
 	PassthroughHeaders    []string
 	AlwaysPaginate        bool
 	SupportFieldRedaction bool
+	BasePath              string
+	BasePathParams        []*PathParam
 }
 
 var ffMsgCodeExtractor = regexp.MustCompile(`^(FF\d+):`)
@@ -98,15 +101,20 @@ func (hs *HandlerFactory) getFilePart(req *http.Request) (*multipartState, error
 func (hs *HandlerFactory) getParams(req *http.Request, route *Route) (queryParams, pathParams map[string]string) {
 	queryParams = make(map[string]string)
 	pathParams = make(map[string]string)
-	if len(route.PathParams) > 0 {
-		v := mux.Vars(req)
-		for _, pp := range route.PathParams {
-			paramUnescaped, err := url.QueryUnescape(v[pp.Name]) // Gorilla mux assures this works
-			if err == nil {
-				pathParams[pp.Name] = paramUnescaped
-			}
+	v := mux.Vars(req)
+	for _, pp := range route.PathParams {
+		paramUnescaped, err := url.QueryUnescape(v[pp.Name]) // Gorilla mux assures this works
+		if err == nil {
+			pathParams[pp.Name] = paramUnescaped
 		}
 	}
+	for _, pp := range hs.BasePathParams {
+		paramUnescaped, err := url.QueryUnescape(v[pp.Name])
+		if err == nil {
+			pathParams[pp.Name] = paramUnescaped
+		}
+	}
+
 	for _, qp := range route.QueryParams {
 		val, exists := req.URL.Query()[qp.Name]
 		if qp.IsBool {
@@ -121,6 +129,10 @@ func (hs *HandlerFactory) getParams(req *http.Request, route *Route) (queryParam
 		}
 	}
 	return queryParams, pathParams
+}
+
+func (hs *HandlerFactory) RoutePath(route *Route) string {
+	return path.Join("/", hs.BasePath, route.Path)
 }
 
 func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {

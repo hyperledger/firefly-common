@@ -368,3 +368,27 @@ func TestPreTranslatedRouteDescription(t *testing.T) {
 	description := swagger.Paths["/namespaces/{ns}/example1/test"].Post.Description
 	assert.Equal(t, "this is a description", description)
 }
+
+func TestBaseURLVariables(t *testing.T) {
+	doc := NewSwaggerGen(&Options{
+		Title:   "UnitTest",
+		Version: "1.0",
+		BaseURL: "http://localhost:12345/api/v1/{param}",
+		BaseURLVariables: map[string]BaseURLVariable{
+			"param": {
+				Default: "default-value",
+			},
+		},
+	}).Generate(context.Background(), testRoutes)
+	err := doc.Validate(context.Background())
+	assert.NoError(t, err)
+
+	server := doc.Servers[0]
+	if assert.Contains(t, server.Variables, "param") {
+		assert.Equal(t, "default-value", server.Variables["param"].Default)
+	}
+
+	b, err := yaml.Marshal(doc)
+	assert.NoError(t, err)
+	fmt.Print(string(b))
+}

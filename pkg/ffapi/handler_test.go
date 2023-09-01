@@ -38,20 +38,22 @@ import (
 
 const configDir = "../../test/data/config"
 
-func newTestHandlerFactory() *HandlerFactory {
+func newTestHandlerFactory(basePath string, basePathParams []*PathParam) *HandlerFactory {
 	return &HandlerFactory{
 		DefaultRequestTimeout: 5 * time.Second,
 		PassthroughHeaders: []string{
 			"X-Custom-Header",
 		},
+		BasePath:       basePath,
+		BasePathParams: basePathParams,
 	}
 }
 
-func newTestServer(t *testing.T, routes []*Route) (httpserver.HTTPServer, *mux.Router, func()) {
+func newTestServer(t *testing.T, routes []*Route, basePath string, basePathParams []*PathParam) (httpserver.HTTPServer, *mux.Router, func()) {
 	r := mux.NewRouter()
-	hs := newTestHandlerFactory()
+	hs := newTestHandlerFactory(basePath, basePathParams)
 	for _, route := range routes {
-		r.HandleFunc(route.Path, hs.RouteHandler(route)).Methods(route.Method)
+		r.HandleFunc(hs.RoutePath(route), hs.RouteHandler(route)).Methods(route.Method)
 	}
 
 	done := make(chan error)
@@ -94,7 +96,7 @@ func TestRouteServePOST201WithParams(t *testing.T) {
 			assert.Equal(t, "false", r.QP["param3"])
 			return map[string]interface{}{"output1": "value2"}, nil
 		},
-	}})
+	}}, "", nil)
 	defer done()
 
 	b, _ := json.Marshal(map[string]interface{}{"input1": "value1"})
@@ -118,7 +120,7 @@ func TestJSONHTTPResponseEncodeFail(t *testing.T) {
 			v := map[string]interface{}{"unserializable": map[bool]interface{}{true: "not in JSON"}}
 			return v, nil
 		},
-	}})
+	}}, "", nil)
 	defer done()
 
 	b, _ := json.Marshal(map[string]interface{}{"input1": "value1"})
@@ -140,7 +142,7 @@ func TestJSONHTTPNilResponseNon204(t *testing.T) {
 		JSONHandler: func(r *APIRequest) (output interface{}, err error) {
 			return nil, nil
 		},
-	}})
+	}}, "", nil)
 	defer done()
 
 	b, _ := json.Marshal(map[string]interface{}{"input1": "value1"})
@@ -163,7 +165,7 @@ func TestJSONHTTPDefault500Error(t *testing.T) {
 		JSONHandler: func(r *APIRequest) (output interface{}, err error) {
 			return nil, fmt.Errorf("pop")
 		},
-	}})
+	}}, "", nil)
 	defer done()
 
 	b, _ := json.Marshal(map[string]interface{}{"input1": "value1"})
@@ -186,7 +188,7 @@ func TestStatusCodeHintMapping(t *testing.T) {
 		JSONHandler: func(r *APIRequest) (output interface{}, err error) {
 			return nil, i18n.NewError(r.Req.Context(), i18n.MsgResponseMarshalError)
 		},
-	}})
+	}}, "", nil)
 	defer done()
 
 	b, _ := json.Marshal(map[string]interface{}{"input1": "value1"})
@@ -211,7 +213,7 @@ func TestFilter(t *testing.T) {
 			assert.NotNil(t, r.Filter)
 			return r.FilterResult([]string{"test"}, nil, nil)
 		},
-	}})
+	}}, "", nil)
 	defer done()
 
 	res, err := http.Get(fmt.Sprintf("http://%s/test?id=1234", s.Addr()))
@@ -233,7 +235,7 @@ func TestStatusInvalidContentType(t *testing.T) {
 		JSONHandler: func(r *APIRequest) (output interface{}, err error) {
 			return nil, nil
 		},
-	}})
+	}}, "", nil)
 	defer done()
 
 	res, err := http.Post(fmt.Sprintf("http://%s/test", s.Addr()), "application/text", bytes.NewReader([]byte{}))
@@ -256,7 +258,7 @@ func TestTimeout(t *testing.T) {
 			<-r.Req.Context().Done()
 			return nil, fmt.Errorf("timeout error")
 		},
-	}})
+	}}, "", nil)
 	defer done()
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/test", s.Addr()), bytes.NewReader([]byte(``)))
 	assert.NoError(t, err)
@@ -280,7 +282,7 @@ func TestBadTimeout(t *testing.T) {
 		JSONHandler: func(r *APIRequest) (output interface{}, err error) {
 			return nil, nil
 		},
-	}})
+	}}, "", nil)
 	defer done()
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/test", s.Addr()), bytes.NewReader([]byte(``)))
 	assert.NoError(t, err)
@@ -308,7 +310,7 @@ func TestMultipartBinary(t *testing.T) {
 			assert.Equal(t, "some data", string(d))
 			return io.NopCloser(strings.NewReader(`{"ok":true}`)), nil
 		},
-	}})
+	}}, "", nil)
 	defer done()
 
 	b := new(bytes.Buffer)
@@ -346,7 +348,7 @@ func TestMultipartBinaryFieldAfterBinary(t *testing.T) {
 		FormUploadHandler: func(r *APIRequest) (output interface{}, err error) {
 			return nil, nil
 		},
-	}})
+	}}, "", nil)
 	defer done()
 
 	b := new(bytes.Buffer)
@@ -384,7 +386,7 @@ func TestMultipartBadData(t *testing.T) {
 		FormUploadHandler: func(r *APIRequest) (output interface{}, err error) {
 			return nil, nil
 		},
-	}})
+	}}, "", nil)
 	defer done()
 
 	b := new(bytes.Buffer)
@@ -425,7 +427,7 @@ func TestTextPlain201(t *testing.T) {
 			assert.Equal(t, "false", r.QP["param3"])
 			return map[string]interface{}{"output1": "value2"}, nil
 		},
-	}})
+	}}, "", nil)
 	defer done()
 
 	b := []byte("this is some sample text")
@@ -438,13 +440,13 @@ func TestTextPlain201(t *testing.T) {
 }
 
 func TestMultipartBadContentType(t *testing.T) {
-	hf := newTestHandlerFactory()
+	hf := newTestHandlerFactory("", nil)
 	_, err := hf.getFilePart(httptest.NewRequest("GET", "/wrong", nil))
 	assert.Regexp(t, "FF00161", err)
 }
 
 func TestSwaggerUI(t *testing.T) {
-	hf := newTestHandlerFactory()
+	hf := newTestHandlerFactory("", nil)
 	h := hf.SwaggerUIHandler("http://localhost:5000/api/v1")
 
 	res := httptest.NewRecorder()
@@ -455,7 +457,7 @@ func TestSwaggerUI(t *testing.T) {
 }
 
 func TestGetTimeoutMax(t *testing.T) {
-	hf := newTestHandlerFactory()
+	hf := newTestHandlerFactory("", nil)
 	hf.MaxTimeout = 1 * time.Second
 	req, err := http.NewRequest("GET", "http://test.example.com", bytes.NewReader([]byte(``)))
 	req.Header.Set("Request-Timeout", "1h")
@@ -480,7 +482,7 @@ func TestCustomHeaderPassthrough(t *testing.T) {
 			assert.Equal(t, headers.Get("X-Custom-Header"), "custom value")
 			return map[string]interface{}{"output1": "value2"}, nil
 		},
-	}})
+	}}, "", nil)
 	defer done()
 
 	b, _ := json.Marshal(map[string]interface{}{"input1": "value1"})
@@ -494,4 +496,30 @@ func TestCustomHeaderPassthrough(t *testing.T) {
 	var resJSON map[string]interface{}
 	json.NewDecoder(res.Body).Decode(&resJSON)
 	assert.Equal(t, "value2", resJSON["output1"])
+}
+
+func TestBasePathParameters(t *testing.T) {
+	s, _, done := newTestServer(t, []*Route{{
+		Name:   "testRoute",
+		Path:   "/test/{something}",
+		Method: "GET",
+		PathParams: []*PathParam{
+			{Name: "something"},
+		},
+		JSONInputValue:  func() interface{} { return make(map[string]interface{}) },
+		JSONOutputValue: func() interface{} { return make(map[string]interface{}) },
+		JSONOutputCodes: []int{201},
+		JSONHandler: func(r *APIRequest) (output interface{}, err error) {
+			assert.Equal(t, "foo", r.PP["param"])
+			assert.Equal(t, "bar", r.PP["something"])
+			return map[string]interface{}{}, nil
+		},
+	}}, "/base-path/{param}", []*PathParam{
+		{Name: "param"},
+	})
+	defer done()
+
+	res, err := http.Get(fmt.Sprintf("http://%s/base-path/foo/test/bar", s.Addr()))
+	assert.NoError(t, err)
+	assert.Equal(t, 201, res.StatusCode)
 }
