@@ -33,14 +33,35 @@ func TestNewError(t *testing.T) {
 func TestNewErrorTruncate(t *testing.T) {
 	err := NewError(context.Background(), MsgUnknownFieldValue, "field", strings.Repeat("x", 3000))
 	assert.Error(t, err)
+	var ffe FFError
+	assert.Implements(t, &ffe, err)
+	assert.Equal(t, 400, interface{}(err).(FFError).HTTPStatus())
+	assert.Equal(t, MsgUnknownFieldValue, interface{}(err).(FFError).MessageKey())
 }
 
 func TestWrapError(t *testing.T) {
 	err := WrapError(context.Background(), fmt.Errorf("some error"), MsgConfigFailed)
 	assert.Error(t, err)
+	var ffe FFError
+	assert.Implements(t, &ffe, err)
+	assert.Equal(t, 500, interface{}(err).(FFError).HTTPStatus())
+	assert.Equal(t, MsgConfigFailed, interface{}(err).(FFError).MessageKey())
+	stackString := interface{}(err).(FFError).StackTrace()
+	fmt.Printf(stackString)
+	assert.NotEmpty(t, stackString)
+}
+
+func TestSafeStackFail(t *testing.T) {
+	stackString := (&ffError{}).StackTrace()
+	assert.Empty(t, stackString)
 }
 
 func TestWrapNilError(t *testing.T) {
+	err := WrapError(context.Background(), nil, MsgConfigFailed)
+	assert.Error(t, err)
+}
+
+func TestStackWithDebug(t *testing.T) {
 	err := WrapError(context.Background(), nil, MsgConfigFailed)
 	assert.Error(t, err)
 }
