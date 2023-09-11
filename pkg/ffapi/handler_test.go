@@ -32,7 +32,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/httpserver"
-	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -186,7 +186,7 @@ func TestStatusCodeHintMapping(t *testing.T) {
 		JSONOutputValue: func() interface{} { return make(map[string]interface{}) },
 		JSONOutputCodes: []int{200},
 		JSONHandler: func(r *APIRequest) (output interface{}, err error) {
-			return nil, i18n.NewError(r.Req.Context(), i18n.MsgResponseMarshalError)
+			return nil, fmt.Errorf("FF00165: fake up this error to check we still catch the 400")
 		},
 	}}, "", nil)
 	defer done()
@@ -335,6 +335,9 @@ func TestMultipartBinary(t *testing.T) {
 }
 
 func TestMultipartBinaryFieldAfterBinary(t *testing.T) {
+	config.SetupLogging(context.Background())
+	logrus.SetLevel(logrus.DebugLevel) // so we can see the stack
+
 	s, _, done := newTestServer(t, []*Route{{
 		Name:   "testRoute",
 		Path:   "/test",

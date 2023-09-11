@@ -33,6 +33,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
+	"github.com/sirupsen/logrus"
 )
 
 const FFRequestIDHeader = "X-FireFly-Request-ID"
@@ -309,12 +310,19 @@ func (hs *HandlerFactory) APIWrapper(handler func(res http.ResponseWriter, req *
 		durationMS := float64(time.Since(startTime)) / float64(time.Millisecond)
 		if err != nil {
 
-			// Routers don't need to tweak the status code when sending errors.
-			// .. either the FF12345 error they raise is mapped to a status hint
-			ffMsgCodeExtract := ffMsgCodeExtractor.FindStringSubmatch(err.Error())
-			if len(ffMsgCodeExtract) >= 2 {
-				if statusHint, ok := i18n.GetStatusHint(ffMsgCodeExtract[1]); ok {
-					status = statusHint
+			if ffe, ok := (interface{}(err)).(i18n.FFError); ok {
+				if logrus.IsLevelEnabled(logrus.DebugLevel) {
+					log.L(ctx).Debugf("%s:\n%s", ffe.Error(), ffe.StackTrace())
+				}
+				status = ffe.HTTPStatus()
+			} else {
+				// Routers don't need to tweak the status code when sending errors.
+				// .. either the FF12345 error they raise is mapped to a status hint
+				ffMsgCodeExtract := ffMsgCodeExtractor.FindStringSubmatch(err.Error())
+				if len(ffMsgCodeExtract) >= 2 {
+					if statusHint, ok := i18n.GetStatusHint(ffMsgCodeExtract[1]); ok {
+						status = statusHint
+					}
 				}
 			}
 
