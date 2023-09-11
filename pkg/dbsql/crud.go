@@ -109,6 +109,7 @@ type CRUD[T Resource] interface {
 	UpdateMany(ctx context.Context, filter ffapi.Filter, update ffapi.Update, hooks ...PostCompletionHook) (err error)
 	Delete(ctx context.Context, id string, hooks ...PostCompletionHook) (err error)
 	DeleteMany(ctx context.Context, filter ffapi.Filter, hooks ...PostCompletionHook) (err error) // no events
+	Scoped(scope sq.Eq) *CrudBase[T]                                                              // allows dynamic scoping to a collection
 }
 
 type CrudBase[T Resource] struct {
@@ -133,6 +134,12 @@ type CrudBase[T Resource] struct {
 	ReadTableAlias    string
 	ReadOnlyColumns   []string
 	ReadQueryModifier func(sq.SelectBuilder) sq.SelectBuilder
+}
+
+func (c *CrudBase[T]) Scoped(scope sq.Eq) *CrudBase[T] {
+	cScoped := *c
+	cScoped.ScopedFilter = func() sq.Eq { return scope }
+	return &cScoped
 }
 
 func UUIDValidator(ctx context.Context, idStr string) error {

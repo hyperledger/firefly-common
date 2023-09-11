@@ -94,7 +94,10 @@ func (f *nullField) Value() (driver.Value, error) { return nil, nil }
 func (f *nullField) String() string               { return fftypes.NullString }
 
 type StringField struct{}
-type stringField struct{ s string }
+type stringField struct {
+	s     string
+	lower bool
+}
 
 func (f *stringField) Scan(src interface{}) error {
 	switch tv := src.(type) {
@@ -136,7 +139,12 @@ func (f *stringField) Scan(src interface{}) error {
 	}
 	return nil
 }
-func (f *stringField) Value() (driver.Value, error)         { return f.s, nil }
+func (f *stringField) Value() (driver.Value, error) {
+	if f.lower {
+		return strings.ToLower(f.s), nil
+	}
+	return f.s, nil
+}
 func (f *stringField) String() string                       { return f.s }
 func (f *StringField) GetSerialization() FieldSerialization { return &stringField{} }
 func (f *StringField) FilterAsString() bool                 { return true }
@@ -146,7 +154,8 @@ type StringFieldLower struct {
 	StringField
 }
 
-func (f *StringFieldLower) GetSerialization() FieldSerialization { return &stringField{} }
+func (f *StringFieldLower) GetSerialization() FieldSerialization { return &stringField{lower: true} }
+func (f *StringFieldLower) FilterAsString() bool                 { return true }
 func (f *StringFieldLower) FieldMods() []FieldMod                { return []FieldMod{FieldModLower} }
 
 type UUIDField struct{}

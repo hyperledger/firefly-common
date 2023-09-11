@@ -414,7 +414,16 @@ func (f *baseFilter) Finalize() (fi *FilterInfo, err error) {
 		case string:
 			switch {
 			case field.FilterAsString():
-				value = &stringField{}
+				// We need to have a stringField for the filter serialization, but in the case of StringFieldLower
+				// (or other modified stringField types) we might still need to run transformations. So...
+				normalFilter := field.GetSerialization()
+				switch normalFilter.(type) {
+				case *stringField:
+					value = normalFilter
+				default:
+					// ... only switch to a default &stringField{} if the Serialization is not already a string
+					value = &stringField{}
+				}
 			case filterOpIsStringMatch(f.op):
 				return nil, i18n.NewError(f.fb.ctx, i18n.MsgFieldTypeNoStringMatching, name, field.Description())
 			default:

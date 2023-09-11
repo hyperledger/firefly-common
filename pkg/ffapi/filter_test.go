@@ -189,7 +189,7 @@ func TestLowerField(t *testing.T) {
 		fb.In("address", []driver.Value{addr1, addr2}),
 	).Finalize()
 	assert.NoError(t, err)
-	assert.Equal(t, "( lower(address) == '0xf698D78272a0bCD63A3feb097B24a866f6b8a5a0' ) && ( lower(address) IN ['0xf698D78272a0bCD63A3feb097B24a866f6b8a5a0','0xb9B919763dBC54D4D634150446Bf3991A9ef5eD7'] )", f.String())
+	assert.Equal(t, "( lower(address) == '0xf698d78272a0bcd63a3feb097b24a866f6b8a5a0' ) && ( lower(address) IN ['0xf698d78272a0bcd63a3feb097b24a866f6b8a5a0','0xb9b919763dbc54d4d634150446bf3991a9ef5ed7'] )", f.String())
 }
 
 func TestBuildMessageStringConvert(t *testing.T) {
