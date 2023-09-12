@@ -18,17 +18,14 @@ package ffapi
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"time"
 
-	"github.com/ghodss/yaml"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/gorilla/mux"
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/fftls"
@@ -185,43 +182,6 @@ func buildPublicURL(conf config.Section, a net.Addr) string {
 	return publicURL
 }
 
-func (as *apiServer[T]) swaggerGenConf(apiBaseURL string) *Options {
-	return &Options{
-		BaseURL:                   apiBaseURL,
-		Title:                     as.Description,
-		Version:                   "1.0",
-		PanicOnMissingDescription: as.PanicOnMissingDescription,
-		DefaultRequestTimeout:     as.requestTimeout,
-		SupportFieldRedaction:     as.SupportFieldRedaction,
-	}
-}
-
-func (as *apiServer[T]) swaggerHandler(generator func(req *http.Request) (*openapi3.T, error)) func(res http.ResponseWriter, req *http.Request) (status int, err error) {
-	return func(res http.ResponseWriter, req *http.Request) (status int, err error) {
-		vars := mux.Vars(req)
-		doc, err := generator(req)
-		if err != nil {
-			return 500, err
-		}
-		if vars["ext"] == ".json" {
-			res.Header().Add("Content-Type", "application/json")
-			b, _ := json.Marshal(&doc)
-			_, _ = res.Write(b)
-		} else {
-			res.Header().Add("Content-Type", "application/x-yaml")
-			b, _ := yaml.Marshal(&doc)
-			_, _ = res.Write(b)
-		}
-		return 200, nil
-	}
-}
-
-func (as *apiServer[T]) swaggerGenerator(apiBaseURL string) func(req *http.Request) (*openapi3.T, error) {
-	swg := NewSwaggerGen(as.swaggerGenConf(apiBaseURL))
-	return func(req *http.Request) (*openapi3.T, error) {
-		return swg.Generate(req.Context(), as.Routes), nil
-	}
-}
 func (as *apiServer[T]) routeHandler(hf *HandlerFactory, route *Route) http.HandlerFunc {
 	// We extend the base ffapi functionality, with standardized DB filter support for all core resources.
 	// We also pass the Orchestrator context through
@@ -257,7 +217,6 @@ func (as *apiServer[T]) createMuxRouter(ctx context.Context, publicURL string) *
 		r.Use(h)
 	}
 
-	apiBaseURL := fmt.Sprintf("%s/api/v1", publicURL)
 	for _, route := range as.Routes {
 		ce, ok := route.Extensions.(*APIServerRouteExt[T])
 		if !ok {
@@ -278,8 +237,21 @@ func (as *apiServer[T]) createMuxRouter(ctx context.Context, publicURL string) *
 		}
 	}
 
-	r.HandleFunc(`/api/swagger{ext:\.yaml|\.json|}`, hf.APIWrapper(as.swaggerHandler(as.swaggerGenerator(apiBaseURL))))
-	r.HandleFunc(`/api`, hf.APIWrapper(hf.SwaggerUIHandler(publicURL+"/api/swagger.yaml")))
+	oah := &OpenAPIHandlerFactory{
+		BaseSwaggerGenOptions: SwaggerGenOptions{
+			Title:                     as.Description,
+			Version:                   "1.0",
+			PanicOnMissingDescription: as.PanicOnMissingDescription,
+			DefaultRequestTimeout:     as.requestTimeout,
+			SupportFieldRedaction:     as.SupportFieldRedaction,
+		},
+		StaticPublicURL: publicURL,
+	}
+	r.HandleFunc(`/api/swagger.yaml`, hf.APIWrapper(oah.OpenAPIHandler(`/api/v1`, OpenAPIFormatYAML, as.Routes)))
+	r.HandleFunc(`/api/swagger.json`, hf.APIWrapper(oah.OpenAPIHandler(`/api/v1`, OpenAPIFormatJSON, as.Routes)))
+	r.HandleFunc(`/api/openapi.yaml`, hf.APIWrapper(oah.OpenAPIHandler(`/api/v1`, OpenAPIFormatYAML, as.Routes)))
+	r.HandleFunc(`/api/openapi.json`, hf.APIWrapper(oah.OpenAPIHandler(`/api/v1`, OpenAPIFormatJSON, as.Routes)))
+	r.HandleFunc(`/api`, hf.APIWrapper(oah.SwaggerUIHandler(`/api/openapi.yaml`)))
 	r.HandleFunc(`/favicon{any:.*}.png`, favIconsHandler(as.FavIcon16, as.FavIcon32))
 
 	r.NotFoundHandler = hf.APIWrapper(as.notFoundHandler)

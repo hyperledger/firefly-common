@@ -21,11 +21,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/httpserver"
@@ -337,21 +335,6 @@ func TestBadRoute(t *testing.T) {
 		CORSConfig:    corsConfig,
 	})
 	assert.Panics(t, func() { as.Serve(context.Background()) })
-}
-
-func TestBadSwagger(t *testing.T) {
-	_, as, done := newTestAPIServer(t, false)
-	defer done()
-
-	h := as.swaggerHandler(func(req *http.Request) (*openapi3.T, error) {
-		return nil, fmt.Errorf("pop")
-	})
-	res := httptest.NewRecorder()
-	req, err := http.NewRequest(http.MethodGet, "swagger", nil)
-	assert.NoError(t, err)
-	status, err := h(res, req)
-	assert.Equal(t, 500, status)
-	assert.Regexp(t, "pop", err)
 }
 
 func TestBadMetrics(t *testing.T) {

@@ -159,7 +159,7 @@ type TestNonTaggedType struct {
 }
 
 func TestOpenAPI3SwaggerGen(t *testing.T) {
-	doc := NewSwaggerGen(&Options{
+	doc := NewSwaggerGen(&SwaggerGenOptions{
 		Title:   "UnitTest",
 		Version: "1.0",
 		BaseURL: "http://localhost:12345/api/v1",
@@ -192,7 +192,7 @@ func TestBadCustomInputSchemaFail(t *testing.T) {
 		},
 	}
 	assert.Panics(t, func() {
-		_ = NewSwaggerGen(&Options{
+		_ = NewSwaggerGen(&SwaggerGenOptions{
 			Title:   "UnitTest",
 			Version: "1.0",
 			BaseURL: "http://localhost:12345/api/v1",
@@ -214,7 +214,7 @@ func TestBadCustomOutputSchemaFail(t *testing.T) {
 		},
 	}
 	assert.Panics(t, func() {
-		_ = NewSwaggerGen(&Options{
+		_ = NewSwaggerGen(&SwaggerGenOptions{
 			Title:   "UnitTest",
 			Version: "1.0",
 			BaseURL: "http://localhost:12345/api/v1",
@@ -227,7 +227,7 @@ func TestDuplicateOperationIDCheck(t *testing.T) {
 		{Name: "op1"}, {Name: "op1"},
 	}
 	assert.PanicsWithValue(t, "Duplicate/invalid name (used as operation ID in swagger): op1", func() {
-		_ = NewSwaggerGen(&Options{
+		_ = NewSwaggerGen(&SwaggerGenOptions{
 			Title:   "UnitTest",
 			Version: "1.0",
 			BaseURL: "http://localhost:12345/api/v1",
@@ -245,7 +245,7 @@ func TestWildcards(t *testing.T) {
 			JSONOutputCodes: []int{http.StatusOK},
 		},
 	}
-	swagger := NewSwaggerGen(&Options{
+	swagger := NewSwaggerGen(&SwaggerGenOptions{
 		Title:   "UnitTest",
 		Version: "1.0",
 		BaseURL: "http://localhost:12345/api/v1",
@@ -264,7 +264,7 @@ func TestFFExcludeTag(t *testing.T) {
 			JSONOutputCodes: []int{http.StatusOK},
 		},
 	}
-	swagger := NewSwaggerGen(&Options{
+	swagger := NewSwaggerGen(&SwaggerGenOptions{
 		Title:   "UnitTest",
 		Version: "1.0",
 		BaseURL: "http://localhost:12345/api/v1",
@@ -297,7 +297,7 @@ func TestPanicOnMissingDescription(t *testing.T) {
 		},
 	}
 	assert.PanicsWithValue(t, "invalid schema: FF00158: Field description missing for 'TestInOutType.conditional' on route 'PostPanicOnMissingDescription'", func() {
-		_ = NewSwaggerGen(&Options{
+		_ = NewSwaggerGen(&SwaggerGenOptions{
 			Title:                     "UnitTest",
 			Version:                   "1.0",
 			BaseURL:                   "http://localhost:12345/api/v1",
@@ -318,7 +318,7 @@ func TestPanicOnMissingFFStructTag(t *testing.T) {
 		},
 	}
 	assert.PanicsWithValue(t, "invalid schema: FF00160: ffstruct tag is missing for 'noFFStructTag' on route 'GetPanicOnMissingFFStructTag'", func() {
-		_ = NewSwaggerGen(&Options{
+		_ = NewSwaggerGen(&SwaggerGenOptions{
 			Title:                     "UnitTest",
 			Version:                   "1.0",
 			BaseURL:                   "http://localhost:12345/api/v1",
@@ -338,7 +338,7 @@ func TestPanicOnMissingRouteDescription(t *testing.T) {
 		},
 	}
 	assert.PanicsWithValue(t, "FF00159: API route description missing for route 'GetPanicOnMissingRouteDescription'", func() {
-		_ = NewSwaggerGen(&Options{
+		_ = NewSwaggerGen(&SwaggerGenOptions{
 			Title:                     "UnitTest",
 			Version:                   "1.0",
 			BaseURL:                   "http://localhost:12345/api/v1",
@@ -359,7 +359,7 @@ func TestPreTranslatedRouteDescription(t *testing.T) {
 			PreTranslatedDescription: "this is a description",
 		},
 	}
-	swagger := NewSwaggerGen(&Options{
+	swagger := NewSwaggerGen(&SwaggerGenOptions{
 		Title:   "UnitTest",
 		Version: "1.0",
 		BaseURL: "http://localhost:12345/api/v1",
@@ -370,7 +370,7 @@ func TestPreTranslatedRouteDescription(t *testing.T) {
 }
 
 func TestBaseURLVariables(t *testing.T) {
-	doc := NewSwaggerGen(&Options{
+	doc := NewSwaggerGen(&SwaggerGenOptions{
 		Title:   "UnitTest",
 		Version: "1.0",
 		BaseURL: "http://localhost:12345/api/v1/{param}",
