@@ -50,16 +50,17 @@ type APIServer interface {
 type apiServer[T any] struct {
 	started chan struct{}
 
-	defaultFilterLimit uint64
-	maxFilterLimit     uint64
-	maxFilterSkip      uint64
-	requestTimeout     time.Duration
-	requestMaxTimeout  time.Duration
-	apiPublicURL       string
-	alwaysPaginate     bool
-	metricsEnabled     bool
-	metricsPath        string
-	metricsPublicURL   string
+	defaultFilterLimit        uint64
+	maxFilterLimit            uint64
+	maxFilterSkip             uint64
+	requestTimeout            time.Duration
+	requestMaxTimeout         time.Duration
+	apiPublicURL              string
+	apiDynamicPublicURLHeader string
+	alwaysPaginate            bool
+	metricsEnabled            bool
+	metricsPath               string
+	metricsPublicURL          string
 
 	APIServerOptions[T]
 }
@@ -87,16 +88,17 @@ type APIServerRouteExt[T any] struct {
 // the supplied wrapper function - which will inject
 func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APIServer {
 	as := &apiServer[T]{
-		defaultFilterLimit: options.APIConfig.GetUint64(ConfAPIDefaultFilterLimit),
-		maxFilterLimit:     options.APIConfig.GetUint64(ConfAPIMaxFilterLimit),
-		maxFilterSkip:      options.APIConfig.GetUint64(ConfAPIMaxFilterSkip),
-		requestTimeout:     options.APIConfig.GetDuration(ConfAPIRequestTimeout),
-		requestMaxTimeout:  options.APIConfig.GetDuration(ConfAPIRequestMaxTimeout),
-		metricsEnabled:     options.MetricsConfig.GetBool(ConfMetricsServerEnabled),
-		metricsPath:        options.MetricsConfig.GetString(ConfMetricsServerPath),
-		alwaysPaginate:     options.APIConfig.GetBool(ConfAPIAlwaysPaginate),
-		APIServerOptions:   options,
-		started:            make(chan struct{}),
+		defaultFilterLimit:        options.APIConfig.GetUint64(ConfAPIDefaultFilterLimit),
+		maxFilterLimit:            options.APIConfig.GetUint64(ConfAPIMaxFilterLimit),
+		maxFilterSkip:             options.APIConfig.GetUint64(ConfAPIMaxFilterSkip),
+		requestTimeout:            options.APIConfig.GetDuration(ConfAPIRequestTimeout),
+		requestMaxTimeout:         options.APIConfig.GetDuration(ConfAPIRequestMaxTimeout),
+		metricsEnabled:            options.MetricsConfig.GetBool(ConfMetricsServerEnabled),
+		metricsPath:               options.MetricsConfig.GetString(ConfMetricsServerPath),
+		alwaysPaginate:            options.APIConfig.GetBool(ConfAPIAlwaysPaginate),
+		apiDynamicPublicURLHeader: options.APIConfig.GetString(ConfAPIDynamicPublicURLHeader),
+		APIServerOptions:          options,
+		started:                   make(chan struct{}),
 	}
 	if as.FavIcon16 == nil {
 		as.FavIcon16 = ffLogo16
@@ -127,7 +129,7 @@ func (as *apiServer[T]) Serve(ctx context.Context) (err error) {
 	httpErrChan := make(chan error)
 	metricsErrChan := make(chan error)
 
-	apiHTTPServer, err := httpserver.NewHTTPServer(ctx, "api", as.createMuxRouter(ctx, as.apiPublicURL), httpErrChan, as.APIConfig, as.CORSConfig, &httpserver.ServerOptions{
+	apiHTTPServer, err := httpserver.NewHTTPServer(ctx, "api", as.createMuxRouter(ctx), httpErrChan, as.APIConfig, as.CORSConfig, &httpserver.ServerOptions{
 		MaximumRequestTimeout: as.requestMaxTimeout,
 	})
 	if err != nil {
@@ -208,7 +210,7 @@ func (as *apiServer[T]) handlerFactory() *HandlerFactory {
 	}
 }
 
-func (as *apiServer[T]) createMuxRouter(ctx context.Context, publicURL string) *mux.Router {
+func (as *apiServer[T]) createMuxRouter(ctx context.Context) *mux.Router {
 	r := mux.NewRouter().UseEncodedPath()
 	hf := as.handlerFactory()
 
@@ -245,7 +247,7 @@ func (as *apiServer[T]) createMuxRouter(ctx context.Context, publicURL string) *
 			DefaultRequestTimeout:     as.requestTimeout,
 			SupportFieldRedaction:     as.SupportFieldRedaction,
 		},
-		StaticPublicURL: publicURL,
+		StaticPublicURL: as.apiPublicURL,
 	}
 	r.HandleFunc(`/api/swagger.yaml`, hf.APIWrapper(oah.OpenAPIHandler(`/api/v1`, OpenAPIFormatYAML, as.Routes)))
 	r.HandleFunc(`/api/swagger.json`, hf.APIWrapper(oah.OpenAPIHandler(`/api/v1`, OpenAPIFormatJSON, as.Routes)))

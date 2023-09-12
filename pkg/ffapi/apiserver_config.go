@@ -25,12 +25,13 @@ var (
 	ConfMetricsServerEnabled = "enabled"
 	ConfMetricsServerPath    = "/metrics"
 
-	ConfAPIDefaultFilterLimit = "defaultFilterLimit"
-	ConfAPIMaxFilterLimit     = "maxFilterLimit"
-	ConfAPIMaxFilterSkip      = "maxFilterSkip"
-	ConfAPIRequestTimeout     = "requestTimeout"
-	ConfAPIRequestMaxTimeout  = "requestMaxTimeout"
-	ConfAPIAlwaysPaginate     = "alwaysPaginate"
+	ConfAPIDefaultFilterLimit     = "defaultFilterLimit"
+	ConfAPIMaxFilterLimit         = "maxFilterLimit"
+	ConfAPIMaxFilterSkip          = "maxFilterSkip"
+	ConfAPIRequestTimeout         = "requestTimeout"
+	ConfAPIRequestMaxTimeout      = "requestMaxTimeout"
+	ConfAPIAlwaysPaginate         = "alwaysPaginate"
+	ConfAPIDynamicPublicURLHeader = "dynamicPublicURLHeader"
 )
 
 func InitAPIServerConfig(apiConfig, metricsConfig, corsConfig config.Section) {
@@ -41,6 +42,7 @@ func InitAPIServerConfig(apiConfig, metricsConfig, corsConfig config.Section) {
 	apiConfig.AddKnownKey(ConfAPIRequestTimeout, "30s")
 	apiConfig.AddKnownKey(ConfAPIRequestMaxTimeout, "10m")
 	apiConfig.AddKnownKey(ConfAPIAlwaysPaginate, false)
+	apiConfig.AddKnownKey(ConfAPIDynamicPublicURLHeader)
 
 	httpserver.InitCORSConfig(corsConfig)
 
