@@ -28,7 +28,7 @@ import (
 type OpenAPIFormat int
 
 const (
-	OpenAPIFormatJSON = iota
+	OpenAPIFormatJSON OpenAPIFormat = iota
 	OpenAPIFormatYAML
 )
 
