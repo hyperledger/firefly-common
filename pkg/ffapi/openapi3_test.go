@@ -369,7 +369,7 @@ func TestPreTranslatedRouteDescription(t *testing.T) {
 	assert.Equal(t, "this is a description", description)
 }
 
-func TestBaseURLVariables(t *testing.T) {
+func TestBaseURLVariablesAndHook(t *testing.T) {
 	doc := NewSwaggerGen(&SwaggerGenOptions{
 		Title:   "UnitTest",
 		Version: "1.0",
@@ -378,6 +378,9 @@ func TestBaseURLVariables(t *testing.T) {
 			"param": {
 				Default: "default-value",
 			},
+		},
+		PostGenerateHook: func(doc *openapi3.T) {
+			doc.Info.Title = "modified-by-hook"
 		},
 	}).Generate(context.Background(), testRoutes)
 	err := doc.Validate(context.Background())
@@ -391,4 +394,5 @@ func TestBaseURLVariables(t *testing.T) {
 	b, err := yaml.Marshal(doc)
 	assert.NoError(t, err)
 	fmt.Print(string(b))
+	assert.Contains(t, string(b), "modified-by-hook")
 }
