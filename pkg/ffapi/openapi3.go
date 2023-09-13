@@ -47,9 +47,7 @@ type SwaggerGenOptions struct {
 	APIDefaultFilterLimit     string
 	APIMaxFilterLimit         uint
 	SupportFieldRedaction     bool
-	PostGenerateHook          func(doc *openapi3.T)
-
-	RouteCustomizations func(ctx context.Context, sg *SwaggerGen, route *Route, op *openapi3.Operation)
+	RouteCustomizations       func(ctx context.Context, sg *SwaggerGen, route *Route, op *openapi3.Operation)
 }
 
 type BaseURLVariable struct {
@@ -106,9 +104,6 @@ func (sg *SwaggerGen) Generate(ctx context.Context, routes []*Route) *openapi3.T
 		}
 		sg.addRoute(ctx, doc, route)
 		opIds[route.Name] = true
-	}
-	if sg.options.PostGenerateHook != nil {
-		sg.options.PostGenerateHook(doc)
 	}
 	return doc
 }
