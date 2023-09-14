@@ -115,10 +115,11 @@ var (
 
 	ConfigGlobalDebugEnabled = ffc("config.debug.enabled", "Whether the debug HTTP endpoint is enabled", BooleanType)
 
-	ConfigGlobalPort            = ffc("config.global.port", "Listener port", IntType)
-	ConfigGlobalAddress         = ffc("config.global.address", "Listener address", IntType)
-	ConfigGlobalPublicURL       = ffc("config.global.publicURL", "Externally available URL for the HTTP endpoint", StringType)
-	ConfigGlobalReadTimeout     = ffc("config.global.readTimeout", "HTTP server read timeout", TimeDurationType)
-	ConfigGlobalWriteTimeout    = ffc("config.global.writeTimeout", "HTTP server write timeout", TimeDurationType)
-	ConfigGlobalShutdownTimeout = ffc("config.global.shutdownTimeout", "HTTP server shutdown timeout", TimeDurationType)
+	ConfigGlobalPort              = ffc("config.global.port", "Listener port", IntType)
+	ConfigGlobalAddress           = ffc("config.global.address", "Listener address", IntType)
+	ConfigGlobalPublicURL         = ffc("config.global.publicURL", "Externally available URL for the HTTP endpoint", StringType)
+	ConfigGlobalReadTimeout       = ffc("config.global.readTimeout", "HTTP server read timeout", TimeDurationType)
+	ConfigGlobalWriteTimeout      = ffc("config.global.writeTimeout", "HTTP server write timeout", TimeDurationType)
+	ConfigGlobalShutdownTimeout   = ffc("config.global.shutdownTimeout", "HTTP server shutdown timeout", TimeDurationType)
+	ConfigDynamicPublicURLHeaders = ffc("config.global.dynamicPublicURLHeader", "Dynamic header that informs the backend the base public URL for the request, in order to build URL links in OpenAPI/SwaggerUI", StringType)
 )

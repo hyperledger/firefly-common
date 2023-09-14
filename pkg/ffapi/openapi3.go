@@ -35,7 +35,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 )
 
-type Options struct {
+type SwaggerGenOptions struct {
 	BaseURL                   string
 	BaseURLVariables          map[string]BaseURLVariable
 	Title                     string
@@ -47,8 +47,7 @@ type Options struct {
 	APIDefaultFilterLimit     string
 	APIMaxFilterLimit         uint
 	SupportFieldRedaction     bool
-
-	RouteCustomizations func(ctx context.Context, sg *SwaggerGen, route *Route, op *openapi3.Operation)
+	RouteCustomizations       func(ctx context.Context, sg *SwaggerGen, route *Route, op *openapi3.Operation)
 }
 
 type BaseURLVariable struct {
@@ -59,10 +58,10 @@ type BaseURLVariable struct {
 var customRegexRemoval = regexp.MustCompile(`{(\w+)\:[^}]+}`)
 
 type SwaggerGen struct {
-	options *Options
+	options *SwaggerGenOptions
 }
 
-func NewSwaggerGen(options *Options) *SwaggerGen {
+func NewSwaggerGen(options *SwaggerGenOptions) *SwaggerGen {
 	return &SwaggerGen{
 		options: options,
 	}

@@ -43,6 +43,8 @@ type (
 	CtxFFRequestIDKey struct{}
 )
 
+type HandlerFunction func(res http.ResponseWriter, req *http.Request) (status int, err error)
+
 type HandlerFactory struct {
 	DefaultRequestTimeout time.Duration
 	MaxTimeout            time.Duration
@@ -216,14 +218,6 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 	})
 }
 
-func (hs *HandlerFactory) SwaggerUIHandler(url string) func(res http.ResponseWriter, req *http.Request) (status int, err error) {
-	return func(res http.ResponseWriter, req *http.Request) (status int, err error) {
-		res.Header().Add("Content-Type", "text/html")
-		_, _ = res.Write(SwaggerUIHTML(req.Context(), url))
-		return 200, nil
-	}
-}
-
 func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWriter, status int, output interface{}) (int, error) {
 	vOutput := reflect.ValueOf(output)
 	outputKind := vOutput.Kind()
@@ -286,7 +280,7 @@ func (hs *HandlerFactory) getTimeout(req *http.Request) time.Duration {
 	return CalcRequestTimeout(req, hs.DefaultRequestTimeout, hs.MaxTimeout)
 }
 
-func (hs *HandlerFactory) APIWrapper(handler func(res http.ResponseWriter, req *http.Request) (status int, err error)) http.HandlerFunc {
+func (hs *HandlerFactory) APIWrapper(handler HandlerFunction) http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
 
 		reqTimeout := hs.getTimeout(req)

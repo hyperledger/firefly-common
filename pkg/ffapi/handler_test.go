@@ -448,17 +448,6 @@ func TestMultipartBadContentType(t *testing.T) {
 	assert.Regexp(t, "FF00161", err)
 }
 
-func TestSwaggerUI(t *testing.T) {
-	hf := newTestHandlerFactory("", nil)
-	h := hf.SwaggerUIHandler("http://localhost:5000/api/v1")
-
-	res := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/api/v1", nil)
-	status, err := h(res, req)
-	assert.Equal(t, 200, status)
-	assert.NoError(t, err)
-}
-
 func TestGetTimeoutMax(t *testing.T) {
 	hf := newTestHandlerFactory("", nil)
 	hf.MaxTimeout = 1 * time.Second
