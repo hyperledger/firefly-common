@@ -57,6 +57,9 @@ const (
 	HTTPConfigRetryInitDelay = "retry.initWaitTime"
 	// HTTPConfigRetryMaxDelay the maximum retry delay
 	HTTPConfigRetryMaxDelay = "retry.maxWaitTime"
+	// HTTPConfigRetryErrorStatusCodeRegex the regex that the error response status code must match to trigger retry
+	HTTPConfigRetryErrorStatusCodeRegex = "retry.errorStatusCodeRegex"
+
 	// HTTPConfigRequestTimeout the request timeout
 	HTTPConfigRequestTimeout = "requestTimeout"
 	// HTTPIdleTimeout the max duration to hold a HTTP keepalive connection between calls
@@ -88,6 +91,7 @@ func InitConfig(conf config.Section) {
 	conf.AddKnownKey(HTTPConfigRetryCount, defaultRetryCount)
 	conf.AddKnownKey(HTTPConfigRetryInitDelay, defaultRetryWaitTime)
 	conf.AddKnownKey(HTTPConfigRetryMaxDelay, defaultRetryMaxWaitTime)
+	conf.AddKnownKey(HTTPConfigRetryErrorStatusCodeRegex)
 	conf.AddKnownKey(HTTPConfigRequestTimeout, defaultRequestTimeout)
 	conf.AddKnownKey(HTTPIdleTimeout, defaultHTTPIdleTimeout)
 	conf.AddKnownKey(HTTPMaxIdleConns, defaultHTTPMaxIdleConns)
@@ -113,6 +117,7 @@ func GenerateConfig(ctx context.Context, conf config.Section) (*Config, error) {
 		RetryCount:                    conf.GetInt(HTTPConfigRetryCount),
 		RetryInitialDelay:             conf.GetDuration(HTTPConfigRetryInitDelay),
 		RetryMaximumDelay:             conf.GetDuration(HTTPConfigRetryMaxDelay),
+		RetryErrorStatusCodeRegex:     conf.GetString(HTTPConfigRetryErrorStatusCodeRegex),
 		HTTPRequestTimeout:            conf.GetDuration(HTTPConfigRequestTimeout),
 		HTTPIdleConnTimeout:           conf.GetDuration(HTTPIdleTimeout),
 		HTTPMaxIdleConns:              conf.GetInt(HTTPMaxIdleConns),
