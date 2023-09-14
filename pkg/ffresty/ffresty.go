@@ -24,6 +24,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -58,6 +59,7 @@ type Config struct {
 	RetryCount                    int                                       `json:"retryCount,omitempty"`
 	RetryInitialDelay             time.Duration                             `json:"retryInitialDelay,omitempty"`
 	RetryMaximumDelay             time.Duration                             `json:"retryMaximumDelay,omitempty"`
+	RetryErrorStatusCodeRegex     string                                    `json:"retryErrorStatusCodeRegex,omitempty"`
 	HTTPMaxIdleConns              int                                       `json:"maxIdleConns,omitempty"`
 	HTTPMaxConnsPerHost           int                                       `json:"maxConnsPerHost,omitempty"`
 	HTTPPassthroughHeadersEnabled bool                                      `json:"httpPassthroughHeadersEnabled,omitempty"`
@@ -208,6 +210,11 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 		client.SetHeader("Authorization", fmt.Sprintf("Basic %s", base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s:%s", ffrestyConfig.AuthUsername, ffrestyConfig.AuthPassword)))))
 	}
 
+	var retryStatusCodeRegex *regexp.Regexp
+	if ffrestyConfig.RetryErrorStatusCodeRegex != "" {
+		retryStatusCodeRegex = regexp.MustCompile(ffrestyConfig.RetryErrorStatusCodeRegex)
+	}
+
 	if ffrestyConfig.Retry {
 		retryCount := ffrestyConfig.RetryCount
 		minTimeout := ffrestyConfig.RetryInitialDelay
@@ -220,6 +227,12 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 				if r == nil || r.IsSuccess() {
 					return false
 				}
+
+				if retryStatusCodeRegex != nil && !retryStatusCodeRegex.MatchString(r.Status()) {
+					// the error status code doesn't match the retry status code regex, stop retry
+					return false
+				}
+
 				rCtx := r.Request.Context()
 				rc := rCtx.Value(retryCtxKey{}).(*retryCtx)
 				if ffrestyConfig.OnCheckRetry != nil && !ffrestyConfig.OnCheckRetry(r, err) {

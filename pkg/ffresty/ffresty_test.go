@@ -114,6 +114,44 @@ func TestRequestRetry(t *testing.T) {
 
 }
 
+func TestRequestRetryErrorStatusCodeRegex(t *testing.T) {
+
+	ctx := context.Background()
+
+	resetConf()
+	utConf.Set(HTTPConfigURL, "http://localhost:12345")
+	utConf.Set(HTTPConfigRetryEnabled, true)
+	utConf.Set(HTTPConfigRetryInitDelay, 1)
+	utConf.Set(HTTPConfigRetryErrorStatusCodeRegex, "(?:429|503)")
+
+	c, err := New(ctx, utConf)
+	assert.Nil(t, err)
+	httpmock.ActivateNonDefault(c.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	httpmock.RegisterResponder("GET", "http://localhost:12345/test",
+		httpmock.NewStringResponder(500, `{"message": "pop"}`))
+
+	httpmock.RegisterResponder("GET", "http://localhost:12345/test2",
+		httpmock.NewStringResponder(429, `{"message": "pop"}`))
+
+	resp, err := c.R().Get("/test")
+	assert.NoError(t, err)
+	assert.Equal(t, 500, resp.StatusCode())
+	assert.Equal(t, 1, httpmock.GetTotalCallCount())
+
+	err = WrapRestErr(ctx, resp, err, i18n.MsgConfigFailed)
+	assert.Error(t, err)
+
+	resp, err = c.R().Get("/test2")
+	assert.NoError(t, err)
+	assert.Equal(t, 429, resp.StatusCode())
+	assert.Equal(t, 7, httpmock.GetTotalCallCount())
+
+	err = WrapRestErr(ctx, resp, err, i18n.MsgConfigFailed)
+	assert.Error(t, err)
+
+}
 func TestConfWithProxy(t *testing.T) {
 
 	ctx := context.Background()
