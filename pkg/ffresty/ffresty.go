@@ -228,7 +228,7 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 					return false
 				}
 
-				if retryStatusCodeRegex != nil && !retryStatusCodeRegex.MatchString(r.Status()) {
+				if r.StatusCode() > 0 && retryStatusCodeRegex != nil && !retryStatusCodeRegex.MatchString(r.Status()) {
 					// the error status code doesn't match the retry status code regex, stop retry
 					return false
 				}

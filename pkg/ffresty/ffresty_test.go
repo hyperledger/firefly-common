@@ -25,6 +25,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"log"
 	"math/big"
@@ -135,6 +136,9 @@ func TestRequestRetryErrorStatusCodeRegex(t *testing.T) {
 	httpmock.RegisterResponder("GET", "http://localhost:12345/test2",
 		httpmock.NewStringResponder(429, `{"message": "pop"}`))
 
+	httpmock.RegisterResponder("GET", "http://localhost:12345/test3",
+		httpmock.NewErrorResponder(errors.New("not http response")))
+
 	resp, err := c.R().Get("/test")
 	assert.NoError(t, err)
 	assert.Equal(t, 500, resp.StatusCode())
@@ -147,6 +151,14 @@ func TestRequestRetryErrorStatusCodeRegex(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 429, resp.StatusCode())
 	assert.Equal(t, 7, httpmock.GetTotalCallCount())
+
+	err = WrapRestErr(ctx, resp, err, i18n.MsgConfigFailed)
+	assert.Error(t, err)
+
+	resp, err = c.R().Get("/test3")
+	assert.Error(t, err)
+	assert.Equal(t, 0, resp.StatusCode())
+	assert.Equal(t, 13, httpmock.GetTotalCallCount())
 
 	err = WrapRestErr(ctx, resp, err, i18n.MsgConfigFailed)
 	assert.Error(t, err)
