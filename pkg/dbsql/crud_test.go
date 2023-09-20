@@ -103,6 +103,7 @@ var LinkableQueryFactory = &ffapi.QueryFields{
 	"created": &ffapi.TimeField{},
 	"updated": &ffapi.TimeField{},
 	"crud":    &ffapi.UUIDField{},
+	"field1":  &ffapi.StringField{},
 }
 
 type TestCRUD struct {
@@ -230,6 +231,9 @@ func newLinkableCollection(db *Database, ns string) *CrudBase[*TestLinkable] {
 			"desc",
 			"crud_id",
 		},
+		ImmutableColumns: []string{
+			"ns",
+		},
 		ReadTableAlias: "l",
 		ReadOnlyColumns: []string{
 			"c.field1",
@@ -270,6 +274,46 @@ func newLinkableCollection(db *Database, ns string) *CrudBase[*TestLinkable] {
 			}
 			panic(fmt.Sprintf("unknown column: '%s'", col))
 		},
+	}
+	return tc
+}
+
+func newExtCollection(db *Database, ns string) *CrudBase[*TestLinkable] {
+	tc := &CrudBase[*TestLinkable]{
+		DB:            db,
+		Table:         "linkables",
+		PatchDisabled: true,
+		ColumnsExt: ColumnMap[*TestLinkable]{
+			ColumnID: {
+				GetFieldPtr: func(inst *TestLinkable) interface{} { return &inst.ID },
+			},
+			ColumnCreated: {
+				GetFieldPtr: func(inst *TestLinkable) interface{} { return &inst.Created },
+			},
+			ColumnUpdated: {
+				GetFieldPtr: func(inst *TestLinkable) interface{} { return &inst.Updated },
+			},
+			"ns": {
+				Immutable:   true,
+				GetFieldPtr: func(inst *TestLinkable) interface{} { return &inst.NS },
+			},
+			"desc": {
+				GetFieldPtr: func(inst *TestLinkable) interface{} { return &inst.Description },
+			},
+			"field1": {
+				Select:        "'constant1'",
+				ReadOnly:      true,
+				GetFieldPtr:   func(inst *TestLinkable) interface{} { return &inst.Field1 },
+				QueryModifier: func(sb sq.SelectBuilder) sq.SelectBuilder { return sb },
+			},
+		},
+		FilterFieldMap: map[string]string{
+			"description": "desc",
+			"crud":        "crud_id",
+		},
+		NilValue:     func() *TestLinkable { return nil },
+		NewInstance:  func() *TestLinkable { return &TestLinkable{} },
+		EventHandler: nil, // set below
 	}
 	return tc
 }
@@ -868,7 +912,7 @@ func TestGetFirstQueryFail(t *testing.T) {
 func TestGetManyInvalidOp(t *testing.T) {
 	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
-	_, _, err := tc.getManyScoped(context.Background(), "", &ffapi.FilterInfo{Op: ffapi.FilterOp("!wrong")}, nil, nil, nil)
+	_, _, err := tc.getManyScoped(context.Background(), "", &ffapi.FilterInfo{Op: ffapi.FilterOp("!wrong")}, nil, nil, nil, nil)
 	assert.Regexp(t, "FF00190", err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -1081,7 +1125,23 @@ func TestValidateDupSeqColumn(t *testing.T) {
 		NewInstance: func() *TestCRUDable { return &TestCRUDable{} },
 		Columns:     []string{"seq"},
 	}
-	assert.PanicsWithValue(t, "cannot have column named 'seq'", func() {
+	assert.PanicsWithValue(t, "seq is a duplicated column", func() {
+		tc.Validate()
+	})
+}
+
+func TestValidateBadQueryModifier(t *testing.T) {
+	db, _ := NewMockProvider().UTInit()
+	tc := &CrudBase[*TestCRUDable]{
+		DB:          &db.Database,
+		NewInstance: func() *TestCRUDable { return &TestCRUDable{} },
+		ColumnsExt: ColumnMap[*TestCRUDable]{
+			"testcol": {
+				QueryModifier: func(sb sq.SelectBuilder) sq.SelectBuilder { return sb },
+			},
+		},
+	}
+	assert.PanicsWithValue(t, "testcol: query modifiers are only supported on read-only columns", func() {
 		tc.Validate()
 	})
 }
@@ -1189,4 +1249,34 @@ func TestValidateNameSemanticsWithoutQueryFactory(t *testing.T) {
 	assert.PanicsWithValue(t, "QueryFactory must be set when name semantics are enabled", func() {
 		tc.Validate()
 	})
+}
+
+func TestColumnsExt(t *testing.T) {
+	log.SetLevel("trace")
+
+	db, done := newSQLiteTestProvider(t)
+	defer done()
+	ctx := context.Background()
+
+	linkables := newExtCollection(&db.Database, "ns1")
+	l1 := &TestLinkable{
+		ResourceBase: ResourceBase{
+			ID: fftypes.NewUUID(),
+		},
+		NS:          "ns1",
+		Description: "linked to C1",
+		CrudID:      fftypes.NewUUID(),
+	}
+
+	linkables.Validate()
+
+	err := linkables.Insert(ctx, l1)
+	assert.NoError(t, err)
+
+	fb := LinkableQueryFactory.NewFilter(ctx)
+	l1Copy, _, err := linkables.GetMany(ctx, fb.Eq("id", l1.ID))
+	assert.NoError(t, err)
+	assert.Len(t, l1Copy, 1)
+	assert.Equal(t, "linked to C1", l1Copy[0].Description)
+	assert.Equal(t, "constant1", l1Copy[0].Field1)
 }
