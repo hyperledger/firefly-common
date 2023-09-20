@@ -25,16 +25,17 @@ var ffm = func(key, translation string) MessageKey {
 }
 
 var (
-	APISuccessResponse      = ffm("api.success", "Success")
-	APIRequestTimeoutDesc   = ffm("api.requestTimeout", "Server-side request timeout (milliseconds, or set a custom suffix like 10s)")
-	APIFilterParamDesc      = ffm("api.filterParam", "Data filter field. Prefixes supported: > >= < <= @ ^ ! !@ !^")
-	APIFilterSortDesc       = ffm("api.filterSort", "Sort field. For multi-field sort use comma separated values (or multiple query values) with '-' prefix for descending")
-	APIFilterAscendingDesc  = ffm("api.filterAscending", "Ascending sort order (overrides all fields in a multi-field sort)")
-	APIFilterDescendingDesc = ffm("api.filterDescending", "Descending sort order (overrides all fields in a multi-field sort)")
-	APIFilterSkipDesc       = ffm("api.filterSkip", "The number of records to skip (max: %d). Unsuitable for bulk operations")
-	APIFilterLimitDesc      = ffm("api.filterLimit", "The maximum number of records to return (max: %d)")
-	APIFilterCountDesc      = ffm("api.filterCount", "Return a total count as well as items (adds extra database processing)")
-	APIFilterFieldsDesc     = ffm("api.filterFields", "Comma separated list of fields to return")
+	APISuccessResponse       = ffm("api.success", "Success")
+	APIRequestTimeoutDesc    = ffm("api.requestTimeout", "Server-side request timeout (milliseconds, or set a custom suffix like 10s)")
+	APIFilterParamDesc       = ffm("api.filterParam", "Data filter field. Prefixes supported: > >= < <= @ ^ ! !@ !^")
+	APIFilterSortDesc        = ffm("api.filterSort", "Sort field. For multi-field sort use comma separated values (or multiple query values) with '-' prefix for descending")
+	APIFilterAscendingDesc   = ffm("api.filterAscending", "Ascending sort order (overrides all fields in a multi-field sort)")
+	APIFilterDescendingDesc  = ffm("api.filterDescending", "Descending sort order (overrides all fields in a multi-field sort)")
+	APIFilterSkipDesc        = ffm("api.filterSkip", "The number of records to skip (max: %d). Unsuitable for bulk operations")
+	APIFilterLimitDesc       = ffm("api.filterLimit", "The maximum number of records to return (max: %d)")
+	APIFilterCountDesc       = ffm("api.filterCount", "Return a total count as well as items (adds extra database processing)")
+	APIFilterFieldsDesc      = ffm("api.filterFields", "Comma separated list of fields to return (replaces the default set of fields)")
+	APIFilterExtraFieldsDesc = ffm("api.filterExtraFields", "Comma separated list of extra fields to return (extends the default set of fields)")
 
 	ResourceBaseID      = ffm("ResourceBase.id", "The UUID of the service")
 	ResourceBaseCreated = ffm("ResourceBase.created", "The time the resource was created")

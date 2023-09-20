@@ -49,9 +49,12 @@ type FilterModifiers[T any] interface {
 	// Request a count to be returned on the total number that match the query
 	Count(c bool) T
 
-	// Which fields we require to be returned. Only supported when using CRUD layer on top of underlying DB.
+	// List of fields to be returned. Only supported when using CRUD layer on top of underlying DB. Overrides default fields.
 	// Might allow optimization of the query (in the case of SQL DBs, where it can be combined with GroupBy), or request post-query redaction (in the case of document DBs).
 	RequiredFields(...string) T
+
+	// Extra fields to be returned. Extends default fields. Ignored if RequiredFields() is used.
+	ExtraFields(...string) T
 }
 
 // Filter is the output of the builder
@@ -231,6 +234,7 @@ type SortField struct {
 type FilterInfo struct {
 	GroupBy        []string
 	RequiredFields []string
+	ExtraFields    []string
 	Sort           []*SortField
 	Skip           uint64
 	Limit          uint64
@@ -302,6 +306,9 @@ func (f *FilterInfo) String() string {
 	if len(f.RequiredFields) > 0 {
 		val.WriteString(fmt.Sprintf(" requiredFields=%s", strings.Join(f.RequiredFields, ",")))
 	}
+	if len(f.ExtraFields) > 0 {
+		val.WriteString(fmt.Sprintf(" extraFields=%s", strings.Join(f.ExtraFields, ",")))
+	}
 	if len(f.Sort) > 0 {
 		fields := make([]string, len(f.Sort))
 		for i, s := range f.Sort {
@@ -341,6 +348,7 @@ type filterBuilder struct {
 	sort            []*SortField
 	groupBy         []string
 	requiredFields  []string
+	extraFields     []string
 	skip            uint64
 	limit           uint64
 	count           bool
@@ -459,6 +467,7 @@ func (f *baseFilter) Finalize() (fi *FilterInfo, err error) {
 		Sort:           f.fb.sort,
 		GroupBy:        f.fb.groupBy,
 		RequiredFields: f.fb.requiredFields,
+		ExtraFields:    f.fb.extraFields,
 		Skip:           f.fb.skip,
 		Limit:          f.fb.limit,
 		Count:          f.fb.count,
@@ -512,6 +521,20 @@ func (fb *filterBuilder) RequiredFields(fields ...string) FilterBuilder {
 
 func (f *baseFilter) RequiredFields(fields ...string) Filter {
 	_ = f.fb.RequiredFields(fields...)
+	return f
+}
+
+func (fb *filterBuilder) ExtraFields(fields ...string) FilterBuilder {
+	for _, field := range fields {
+		if _, ok := fb.queryFields[field]; ok {
+			fb.extraFields = append(fb.extraFields, field)
+		}
+	}
+	return fb
+}
+
+func (f *baseFilter) ExtraFields(fields ...string) Filter {
+	_ = f.fb.ExtraFields(fields...)
 	return f
 }
 

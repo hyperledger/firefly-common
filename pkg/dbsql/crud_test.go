@@ -303,6 +303,7 @@ func newExtCollection(db *Database, ns string) *CrudBase[*TestLinkable] {
 			"field1": {
 				Select:        "'constant1'",
 				ReadOnly:      true,
+				OmitDefault:   true,
 				GetFieldPtr:   func(inst *TestLinkable) interface{} { return &inst.Field1 },
 				QueryModifier: func(sb sq.SelectBuilder) sq.SelectBuilder { return sb },
 			},
@@ -1275,6 +1276,12 @@ func TestColumnsExt(t *testing.T) {
 
 	fb := LinkableQueryFactory.NewFilter(ctx)
 	l1Copy, _, err := linkables.GetMany(ctx, fb.Eq("id", l1.ID))
+	assert.NoError(t, err)
+	assert.Len(t, l1Copy, 1)
+	assert.Equal(t, "linked to C1", l1Copy[0].Description)
+	assert.Empty(t, l1Copy[0].Field1)
+
+	l1Copy, _, err = linkables.GetMany(ctx, fb.Eq("id", l1.ID).ExtraFields("field1"))
 	assert.NoError(t, err)
 	assert.Len(t, l1Copy, 1)
 	assert.Equal(t, "linked to C1", l1Copy[0].Description)

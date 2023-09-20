@@ -346,6 +346,7 @@ func (sg *SwaggerGen) addFilters(ctx context.Context, route *Route, op *openapi3
 		if sg.options.SupportFieldRedaction {
 			sg.AddParam(ctx, op, "query", "fields", "", "", i18n.APIFilterFieldsDesc, false)
 		}
+		sg.AddParam(ctx, op, "query", "extraFields", "", "", i18n.APIFilterExtraFieldsDesc, false)
 	}
 }
 

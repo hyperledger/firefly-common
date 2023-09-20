@@ -164,3 +164,17 @@ func TestBuildFilterRequiredFields(t *testing.T) {
 
 	assert.Equal(t, "( created == 0 ) requiredFields=tag,sequence", fi.String())
 }
+
+func TestBuildFilterExtraFields(t *testing.T) {
+	as := &HandlerFactory{
+		MaxFilterLimit: 250,
+	}
+
+	req := httptest.NewRequest("GET", "/things?created=0&extraFields=tag,sequence", nil)
+	filter, err := as.buildFilter(req, TestQueryFactory)
+	assert.NoError(t, err)
+	fi, err := filter.Finalize()
+	assert.NoError(t, err)
+
+	assert.Equal(t, "( created == 0 ) extraFields=tag,sequence", fi.String())
+}

@@ -52,20 +52,16 @@ func (hs *HandlerFactory) getValues(values url.Values, key string) (results []st
 	return results
 }
 
-func (hs *HandlerFactory) buildFilter(req *http.Request, ff QueryFactory) (AndFilter, error) {
-	ctx := req.Context()
-	log.L(ctx).Debugf("Query: %s", req.URL.RawQuery)
-	fb := ff.NewFilterLimit(ctx, hs.DefaultFilterLimit)
+func (hs *HandlerFactory) parseFilters(ctx context.Context, form url.Values, filter AndFilter) error {
+	fb := filter.Builder()
 	possibleFields := fb.Fields()
 	sort.Strings(possibleFields)
-	filter := fb.And()
-	_ = req.ParseForm()
 	for _, field := range possibleFields {
-		values := hs.getValues(req.Form, field)
+		values := hs.getValues(form, field)
 		if len(values) == 1 {
 			_, cond, err := hs.getCondition(ctx, fb, field, values[0])
 			if err != nil {
-				return nil, err
+				return err
 			}
 			filter.Condition(cond)
 		} else if len(values) > 0 {
@@ -75,7 +71,7 @@ func (hs *HandlerFactory) buildFilter(req *http.Request, ff QueryFactory) (AndFi
 			for i, value := range values {
 				mods, cond, err := hs.getCondition(ctx, fb, field, value)
 				if err != nil {
-					return nil, err
+					return err
 				}
 				andCombine = andCombine || mods.andCombine
 				fs[i] = cond
@@ -86,6 +82,18 @@ func (hs *HandlerFactory) buildFilter(req *http.Request, ff QueryFactory) (AndFi
 				filter.Condition(fb.Or(fs...))
 			}
 		}
+	}
+	return nil
+}
+
+func (hs *HandlerFactory) buildFilter(req *http.Request, ff QueryFactory) (AndFilter, error) {
+	ctx := req.Context()
+	log.L(ctx).Debugf("Query: %s", req.URL.RawQuery)
+	fb := ff.NewFilterLimit(ctx, hs.DefaultFilterLimit)
+	filter := fb.And()
+	_ = req.ParseForm()
+	if err := hs.parseFilters(ctx, req.Form, filter); err != nil {
+		return nil, err
 	}
 	skipVals := hs.getValues(req.Form, "skip")
 	if len(skipVals) > 0 {
@@ -122,6 +130,16 @@ func (hs *HandlerFactory) buildFilter(req *http.Request, ff QueryFactory) (AndFi
 				if srf != "" {
 					filter.RequiredFields(srf)
 				}
+			}
+		}
+	}
+	extraFieldVals := hs.getValues(req.Form, "extraFields")
+	for _, ef := range extraFieldVals {
+		subExtraFieldVals := strings.Split(ef, ",")
+		for _, sef := range subExtraFieldVals {
+			sef = strings.TrimSpace(sef)
+			if sef != "" {
+				filter.ExtraFields(sef)
 			}
 		}
 	}

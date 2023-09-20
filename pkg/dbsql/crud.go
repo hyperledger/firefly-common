@@ -119,6 +119,7 @@ type Column[T Resource] struct {
 	Select        string
 	Immutable     bool // disallow update
 	ReadOnly      bool // disallow insert and update
+	OmitDefault   bool // omit from queries unless requested
 	QueryModifier QueryModifier
 	GetFieldPtr   func(inst T) interface{}
 }
@@ -556,6 +557,15 @@ func (c *CrudBase[T]) getCols() (cols namedColumnList[T]) {
 	return cols
 }
 
+func shouldInclude(col string, cols []string) bool {
+	for _, extra := range cols {
+		if col == extra {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *CrudBase[T]) getReadCols(f *ffapi.FilterInfo) (tableFrom string, cols namedColumnList[T], readCols []string, modifiers []QueryModifier) {
 	cols = c.getCols()
 	newCols := namedColumnList[T]{cols[0] /* first column is always the sequence, and must be */}
@@ -571,8 +581,17 @@ func (c *CrudBase[T]) getReadCols(f *ffapi.FilterInfo) (tableFrom string, cols n
 				}
 			}
 		}
-		cols = newCols
+	} else {
+		for i, col := range cols {
+			if i > 0 /* idx==0 handled above */ &&
+				(!col.OmitDefault ||
+					(f != nil && shouldInclude(col.Name, f.ExtraFields))) {
+				newCols = append(newCols, col)
+			}
+		}
 	}
+	cols = newCols
+
 	tableFrom = c.Table
 	if c.ReadTableAlias != "" {
 		tableFrom = fmt.Sprintf("%s AS %s", c.Table, c.ReadTableAlias)
