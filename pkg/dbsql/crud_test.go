@@ -1286,4 +1286,10 @@ func TestColumnsExt(t *testing.T) {
 	assert.Len(t, l1Copy, 1)
 	assert.Equal(t, "linked to C1", l1Copy[0].Description)
 	assert.Equal(t, "constant1", l1Copy[0].Field1)
+
+	l1Copy, _, err = linkables.GetMany(ctx, fb.Eq("field1", "constant1"))
+	assert.NoError(t, err)
+	assert.Len(t, l1Copy, 1)
+	assert.Equal(t, "linked to C1", l1Copy[0].Description)
+	assert.Equal(t, "constant1", l1Copy[0].Field1)
 }

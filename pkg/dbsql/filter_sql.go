@@ -191,6 +191,15 @@ func (s *Database) FilterUpdate(ctx context.Context, update sq.UpdateBuilder, fi
 	return update.Where(fop), nil
 }
 
+func (s *Database) aliasColumn(tableName, fieldName string) string {
+	switch {
+	case tableName == "" || strings.Contains(fieldName, "."):
+		return fieldName
+	default:
+		return fmt.Sprintf("%s.%s", tableName, fieldName)
+	}
+}
+
 func (s *Database) mapFieldName(tableName, fieldName string, tm map[string]string) string {
 	if fieldName == "sequence" {
 		if tableName == "" {
@@ -204,10 +213,7 @@ func (s *Database) mapFieldName(tableName, fieldName string, tm map[string]strin
 			field = mf
 		}
 	}
-	if tableName != "" {
-		field = fmt.Sprintf("%s.%s", tableName, field)
-	}
-	return field
+	return s.aliasColumn(tableName, field)
 }
 
 func (s *Database) mapField(tableName string, op *ffapi.FilterInfo, tm map[string]string) string {

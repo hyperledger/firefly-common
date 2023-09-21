@@ -133,7 +133,7 @@ func (hs *HandlerFactory) buildFilter(req *http.Request, ff QueryFactory) (AndFi
 			}
 		}
 	}
-	extraFieldVals := hs.getValues(req.Form, "extraFields")
+	extraFieldVals := hs.getValues(req.Form, "extrafields")
 	for _, ef := range extraFieldVals {
 		subExtraFieldVals := strings.Split(ef, ",")
 		for _, sef := range subExtraFieldVals {

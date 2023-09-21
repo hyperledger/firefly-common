@@ -138,6 +138,77 @@ func (c *Column[T]) getFieldValue(inst T) interface{} {
 	return reflect.ValueOf(c.GetFieldPtr(inst)).Elem().Interface()
 }
 
+func (c namedColumnList[T]) getNames() []string {
+	result := make([]string, len(c))
+	for i, col := range c {
+		result[i] = col.Name
+	}
+	return result
+}
+
+func (c namedColumnList[T]) getValues(inst T) []interface{} {
+	result := make([]interface{}, len(c))
+	for i, col := range c {
+		result[i] = col.getFieldValue(inst)
+	}
+	return result
+}
+
+func (c namedColumnList[T]) filter(expr func(*namedColumn[T]) bool) namedColumnList[T] {
+	result := make(namedColumnList[T], 0)
+	for _, col := range c {
+		if expr(col) {
+			result = append(result, col)
+		}
+	}
+	return result
+}
+
+func (c namedColumnList[T]) defaults() namedColumnList[T] {
+	return c.filter(func(nc *namedColumn[T]) bool { return !nc.OmitDefault })
+}
+
+func (c namedColumnList[T]) writable() namedColumnList[T] {
+	return c.filter(func(nc *namedColumn[T]) bool { return !nc.ReadOnly })
+}
+
+func (c namedColumnList[T]) updateable() namedColumnList[T] {
+	return c.filter(func(nc *namedColumn[T]) bool { return !nc.ReadOnly && !nc.Immutable })
+}
+
+func (c namedColumnList[T]) only(fields []string, fieldMap map[string]string) namedColumnList[T] {
+	mappedFields := make([]string, len(fields))
+	for i, name := range fields {
+		mappedName, found := fieldMap[name]
+		if found {
+			mappedFields[i] = mappedName
+		} else {
+			mappedFields[i] = name
+		}
+	}
+	return c.filter(func(nc *namedColumn[T]) bool {
+		for _, name := range mappedFields {
+			if name == nc.Name {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+func (c namedColumnList[T]) columnMap(fieldMap map[string]string) map[string]string {
+	result := make(map[string]string, len(fieldMap))
+	for key, val := range fieldMap {
+		result[key] = val
+	}
+	for _, col := range c {
+		if col.Select != "" {
+			result[col.Name] = col.Select
+		}
+	}
+	return result
+}
+
 type CrudBase[T Resource] struct {
 	DB             *Database
 	Table          string
@@ -153,7 +224,7 @@ type CrudBase[T Resource] struct {
 	// New-style column definitions
 	ColumnsExt ColumnMap[T]
 
-	FilterFieldMap map[string]string
+	FilterFieldMap map[string]string  // mapping of filter names to column names
 	TimesDisabled  bool               // no management of the time columns
 	PatchDisabled  bool               // allows non-pointer fields, but prevents UpdateSparse function
 	NameField      string             // If supporting name semantics
@@ -240,25 +311,17 @@ func (c *CrudBase[T]) Validate() {
 }
 
 func (c *CrudBase[T]) idFilter(id string) sq.Eq {
-	var filter sq.Eq
+	fieldName := c.aliasColumn(&namedColumn[T]{Name: "id"})
 	if c.ScopedFilter != nil {
-		filter = c.ScopedFilter()
-	} else {
-		filter = sq.Eq{}
+		f := c.ScopedFilter()
+		f[fieldName] = id
+		return f
 	}
-	if c.ReadTableAlias != "" {
-		filter[fmt.Sprintf("%s.id", c.ReadTableAlias)] = id
-	} else {
-		filter["id"] = id
-	}
-	return filter
+	return sq.Eq{fieldName: id}
 }
 
 func (c *CrudBase[T]) buildUpdateList(_ context.Context, update sq.UpdateBuilder, inst T, includeNil bool) sq.UpdateBuilder {
-	for _, col := range c.getCols() {
-		if col.Immutable || col.ReadOnly {
-			continue
-		}
+	for _, col := range c.getCols().updateable() {
 		value := col.getFieldValue(inst)
 		if includeNil || !isNil(value) {
 			update = update.Set(col.Name, value)
@@ -309,17 +372,10 @@ func (c *CrudBase[T]) attemptInsert(ctx context.Context, tx *TXWrapper, inst T, 
 
 	c.setInsertTimestamps(inst)
 
-	cols := c.getCols()
-	colNames := make([]string, 0, len(cols))
-	values := make([]interface{}, 0, len(cols))
-	for _, col := range cols {
-		if col.ReadOnly {
-			continue
-		}
-		colNames = append(colNames, col.Name)
-		values = append(values, col.getFieldValue(inst))
-	}
-	insert := sq.Insert(c.Table).Columns(colNames...).Values(values...)
+	cols := c.getCols().writable()
+	insert := sq.Insert(c.Table).
+		Columns(cols.getNames()...).
+		Values(cols.getValues(inst)...)
 
 	seq, err := c.DB.InsertTxExt(ctx, c.Table, tx, insert,
 		func() {
@@ -395,24 +451,11 @@ func (c *CrudBase[T]) InsertMany(ctx context.Context, instances []T, allowPartia
 	}
 	defer c.DB.RollbackTx(ctx, tx, autoCommit)
 	if c.DB.Features().MultiRowInsert {
-		cols := make(namedColumnList[T], 0)
-		colNames := make([]string, 0)
-		for _, col := range c.getCols() {
-			if col.ReadOnly {
-				continue
-			}
-			cols = append(cols, col)
-			colNames = append(colNames, col.Name)
-		}
-
-		insert := sq.Insert(c.Table).Columns(colNames...)
+		cols := c.getCols().writable()
+		insert := sq.Insert(c.Table).Columns(cols.getNames()...)
 		for _, inst := range instances {
 			c.setInsertTimestamps(inst)
-			values := make([]interface{}, 0, len(cols))
-			for _, col := range cols {
-				values = append(values, col.getFieldValue(inst))
-			}
-			insert = insert.Values(values...)
+			insert = insert.Values(cols.getValues(inst)...)
 		}
 
 		// Use a single multi-row insert
@@ -516,78 +559,56 @@ func (c *CrudBase[T]) isImmutable(col string) bool {
 	return false
 }
 
+func (c *CrudBase[T]) legacyColumn(colName string, col *Column[T]) *namedColumn[T] {
+	col.GetFieldPtr = func(inst T) interface{} {
+		return c.GetFieldPtr(inst, colName)
+	}
+	return &namedColumn[T]{Name: colName, Column: *col}
+}
+
 func (c *CrudBase[T]) getCols() (cols namedColumnList[T]) {
-	cols = make(namedColumnList[T], 0)
-	cols = append(cols, &namedColumn[T]{
+	cols = namedColumnList[T]{{
 		Name: c.DB.SequenceColumn(),
 		Column: Column[T]{
 			ReadOnly: true,
 		},
-	})
+	}}
 	for _, name := range c.Columns {
-		nameCopy := name
-		cols = append(cols, &namedColumn[T]{
-			Name: name,
-			Column: Column[T]{
-				Immutable: c.isImmutable(name),
-				GetFieldPtr: func(inst T) interface{} {
-					return c.GetFieldPtr(inst, nameCopy)
-				},
-			},
-		})
+		cols = append(cols, c.legacyColumn(name, &Column[T]{
+			Immutable: c.isImmutable(name),
+		}))
 	}
 	for _, name := range c.ReadOnlyColumns {
-		nameCopy := name
-		cols = append(cols, &namedColumn[T]{
-			Name: name,
-			Column: Column[T]{
-				ReadOnly: true,
-				GetFieldPtr: func(inst T) interface{} {
-					return c.GetFieldPtr(inst, nameCopy)
-				},
-			},
-		})
+		cols = append(cols, c.legacyColumn(name, &Column[T]{
+			ReadOnly: true,
+		}))
 	}
-	for name, col := range c.ColumnsExt {
-		cols = append(cols, &namedColumn[T]{
-			Name:   name,
-			Column: *col,
-		})
+	for name, in := range c.ColumnsExt {
+		cols = append(cols, &namedColumn[T]{Name: name, Column: *in})
 	}
 	return cols
 }
 
-func shouldInclude(col string, cols []string) bool {
-	for _, extra := range cols {
-		if col == extra {
-			return true
-		}
+func (c *CrudBase[T]) aliasColumn(col *namedColumn[T]) string {
+	switch {
+	case col.Select != "":
+		return col.Select
+	case c.ReadTableAlias == "" || strings.Contains(col.Name, "."):
+		return col.Name
+	default:
+		return fmt.Sprintf("%s.%s", c.ReadTableAlias, col.Name)
 	}
-	return false
 }
 
 func (c *CrudBase[T]) getReadCols(f *ffapi.FilterInfo) (tableFrom string, cols namedColumnList[T], readCols []string, modifiers []QueryModifier) {
 	cols = c.getCols()
 	newCols := namedColumnList[T]{cols[0] /* first column is always the sequence, and must be */}
 	if f != nil && len(f.RequiredFields) > 0 {
-		for _, requiredFieldName := range f.RequiredFields {
-			requiredColName := c.FilterFieldMap[requiredFieldName]
-			if requiredColName == "" {
-				requiredColName = requiredFieldName
-			}
-			for i, col := range cols {
-				if i > 0 /* idx==0 handled above */ && col.Name == requiredColName {
-					newCols = append(newCols, col)
-				}
-			}
-		}
+		newCols = append(newCols, cols.only(f.RequiredFields, c.FilterFieldMap)...)
 	} else {
-		for i, col := range cols {
-			if i > 0 /* idx==0 handled above */ &&
-				(!col.OmitDefault ||
-					(f != nil && shouldInclude(col.Name, f.ExtraFields))) {
-				newCols = append(newCols, col)
-			}
+		newCols = cols.defaults()
+		if f != nil && len(f.ExtraFields) > 0 {
+			newCols = append(newCols, cols.only(f.ExtraFields, c.FilterFieldMap)...)
 		}
 	}
 	cols = newCols
@@ -598,14 +619,7 @@ func (c *CrudBase[T]) getReadCols(f *ffapi.FilterInfo) (tableFrom string, cols n
 	}
 	readCols = make([]string, len(cols))
 	for i, col := range cols {
-		switch {
-		case col.Select != "":
-			readCols[i] = col.Select
-		case c.ReadTableAlias == "" || strings.Contains(col.Name, "."):
-			readCols[i] = col.Name
-		default:
-			readCols[i] = fmt.Sprintf("%s.%s", c.ReadTableAlias, col.Name)
-		}
+		readCols[i] = c.aliasColumn(col)
 		if col.QueryModifier != nil {
 			modifiers = append(modifiers, col.QueryModifier)
 		}
@@ -750,7 +764,10 @@ func (c *CrudBase[T]) GetByUUIDOrName(ctx context.Context, uuidOrName string, ge
 }
 
 func (c *CrudBase[T]) getManyScoped(ctx context.Context, tableFrom string, fi *ffapi.FilterInfo, cols namedColumnList[T], readCols []string, preconditions []sq.Sqlizer, modifiers []QueryModifier) (instances []T, fr *ffapi.FilterResult, err error) {
-	query, fop, fi, err := c.DB.filterSelectFinalized(ctx, c.ReadTableAlias, sq.Select(readCols...).From(tableFrom), fi, c.FilterFieldMap,
+	query, fop, fi, err := c.DB.filterSelectFinalized(ctx, c.ReadTableAlias,
+		sq.Select(readCols...).From(tableFrom),
+		fi,
+		cols.columnMap(c.FilterFieldMap),
 		[]interface{}{
 			&ffapi.SortField{Field: c.DB.sequenceColumn, Descending: true},
 		}, preconditions...)
