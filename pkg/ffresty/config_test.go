@@ -81,3 +81,7 @@ func TestWSConfigTLSGenerationFail(t *testing.T) {
 	_, err := GenerateConfig(ctx, utConf)
 	assert.Regexp(t, "FF00153", err)
 }
+
+func TestCheckAllFieldsDocumented(t *testing.T) {
+
+}

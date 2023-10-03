@@ -46,27 +46,33 @@ type retryCtx struct {
 }
 
 type Config struct {
-	URL                           string                                    `json:"httpURL,omitempty"`
-	ProxyURL                      string                                    `json:"proxyURL,omitempty"`
-	HTTPRequestTimeout            time.Duration                             `json:"requestTimeout,omitempty"`
-	HTTPIdleConnTimeout           time.Duration                             `json:"idleTimeout,omitempty"`
-	HTTPMaxIdleTimeout            time.Duration                             `json:"maxIdleTimeout,omitempty"`
-	HTTPConnectionTimeout         time.Duration                             `json:"connectionTimeout,omitempty"`
-	HTTPExpectContinueTimeout     time.Duration                             `json:"expectContinueTimeout,omitempty"`
-	AuthUsername                  string                                    `json:"authUsername,omitempty"`
-	AuthPassword                  string                                    `json:"authPassword,omitempty"`
-	Retry                         bool                                      `json:"retry,omitempty"`
-	RetryCount                    int                                       `json:"retryCount,omitempty"`
-	RetryInitialDelay             time.Duration                             `json:"retryInitialDelay,omitempty"`
-	RetryMaximumDelay             time.Duration                             `json:"retryMaximumDelay,omitempty"`
-	RetryErrorStatusCodeRegex     string                                    `json:"retryErrorStatusCodeRegex,omitempty"`
-	HTTPMaxIdleConns              int                                       `json:"maxIdleConns,omitempty"`
-	HTTPMaxConnsPerHost           int                                       `json:"maxConnsPerHost,omitempty"`
-	HTTPPassthroughHeadersEnabled bool                                      `json:"httpPassthroughHeadersEnabled,omitempty"`
-	HTTPHeaders                   fftypes.JSONObject                        `json:"headers,omitempty"`
-	TLSClientConfig               *tls.Config                               `json:"tlsClientConfig,omitempty"`
-	HTTPTLSHandshakeTimeout       time.Duration                             `json:"tlsHandshakeTimeout,omitempty"`
-	HTTPCustomClient              interface{}                               `json:"httpCustomClient,omitempty"`
+	URL string `json:"httpURL,omitempty"`
+	HTTPConfig
+}
+
+// HTTPConfig is all the optional configuration separate to the URL you wish to invoke.
+// This is JSON serializable with docs, so you can embed it into API objects.
+type HTTPConfig struct {
+	ProxyURL                      string                                    `ffstruct:"RESTConfig" json:"proxyURL,omitempty"`
+	HTTPRequestTimeout            fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"requestTimeout,omitempty"`
+	HTTPIdleConnTimeout           fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"idleTimeout,omitempty"`
+	HTTPMaxIdleTimeout            fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"maxIdleTimeout,omitempty"`
+	HTTPConnectionTimeout         fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"connectionTimeout,omitempty"`
+	HTTPExpectContinueTimeout     fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"expectContinueTimeout,omitempty"`
+	AuthUsername                  string                                    `ffstruct:"RESTConfig" json:"authUsername,omitempty"`
+	AuthPassword                  string                                    `ffstruct:"RESTConfig" json:"authPassword,omitempty"`
+	Retry                         bool                                      `ffstruct:"RESTConfig" json:"retry,omitempty"`
+	RetryCount                    int                                       `ffstruct:"RESTConfig" json:"retryCount,omitempty"`
+	RetryInitialDelay             fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"retryInitialDelay,omitempty"`
+	RetryMaximumDelay             fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"retryMaximumDelay,omitempty"`
+	RetryErrorStatusCodeRegex     string                                    `ffstruct:"RESTConfig" json:"retryErrorStatusCodeRegex,omitempty"`
+	HTTPMaxIdleConns              int                                       `ffstruct:"RESTConfig" json:"maxIdleConns,omitempty"`
+	HTTPMaxConnsPerHost           int                                       `ffstruct:"RESTConfig" json:"maxConnsPerHost,omitempty"`
+	HTTPPassthroughHeadersEnabled bool                                      `ffstruct:"RESTConfig" json:"httpPassthroughHeadersEnabled,omitempty"`
+	HTTPHeaders                   fftypes.JSONObject                        `ffstruct:"RESTConfig" json:"headers,omitempty"`
+	HTTPTLSHandshakeTimeout       fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"tlsHandshakeTimeout,omitempty"`
+	HTTPCustomClient              interface{}                               `ffstruct:"RESTConfig" json:"httpCustomClient,omitempty"`
+	TLSClientConfig               *tls.Config                               `json:"-"` // should be built from separate TLSConfig using fftls utils
 	OnCheckRetry                  func(res *resty.Response, err error) bool `json:"-"` // response could be nil on err
 	OnBeforeRequest               func(req *resty.Request) error            `json:"-"` // called before each request, even retry
 }
@@ -121,15 +127,15 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 		httpTransport := &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
 			DialContext: (&net.Dialer{
-				Timeout:   ffrestyConfig.HTTPConnectionTimeout,
-				KeepAlive: ffrestyConfig.HTTPConnectionTimeout,
+				Timeout:   time.Duration(ffrestyConfig.HTTPConnectionTimeout),
+				KeepAlive: time.Duration(ffrestyConfig.HTTPConnectionTimeout),
 			}).DialContext,
 			ForceAttemptHTTP2:     true,
 			MaxIdleConns:          ffrestyConfig.HTTPMaxIdleConns,
 			MaxConnsPerHost:       ffrestyConfig.HTTPMaxConnsPerHost,
-			IdleConnTimeout:       ffrestyConfig.HTTPIdleConnTimeout,
-			TLSHandshakeTimeout:   ffrestyConfig.HTTPTLSHandshakeTimeout,
-			ExpectContinueTimeout: ffrestyConfig.HTTPExpectContinueTimeout,
+			IdleConnTimeout:       time.Duration(ffrestyConfig.HTTPIdleConnTimeout),
+			TLSHandshakeTimeout:   time.Duration(ffrestyConfig.HTTPTLSHandshakeTimeout),
+			ExpectContinueTimeout: time.Duration(ffrestyConfig.HTTPExpectContinueTimeout),
 		}
 
 		if ffrestyConfig.TLSClientConfig != nil {
@@ -152,7 +158,7 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 		client.SetProxy(ffrestyConfig.ProxyURL)
 	}
 
-	client.SetTimeout(ffrestyConfig.HTTPRequestTimeout)
+	client.SetTimeout(time.Duration(ffrestyConfig.HTTPRequestTimeout))
 
 	client.OnBeforeRequest(func(c *resty.Client, req *resty.Request) error {
 		rCtx := req.Context()
@@ -217,8 +223,8 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 
 	if ffrestyConfig.Retry {
 		retryCount := ffrestyConfig.RetryCount
-		minTimeout := ffrestyConfig.RetryInitialDelay
-		maxTimeout := ffrestyConfig.RetryMaximumDelay
+		minTimeout := time.Duration(ffrestyConfig.RetryInitialDelay)
+		maxTimeout := time.Duration(ffrestyConfig.RetryMaximumDelay)
 		client.
 			SetRetryCount(retryCount).
 			SetRetryWaitTime(minTimeout).

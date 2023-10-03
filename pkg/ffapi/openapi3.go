@@ -260,6 +260,22 @@ func (sg *SwaggerGen) addFormInput(ctx context.Context, op *openapi3.Operation, 
 	}
 }
 
+// CheckObjectDocumented lets unit tests on individual structures validate that all the ffstruct tags are set,
+// without having to build their own swagger.
+func CheckObjectDocumented(example interface{}) {
+	(&SwaggerGen{
+		options: &SwaggerGenOptions{
+			PanicOnMissingDescription: true,
+		},
+	}).Generate(context.Background(), []*Route{{
+		Name:           "doctest",
+		Path:           "doctest",
+		Method:         http.MethodPost,
+		Description:    "Test route to verify object is fully documented",
+		JSONInputValue: func() interface{} { return example },
+	}})
+}
+
 func (sg *SwaggerGen) addOutput(ctx context.Context, doc *openapi3.T, route *Route, op *openapi3.Operation) {
 	var schemaRef *openapi3.SchemaRef
 	var err error

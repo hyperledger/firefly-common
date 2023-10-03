@@ -21,6 +21,7 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/fftls"
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
 )
 
 const (
@@ -108,24 +109,26 @@ func InitConfig(conf config.Section) {
 
 func GenerateConfig(ctx context.Context, conf config.Section) (*Config, error) {
 	ffrestyConfig := &Config{
-		URL:                           conf.GetString(HTTPConfigURL),
-		ProxyURL:                      conf.GetString(HTTPConfigProxyURL),
-		HTTPHeaders:                   conf.GetObject(HTTPConfigHeaders),
-		AuthUsername:                  conf.GetString(HTTPConfigAuthUsername),
-		AuthPassword:                  conf.GetString(HTTPConfigAuthPassword),
-		Retry:                         conf.GetBool(HTTPConfigRetryEnabled),
-		RetryCount:                    conf.GetInt(HTTPConfigRetryCount),
-		RetryInitialDelay:             conf.GetDuration(HTTPConfigRetryInitDelay),
-		RetryMaximumDelay:             conf.GetDuration(HTTPConfigRetryMaxDelay),
-		RetryErrorStatusCodeRegex:     conf.GetString(HTTPConfigRetryErrorStatusCodeRegex),
-		HTTPRequestTimeout:            conf.GetDuration(HTTPConfigRequestTimeout),
-		HTTPIdleConnTimeout:           conf.GetDuration(HTTPIdleTimeout),
-		HTTPMaxIdleConns:              conf.GetInt(HTTPMaxIdleConns),
-		HTTPConnectionTimeout:         conf.GetDuration(HTTPConnectionTimeout),
-		HTTPTLSHandshakeTimeout:       conf.GetDuration(HTTPTLSHandshakeTimeout),
-		HTTPExpectContinueTimeout:     conf.GetDuration(HTTPExpectContinueTimeout),
-		HTTPPassthroughHeadersEnabled: conf.GetBool(HTTPPassthroughHeadersEnabled),
-		HTTPCustomClient:              conf.Get(HTTPCustomClient),
+		URL: conf.GetString(HTTPConfigURL),
+		HTTPConfig: HTTPConfig{
+			ProxyURL:                      conf.GetString(HTTPConfigProxyURL),
+			HTTPHeaders:                   conf.GetObject(HTTPConfigHeaders),
+			AuthUsername:                  conf.GetString(HTTPConfigAuthUsername),
+			AuthPassword:                  conf.GetString(HTTPConfigAuthPassword),
+			Retry:                         conf.GetBool(HTTPConfigRetryEnabled),
+			RetryCount:                    conf.GetInt(HTTPConfigRetryCount),
+			RetryInitialDelay:             fftypes.FFDuration(conf.GetDuration(HTTPConfigRetryInitDelay)),
+			RetryMaximumDelay:             fftypes.FFDuration(conf.GetDuration(HTTPConfigRetryMaxDelay)),
+			RetryErrorStatusCodeRegex:     conf.GetString(HTTPConfigRetryErrorStatusCodeRegex),
+			HTTPRequestTimeout:            fftypes.FFDuration(conf.GetDuration(HTTPConfigRequestTimeout)),
+			HTTPIdleConnTimeout:           fftypes.FFDuration(conf.GetDuration(HTTPIdleTimeout)),
+			HTTPMaxIdleConns:              conf.GetInt(HTTPMaxIdleConns),
+			HTTPConnectionTimeout:         fftypes.FFDuration(conf.GetDuration(HTTPConnectionTimeout)),
+			HTTPTLSHandshakeTimeout:       fftypes.FFDuration(conf.GetDuration(HTTPTLSHandshakeTimeout)),
+			HTTPExpectContinueTimeout:     fftypes.FFDuration(conf.GetDuration(HTTPExpectContinueTimeout)),
+			HTTPPassthroughHeadersEnabled: conf.GetBool(HTTPPassthroughHeadersEnabled),
+			HTTPCustomClient:              conf.Get(HTTPCustomClient),
+		},
 	}
 	tlsSection := conf.SubSection("tls")
 	tlsClientConfig, err := fftls.ConstructTLSConfig(ctx, tlsSection, fftls.ClientType)

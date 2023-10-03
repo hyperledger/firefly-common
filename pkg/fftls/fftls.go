@@ -30,21 +30,31 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/log"
 )
 
+type TLSType string
+
 const (
-	ServerType = "server"
-	ClientType = "client"
+	ServerType TLSType = "server"
+	ClientType TLSType = "client"
 )
 
-func ConstructTLSConfig(ctx context.Context, conf config.Section, tlsType string) (*tls.Config, error) {
-	if !conf.GetBool(HTTPConfTLSEnabled) {
+func ConstructTLSConfig(ctx context.Context, conf config.Section, tlsType TLSType) (*tls.Config, error) {
+	return NewTLSConfig(ctx, GenerateConfig(conf), tlsType)
+}
+
+func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Config, error) {
+	if !config.Enabled {
 		return nil, nil
 	}
 
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12,
 		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-			cert := verifiedChains[0][0]
-			log.L(ctx).Debugf("Client certificate provided Subject=%s Issuer=%s Expiry=%s", cert.Subject, cert.Issuer, cert.NotAfter)
+			if len(verifiedChains) > 0 && len(verifiedChains[0]) > 0 {
+				cert := verifiedChains[0][0]
+				log.L(ctx).Debugf("Client certificate provided Subject=%s Issuer=%s Expiry=%s", cert.Subject, cert.Issuer, cert.NotAfter)
+			} else {
+				log.L(ctx).Debugf("Client certificate unverified")
+			}
 			return nil
 		},
 	}
@@ -52,11 +62,10 @@ func ConstructTLSConfig(ctx context.Context, conf config.Section, tlsType string
 	var err error
 	// Support custom CA file
 	var rootCAs *x509.CertPool
-	caFile := conf.GetString(HTTPConfTLSCAFile)
-	if caFile != "" {
+	if config.CAFile != "" {
 		rootCAs = x509.NewCertPool()
 		var caBytes []byte
-		caBytes, err = os.ReadFile(caFile)
+		caBytes, err = os.ReadFile(config.CAFile)
 		if err == nil {
 			ok := rootCAs.AppendCertsFromPEM(caBytes)
 			if !ok {
@@ -74,11 +83,9 @@ func ConstructTLSConfig(ctx context.Context, conf config.Section, tlsType string
 	tlsConfig.RootCAs = rootCAs
 
 	// For mTLS we need both the cert and key
-	certFile := conf.GetString(HTTPConfTLSCertFile)
-	keyFile := conf.GetString(HTTPConfTLSKeyFile)
-	if certFile != "" && keyFile != "" {
+	if config.CertFile != "" && config.KeyFile != "" {
 		// Read the key pair to create certificate
-		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		cert, err := tls.LoadX509KeyPair(config.CertFile, config.KeyFile)
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, i18n.MsgInvalidKeyPairFiles)
 		}
@@ -90,7 +97,7 @@ func ConstructTLSConfig(ctx context.Context, conf config.Section, tlsType string
 
 		// Support client auth
 		tlsConfig.ClientAuth = tls.NoClientCert
-		if conf.GetBool(HTTPConfTLSClientAuth) {
+		if config.ClientAuth {
 			tlsConfig.ClientAuth = tls.RequireAndVerifyClientCert
 
 			// Used to verify a client certificate by the policy in ClientAuth.
@@ -99,12 +106,13 @@ func ConstructTLSConfig(ctx context.Context, conf config.Section, tlsType string
 
 	}
 
-	requiredDNAttributes := conf.GetObject(HTTPConfTLSRequiredDNAttributes)
-	if len(requiredDNAttributes) > 0 {
-		if tlsConfig.VerifyPeerCertificate, err = buildDNValidator(ctx, requiredDNAttributes); err != nil {
+	if len(config.RequiredDNAttributes) > 0 {
+		if tlsConfig.VerifyPeerCertificate, err = buildDNValidator(ctx, config.RequiredDNAttributes); err != nil {
 			return nil, err
 		}
 	}
+
+	tlsConfig.InsecureSkipVerify = config.InsecureSkipHostVerify
 
 	return tlsConfig, nil
 
