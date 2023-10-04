@@ -17,17 +17,8 @@
 package eventstreams
 
 import (
-	"database/sql/driver"
-
 	"github.com/hyperledger/firefly-common/pkg/dbsql"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
-)
-
-type DistributionMode = fftypes.FFEnum
-
-var (
-	DistributionModeBroadcast   = fftypes.FFEnumValue("distmode", "broadcast")
-	DistributionModeLoadBalance = fftypes.FFEnumValue("distmode", "load_balance")
 )
 
 type EventStreamType = fftypes.FFEnum
@@ -89,21 +80,4 @@ type EventStreamWithStatus struct {
 type EventStreamCheckpoint struct {
 	dbsql.ResourceBase
 	Value *fftypes.JSONAny `json:"value,omitempty"`
-}
-
-type WebSocketConfig struct {
-	DistributionMode *DistributionMode `ffstruct:"wsconfig" json:"distributionMode,omitempty"`
-}
-
-// Store in DB as JSON
-func (wc *WebSocketConfig) Scan(src interface{}) error {
-	return fftypes.JSONScan(src, wc)
-}
-
-// Store in DB as JSON
-func (wc *WebSocketConfig) Value() (driver.Value, error) {
-	if wc == nil {
-		return nil, nil
-	}
-	return fftypes.JSONValue(wc)
 }

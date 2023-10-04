@@ -50,7 +50,7 @@ func newTestWebhooks(t *testing.T, whc *WebhookConfig, tweaks ...func()) *webhoo
 	assert.NoError(t, err)
 	es := ies.(*esManager)
 
-	assert.NoError(t, whc.Validate(ctx, es))
+	assert.NoError(t, whc.Validate(ctx, es.tlsConfigs))
 
 	wh, err := es.newWebhookAction(context.Background(), whc)
 	assert.NoError(t, err)
@@ -60,18 +60,18 @@ func newTestWebhooks(t *testing.T, whc *WebhookConfig, tweaks ...func()) *webhoo
 func TestWebhooksConfigValidate(t *testing.T) {
 
 	wc := &WebhookConfig{}
-	assert.Regexp(t, "FF00216", wc.Validate(context.Background(), &esManager{}))
+	assert.Regexp(t, "FF00216", wc.Validate(context.Background(), nil))
 
 	u := "http://test.example"
 	wc.URL = &u
-	assert.NoError(t, wc.Validate(context.Background(), &esManager{}))
+	assert.NoError(t, wc.Validate(context.Background(), nil))
 
 	tlsConfName := "wrong"
 	wc = &WebhookConfig{
 		URL:           &u,
 		TLSConfigName: &tlsConfName,
 	}
-	assert.Regexp(t, "FF00223", wc.Validate(context.Background(), &esManager{}))
+	assert.Regexp(t, "FF00223", wc.Validate(context.Background(), nil))
 
 }
 
@@ -88,7 +88,7 @@ func TestWebhooksBadHost(t *testing.T) {
 	u := "http://www.sample.invalid/guaranteed-to-fail"
 	wh := newTestWebhooks(t, &WebhookConfig{URL: &u})
 
-	err := wh.attemptDispatch(context.Background(), 0, 0, fftypes.JSONObject{"some": "data"})
+	err := wh.attemptDispatch(context.Background(), 0, 0, []*fftypes.JSONAny{fftypes.JSONAnyPtr(`{"some": "data"}`)})
 	assert.Regexp(t, "FF00218", err)
 }
 
@@ -98,7 +98,7 @@ func TestWebhooksPrivateBlocked(t *testing.T) {
 		WebhookDefaultsConfig.Set(ConfigWebhooksDisablePrivateIPs, true)
 	})
 
-	err := wh.attemptDispatch(context.Background(), 0, 0, fftypes.JSONObject{"some": "data"})
+	err := wh.attemptDispatch(context.Background(), 0, 0, []*fftypes.JSONAny{fftypes.JSONAnyPtr(`{"some": "data"}`)})
 	assert.Regexp(t, "FF00220", err)
 }
 
@@ -108,10 +108,10 @@ func TestWebhooksCustomHeaders403(t *testing.T) {
 		assert.Equal(t, "/test/path", r.URL.Path)
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Equal(t, "test-value", r.Header.Get("test-header"))
-		var data fftypes.JSONObject
+		var data []*fftypes.JSONObject
 		err := json.NewDecoder(r.Body).Decode(&data)
 		assert.NoError(t, err)
-		assert.Equal(t, "data", data.GetString("some"))
+		assert.Equal(t, "data", data[0].GetString("some"))
 		w.WriteHeader(403)
 	}))
 	defer s.Close()
@@ -124,7 +124,7 @@ func TestWebhooksCustomHeaders403(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		err := wh.attemptDispatch(context.Background(), 0, 0, fftypes.JSONObject{"some": "data"})
+		err := wh.attemptDispatch(context.Background(), 0, 0, []*fftypes.JSONAny{fftypes.JSONAnyPtr(`{"some": "data"}`)})
 		assert.Regexp(t, "FF00221.*403", err)
 		close(done)
 	}()
@@ -141,7 +141,7 @@ func TestWebhooksCustomHeadersConnectFail(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		err := wh.attemptDispatch(context.Background(), 0, 0, fftypes.JSONObject{"some": "data"})
+		err := wh.attemptDispatch(context.Background(), 0, 0, []*fftypes.JSONAny{fftypes.JSONAnyPtr(`{"some": "data"}`)})
 		assert.Regexp(t, "FF00219", err)
 		close(done)
 	}()
@@ -171,7 +171,7 @@ func TestWebhooksTLS(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		err := wh.attemptDispatch(context.Background(), 0, 0, fftypes.JSONObject{"some": "data"})
+		err := wh.attemptDispatch(context.Background(), 0, 0, []*fftypes.JSONAny{fftypes.JSONAnyPtr(`{"some": "data"}`)})
 		assert.NoError(t, err)
 		close(done)
 	}()

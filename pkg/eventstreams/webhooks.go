@@ -50,12 +50,12 @@ func (wc *WebhookConfig) Value() (driver.Value, error) {
 }
 
 // Validate initializes the config ready for use
-func (wc *WebhookConfig) Validate(ctx context.Context, es *esManager) error {
+func (wc *WebhookConfig) Validate(ctx context.Context, tlsConfigs map[string]*tls.Config) error {
 	if wc.URL == nil || *wc.URL == "" {
 		return i18n.NewError(ctx, i18n.MsgMissingWebhookURL)
 	}
 	if wc.TLSConfigName != nil && *wc.TLSConfigName != "" {
-		tlsConfig, ok := es.tlsConfigs[*wc.TLSConfigName]
+		tlsConfig, ok := tlsConfigs[*wc.TLSConfigName]
 		if !ok {
 			return i18n.NewError(ctx, i18n.MsgUnknownTLSConfiguration, *wc.TLSConfigName)
 		}
@@ -93,8 +93,7 @@ func (es *esManager) newWebhookAction(ctx context.Context, spec *WebhookConfig) 
 	}, nil
 }
 
-// attemptWebhookAction performs a single attempt of a webhook action
-func (w *webhookAction) attemptDispatch(ctx context.Context, batchNumber int64, attempt int, body interface{}) error {
+func (w *webhookAction) attemptDispatch(ctx context.Context, batchNumber int64, attempt int, events []*fftypes.JSONAny) error {
 	// We perform DNS resolution before each attempt, to exclude private IP address ranges from the target
 	u, _ := url.Parse(*w.spec.URL)
 	addr, err := net.ResolveIPAddr("ip4", u.Hostname())
@@ -107,7 +106,7 @@ func (w *webhookAction) attemptDispatch(ctx context.Context, batchNumber int64, 
 	var resBody []byte
 	req := w.client.R().
 		SetContext(ctx).
-		SetBody(body).
+		SetBody(events).
 		SetResult(&resBody).
 		SetError(&resBody)
 	req.Header.Set("Content-Type", "application/json")

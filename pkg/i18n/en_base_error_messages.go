@@ -161,4 +161,8 @@ var (
 	MsgInvalidDistributionMode                     = ffe("FF00222", "Invalid distribution mode for WebSocket: %s", http.StatusBadRequest)
 	MsgUnknownTLSConfiguration                     = ffe("FF00223", "Unknown TLS configuration: %s", http.StatusBadRequest)
 	MsgConfigurationNotValidated                   = ffe("FF00224", "Configuration not validated", http.StatusInternalServerError)
+	MsgWebSocketInterruptedSend                    = ffe("FF00225", "Interrupted waiting for WebSocket connection to send event")
+	MsgWebSocketInterruptedReceive                 = ffe("FF00226", "Interrupted waiting for WebSocket acknowledgment")
+	MsgWSErrorFromClient                           = ffe("FF00227", "Error received from WebSocket client: %s")
+	MsgWebSocketClosed                             = ffe("FF00228", "WebSocket '%s' closed")
 )
