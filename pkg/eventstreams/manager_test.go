@@ -26,23 +26,34 @@ import (
 
 func TestNewManagerFailMissingDefault(t *testing.T) {
 
-	_, err := NewEventStreamManager(context.Background(), &Config{})
+	_, err := NewEventStreamManager[testConfigType](context.Background(), &Config{}, &mockEventSource{})
 	assert.Regexp(t, "FF00217", err)
 
 }
 
+type mockEventSource struct {
+	validate func(ctx context.Context, conf *testConfigType) error
+	run      func(ctx context.Context, es *EventStreamSpec[testConfigType], checkpointSequenceId string, deliver Deliver) error
+}
+
+func (mes *mockEventSource) Run(ctx context.Context, es *EventStreamSpec[testConfigType], checkpointSequenceId string, deliver Deliver) error {
+	return mes.run(ctx, es, checkpointSequenceId, deliver)
+}
+
+func (mes *mockEventSource) Validate(ctx context.Context, conf *testConfigType) error {
+	return mes.validate(ctx, conf)
+}
+
 func TestNewManagerFailBadTLS(t *testing.T) {
 
-	_, err := NewEventStreamManager(context.Background(), &Config{
+	_, err := NewEventStreamManager[testConfigType](context.Background(), &Config{
 		TLSConfigs: map[string]*fftls.Config{
 			"tls0": {
 				Enabled: true,
 				CAFile:  t.TempDir(),
 			},
 		},
-		WebSocketDefaults: &ConfigWebsocketDefaults{},
-		WebhookDefaults:   &ConfigWebhookDefaults{},
-	})
+	}, &mockEventSource{})
 	assert.Regexp(t, "FF00153", err)
 
 }

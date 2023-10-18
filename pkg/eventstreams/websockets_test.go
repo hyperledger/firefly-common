@@ -54,7 +54,7 @@ func TestWSAttemptIgnoreWrongAcks(t *testing.T) {
 		DistributionMode: &dmw,
 	}, "ut_stream")
 
-	err := wsa.attemptDispatch(context.Background(), 0, 0, []*fftypes.JSONAny{})
+	err := wsa.attemptDispatch(context.Background(), 0, 0, []*Event{})
 	assert.NoError(t, err)
 
 	err = wsa.waitForAck(context.Background(), rc, 23456)
@@ -74,7 +74,7 @@ func TestWSattemptDispatchExitPushingEvent(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	err := wsa.attemptDispatch(ctx, 0, 0, []*fftypes.JSONAny{})
+	err := wsa.attemptDispatch(ctx, 0, 0, []*Event{})
 	assert.Regexp(t, "FF00225", err)
 
 }

@@ -38,8 +38,8 @@ type WebSocketConfig struct {
 }
 
 type WebSocketEventBatch struct {
-	BatchNumber int64              `ffstruct:"wsevent" json:"batchNumber"`
-	Events      []*fftypes.JSONAny `ffstruct:"wsevent" json:"events"`
+	BatchNumber int64    `ffstruct:"wsevent" json:"batchNumber"`
+	Events      []*Event `ffstruct:"wsevent" json:"events"`
 }
 
 // Store in DB as JSON
@@ -55,20 +55,8 @@ func (wc *WebSocketConfig) Value() (driver.Value, error) {
 	return fftypes.JSONValue(wc)
 }
 
-func (wc *WebSocketConfig) Validate(ctx context.Context, defaults *ConfigWebsocketDefaults) error {
-
-	if wc.DistributionMode == nil {
-		def := defaults.DefaultDistributionMode
-		wc.DistributionMode = &def
-	}
-
-	switch *wc.DistributionMode {
-	case DistributionModeLoadBalance, DistributionModeBroadcast:
-	default:
-		return i18n.NewError(ctx, i18n.MsgInvalidDistributionMode, *wc.DistributionMode)
-	}
-
-	return nil
+func (wc *WebSocketConfig) Validate(ctx context.Context, defaults *ConfigWebsocketDefaults, setDefaults bool) error {
+	return checkSet(ctx, setDefaults, "errorHandling", &wc.DistributionMode, defaults.DefaultDistributionMode, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "distmode", v) })
 }
 
 type webSocketAction struct {
@@ -85,7 +73,7 @@ func newWebSocketAction(wsChannels wsserver.WebSocketChannels, spec *WebSocketCo
 	}
 }
 
-func (w *webSocketAction) attemptDispatch(ctx context.Context, batchNumber int64, attempt int, events []*fftypes.JSONAny) error {
+func (w *webSocketAction) attemptDispatch(ctx context.Context, batchNumber int64, attempt int, events []*Event) error {
 	var err error
 
 	// Get a blocking channel to send and receive on our chosen namespace

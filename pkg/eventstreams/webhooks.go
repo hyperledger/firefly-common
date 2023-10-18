@@ -65,35 +65,35 @@ func (wc *WebhookConfig) Validate(ctx context.Context, tlsConfigs map[string]*tl
 	return nil
 }
 
-type webhookAction struct {
-	es                *esManager
+type webhookAction[CT any] struct {
+	esm               *esManager[CT]
 	disablePrivateIPs bool
 	spec              *WebhookConfig
 	client            *resty.Client
 }
 
-func (es *esManager) newWebhookAction(ctx context.Context, spec *WebhookConfig) (*webhookAction, error) {
+func (esm *esManager[CT]) newWebhookAction(ctx context.Context, spec *WebhookConfig) (*webhookAction[CT], error) {
 	if !spec.validated {
 		return nil, i18n.NewError(ctx, i18n.MsgConfigurationNotValidated)
 	}
 	conf := spec.HTTP
 	if conf == nil {
-		conf = &es.config.WebhookDefaults.HTTPConfig
+		conf = &esm.config.Defaults.WebhookDefaults.HTTPConfig
 	}
 	conf.TLSClientConfig = spec.tlsConfig
 	client := ffresty.NewWithConfig(ctx, ffresty.Config{
 		URL:        *spec.URL,
 		HTTPConfig: *conf,
 	})
-	return &webhookAction{
-		es:                es,
+	return &webhookAction[CT]{
+		esm:               esm,
 		spec:              spec,
-		disablePrivateIPs: es.config.WebhookDefaults.DisablePrivateIPs,
+		disablePrivateIPs: esm.config.DisablePrivateIPs,
 		client:            client,
 	}, nil
 }
 
-func (w *webhookAction) attemptDispatch(ctx context.Context, batchNumber int64, attempt int, events []*fftypes.JSONAny) error {
+func (w *webhookAction[CT]) attemptDispatch(ctx context.Context, batchNumber int64, attempt int, events []*Event) error {
 	// We perform DNS resolution before each attempt, to exclude private IP address ranges from the target
 	u, _ := url.Parse(*w.spec.URL)
 	addr, err := net.ResolveIPAddr("ip4", u.Hostname())
@@ -126,7 +126,7 @@ func (w *webhookAction) attemptDispatch(ctx context.Context, batchNumber int64, 
 }
 
 // isAddressBlocked allows blocking of all of the "private" address blocks defined by IPv4
-func (w *webhookAction) isAddressBlocked(ip *net.IPAddr) bool {
+func (w *webhookAction[CT]) isAddressBlocked(ip *net.IPAddr) bool {
 	ip4 := ip.IP.To4()
 	return w.disablePrivateIPs &&
 		(ip4[0] == 0 ||

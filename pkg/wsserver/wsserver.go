@@ -31,7 +31,7 @@ import (
 // WebSocketChannels is provided to allow us to do a blocking send to a namespace that will complete once a client connects on it
 // We also provide a channel to listen on for closing of the connection, to allow a select to wake on a blocking send
 type WebSocketChannels interface {
-	GetChannels(topic string) (senderChannel chan<- interface{}, broadcastChannel chan<- interface{}, receiverChannel <-chan *WebSocketCommandMessageOrError)
+	GetChannels(streamName string) (senderChannel chan<- interface{}, broadcastChannel chan<- interface{}, receiverChannel <-chan *WebSocketCommandMessageOrError)
 	SendReply(message interface{})
 }
 
@@ -46,17 +46,17 @@ type webSocketServer struct {
 	ctx               context.Context
 	processingTimeout time.Duration
 	mux               sync.Mutex
-	topics            map[string]*webSocketTopic
-	topicMap          map[string]map[string]*webSocketConnection
+	streams           map[string]*webSocketStream
+	streamMap         map[string]map[string]*webSocketConnection
 	replyMap          map[string]*webSocketConnection
-	newTopic          chan bool
+	newStream         chan bool
 	replyChannel      chan interface{}
 	upgrader          *websocket.Upgrader
 	connections       map[string]*webSocketConnection
 }
 
-type webSocketTopic struct {
-	topic            string
+type webSocketStream struct {
+	streamName       string
 	senderChannel    chan interface{}
 	broadcastChannel chan interface{}
 	receiverChannel  chan *WebSocketCommandMessageOrError
@@ -67,10 +67,10 @@ func NewWebSocketServer(bgCtx context.Context) WebSocketServer {
 	s := &webSocketServer{
 		ctx:               bgCtx,
 		connections:       make(map[string]*webSocketConnection),
-		topics:            make(map[string]*webSocketTopic),
-		topicMap:          make(map[string]map[string]*webSocketConnection),
+		streams:           make(map[string]*webSocketStream),
+		streamMap:         make(map[string]map[string]*webSocketConnection),
 		replyMap:          make(map[string]*webSocketConnection),
-		newTopic:          make(chan bool),
+		newStream:         make(chan bool),
 		replyChannel:      make(chan interface{}),
 		processingTimeout: 30 * time.Second,
 		upgrader: &websocket.Upgrader{
@@ -95,11 +95,11 @@ func (s *webSocketServer) Handler(w http.ResponseWriter, r *http.Request) {
 	s.connections[c.id] = c
 }
 
-func (s *webSocketServer) cycleTopic(connInfo string, t *webSocketTopic) {
+func (s *webSocketServer) cycleStream(connInfo string, t *webSocketStream) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 
-	// When a connection that was listening on a topic closes, we need to wake anyone
+	// When a connection that was listening on a stream closes, we need to wake anyone
 	// that was listening for a response
 	select {
 	case t.receiverChannel <- &WebSocketCommandMessageOrError{Err: i18n.NewError(s.ctx, i18n.MsgWebSocketClosed, connInfo)}:
@@ -112,8 +112,8 @@ func (s *webSocketServer) connectionClosed(c *webSocketConnection) {
 	defer s.mux.Unlock()
 	delete(s.connections, c.id)
 	delete(s.replyMap, c.id)
-	for _, topic := range c.topics {
-		delete(s.topicMap[topic.topic], c.id)
+	for _, stream := range c.streams {
+		delete(s.streamMap[stream.streamName], c.id)
 	}
 }
 
@@ -123,35 +123,35 @@ func (s *webSocketServer) Close() {
 	}
 }
 
-func (s *webSocketServer) getTopic(topic string) *webSocketTopic {
+func (s *webSocketServer) getStream(stream string) *webSocketStream {
 	s.mux.Lock()
-	t, exists := s.topics[topic]
+	t, exists := s.streams[stream]
 	if !exists {
-		t = &webSocketTopic{
-			topic:            topic,
+		t = &webSocketStream{
+			streamName:       stream,
 			senderChannel:    make(chan interface{}),
 			broadcastChannel: make(chan interface{}),
 			receiverChannel:  make(chan *WebSocketCommandMessageOrError, 10),
 		}
-		s.topics[topic] = t
-		s.topicMap[topic] = make(map[string]*webSocketConnection)
+		s.streams[stream] = t
+		s.streamMap[stream] = make(map[string]*webSocketConnection)
 	}
 	s.mux.Unlock()
 	if !exists {
-		// Signal to the broadcaster that a new topic has been added
-		s.newTopic <- true
+		// Signal to the broadcaster that a new stream has been added
+		s.newStream <- true
 	}
 	return t
 }
 
-func (s *webSocketServer) GetChannels(topic string) (chan<- interface{}, chan<- interface{}, <-chan *WebSocketCommandMessageOrError) {
-	t := s.getTopic(topic)
+func (s *webSocketServer) GetChannels(stream string) (chan<- interface{}, chan<- interface{}, <-chan *WebSocketCommandMessageOrError) {
+	t := s.getStream(stream)
 	return t.senderChannel, t.broadcastChannel, t.receiverChannel
 }
 
-func (s *webSocketServer) ListenOnTopic(c *webSocketConnection, topic string) {
-	// Track that this connection is interested in this topic
-	s.topicMap[topic][c.id] = c
+func (s *webSocketServer) ListenOnStream(c *webSocketConnection, stream string) {
+	// Track that this connection is interested in this stream
+	s.streamMap[stream][c.id] = c
 }
 
 func (s *webSocketServer) ListenForReplies(c *webSocketConnection) {
@@ -163,20 +163,20 @@ func (s *webSocketServer) SendReply(message interface{}) {
 }
 
 func (s *webSocketServer) processBroadcasts() {
-	var topics []string
+	var streams []string
 	buildCases := func() []reflect.SelectCase {
 		// only hold the lock while we're building the list of cases (not while doing the select)
 		s.mux.Lock()
 		defer s.mux.Unlock()
-		topics = make([]string, len(s.topics))
-		cases := make([]reflect.SelectCase, len(s.topics)+1)
+		streams = make([]string, len(s.streams))
+		cases := make([]reflect.SelectCase, len(s.streams)+1)
 		i := 0
-		for _, t := range s.topics {
+		for _, t := range s.streams {
 			cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(t.broadcastChannel)}
-			topics[i] = t.topic
+			streams[i] = t.streamName
 			i++
 		}
-		cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.newTopic)}
+		cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.newStream)}
 		return cases
 	}
 	cases := buildCases()
@@ -188,14 +188,14 @@ func (s *webSocketServer) processBroadcasts() {
 		}
 
 		if chosen == len(cases)-1 {
-			// Addition of a new topic
+			// Addition of a new stream
 			cases = buildCases()
 		} else {
-			// Message on one of the existing topics
-			// Gather all connections interested in this topic and send to them
+			// Message on one of the existing streams
+			// Gather all connections interested in this stream and send to them
 			s.mux.Lock()
-			topic := topics[chosen]
-			wsconns := getConnListFromMap(s.topicMap[topic])
+			stream := streams[chosen]
+			wsconns := getConnListFromMap(s.streamMap[stream])
 			s.mux.Unlock()
 			s.broadcastToConnections(wsconns, value.Interface())
 		}

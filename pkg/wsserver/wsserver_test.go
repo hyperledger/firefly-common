@@ -87,7 +87,7 @@ func TestConnectSendReceiveCycle(t *testing.T) {
 
 }
 
-func TestConnectTopicIsolation(t *testing.T) {
+func TestConnectStreamIsolation(t *testing.T) {
 	assert := assert.New(t)
 
 	w, ts := newTestWebSocketServer()
@@ -102,17 +102,17 @@ func TestConnectTopicIsolation(t *testing.T) {
 	assert.NoError(err)
 
 	c1.WriteJSON(&WebSocketCommandMessage{
-		Type:  "listen",
-		Topic: "topic1",
+		Type:   "listen",
+		Stream: "stream1",
 	})
 
 	c2.WriteJSON(&WebSocketCommandMessage{
-		Type:  "listen",
-		Topic: "topic2",
+		Type:   "listen",
+		Stream: "stream2",
 	})
 
-	s1, _, r1 := w.GetChannels("topic1")
-	s2, _, r2 := w.GetChannels("topic2")
+	s1, _, r1 := w.GetChannels("stream1")
+	s2, _, r2 := w.GetChannels("stream2")
 
 	s1 <- "Hello Number 1"
 	s2 <- "Hello Number 2"
@@ -121,8 +121,8 @@ func TestConnectTopicIsolation(t *testing.T) {
 	c1.ReadJSON(&val)
 	assert.Equal("Hello Number 1", val)
 	c1.WriteJSON(&WebSocketCommandMessage{
-		Type:  "ack",
-		Topic: "topic1",
+		Type:   "ack",
+		Stream: "stream1",
 	})
 	msgOrErr := <-r1
 	assert.NoError(msgOrErr.Err)
@@ -130,8 +130,8 @@ func TestConnectTopicIsolation(t *testing.T) {
 	c2.ReadJSON(&val)
 	assert.Equal("Hello Number 2", val)
 	c2.WriteJSON(&WebSocketCommandMessage{
-		Type:  "ack",
-		Topic: "topic2",
+		Type:   "ack",
+		Stream: "stream2",
 	})
 	msgOrErr = <-r2
 	assert.NoError(msgOrErr.Err)
@@ -190,16 +190,16 @@ func TestSpuriousAckProcessing(t *testing.T) {
 	assert.NoError(err)
 
 	// Drop depth to 1 for spurious ack processing
-	topic := w.getTopic("mytopic")
-	topic.receiverChannel = make(chan *WebSocketCommandMessageOrError, 1)
+	stream := w.getStream("mystream")
+	stream.receiverChannel = make(chan *WebSocketCommandMessageOrError, 1)
 
 	c.WriteJSON(&WebSocketCommandMessage{
-		Type:  "ack",
-		Topic: "mytopic",
+		Type:   "ack",
+		Stream: "mystream",
 	})
 	c.WriteJSON(&WebSocketCommandMessage{
-		Type:  "ack",
-		Topic: "mytopic",
+		Type:   "ack",
+		Stream: "mystream",
 	})
 
 	for len(w.connections) > 0 {
@@ -222,16 +222,16 @@ func TestSpuriousNackProcessing(t *testing.T) {
 	assert.NoError(err)
 
 	// Drop depth to 1 for spurious ack processing
-	topic := w.getTopic("mytopic")
-	topic.receiverChannel = make(chan *WebSocketCommandMessageOrError, 1)
+	stream := w.getStream("mystream")
+	stream.receiverChannel = make(chan *WebSocketCommandMessageOrError, 1)
 
 	c.WriteJSON(&WebSocketCommandMessage{
-		Type:  "ack",
-		Topic: "mytopic",
+		Type:   "ack",
+		Stream: "mystream",
 	})
 	c.WriteJSON(&WebSocketCommandMessage{
-		Type:  "error",
-		Topic: "mytopic",
+		Type:   "error",
+		Stream: "mystream",
 	})
 
 	for len(w.connections) > 0 {
@@ -266,21 +266,21 @@ func TestBroadcast(t *testing.T) {
 	u, _ := url.Parse(ts.URL)
 	u.Scheme = "ws"
 	u.Path = "/ws"
-	topic := "banana"
+	stream := "banana"
 	c, _, err := ws.DefaultDialer.Dial(u.String(), nil)
 	assert.NoError(err)
 
 	c.WriteJSON(&WebSocketCommandMessage{
-		Type:  "listen",
-		Topic: topic,
+		Type:   "listen",
+		Stream: stream,
 	})
 
-	// Wait until the client has subscribed to the topic before proceeding
-	for len(w.topicMap[topic]) == 0 {
+	// Wait until the client has subscribed to the stream before proceeding
+	for len(w.streamMap[stream]) == 0 {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	_, b, _ := w.GetChannels(topic)
+	_, b, _ := w.GetChannels(stream)
 	b <- "Hello World"
 
 	var val string
@@ -295,7 +295,7 @@ func TestBroadcast(t *testing.T) {
 	w.Close()
 }
 
-func TestBroadcastDefaultTopic(t *testing.T) {
+func TestBroadcastDefaultStream(t *testing.T) {
 	assert := assert.New(t)
 
 	w, ts := newTestWebSocketServer()
@@ -304,7 +304,7 @@ func TestBroadcastDefaultTopic(t *testing.T) {
 	u, _ := url.Parse(ts.URL)
 	u.Scheme = "ws"
 	u.Path = "/ws"
-	topic := ""
+	stream := ""
 	c, _, err := ws.DefaultDialer.Dial(u.String(), nil)
 	assert.NoError(err)
 
@@ -312,12 +312,12 @@ func TestBroadcastDefaultTopic(t *testing.T) {
 		Type: "listen",
 	})
 
-	// Wait until the client has subscribed to the topic before proceeding
-	for len(w.topicMap[topic]) == 0 {
+	// Wait until the client has subscribed to the stream before proceeding
+	for len(w.streamMap[stream]) == 0 {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	_, b, _ := w.GetChannels(topic)
+	_, b, _ := w.GetChannels(stream)
 	b <- "Hello World"
 
 	var val string
@@ -341,7 +341,7 @@ func TestRecvNotOk(t *testing.T) {
 	u, _ := url.Parse(ts.URL)
 	u.Scheme = "ws"
 	u.Path = "/ws"
-	topic := ""
+	stream := ""
 	c, _, err := ws.DefaultDialer.Dial(u.String(), nil)
 	assert.NoError(err)
 
@@ -349,12 +349,12 @@ func TestRecvNotOk(t *testing.T) {
 		Type: "listen",
 	})
 
-	// Wait until the client has subscribed to the topic before proceeding
-	for len(w.topicMap[topic]) == 0 {
+	// Wait until the client has subscribed to the stream before proceeding
+	for len(w.streamMap[stream]) == 0 {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	_, b, _ := w.GetChannels(topic)
+	_, b, _ := w.GetChannels(stream)
 	close(b)
 	w.Close()
 }
@@ -375,7 +375,7 @@ func TestSendReply(t *testing.T) {
 		Type: "listenReplies",
 	})
 
-	// Wait until the client has subscribed to the topic before proceeding
+	// Wait until the client has subscribed to the stream before proceeding
 	for len(w.replyMap) == 0 {
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -387,21 +387,21 @@ func TestSendReply(t *testing.T) {
 	assert.Equal("Hello World", val)
 }
 
-func TestListenTopicClosing(t *testing.T) {
+func TestListenStreamClosing(t *testing.T) {
 
 	w, ts := newTestWebSocketServer()
 	defer ts.Close()
-	w.getTopic("test")
+	w.getStream("test")
 
 	c := &webSocketConnection{
-		server:   w,
-		topics:   make(map[string]*webSocketTopic),
-		closing:  make(chan struct{}),
-		newTopic: make(chan bool),
+		server:    w,
+		streams:   make(map[string]*webSocketStream),
+		closing:   make(chan struct{}),
+		newStream: make(chan bool),
 	}
 	close(c.closing)
-	c.listenTopic(&webSocketTopic{
-		topic: "test",
+	c.listenStream(&webSocketStream{
+		streamName: "test",
 	})
 }
 
@@ -409,13 +409,13 @@ func TestBroadcastClosing(t *testing.T) {
 
 	w, ts := newTestWebSocketServer()
 	defer ts.Close()
-	w.getTopic("test")
+	w.getStream("test")
 
 	c := &webSocketConnection{
-		server:   w,
-		topics:   make(map[string]*webSocketTopic),
-		closing:  make(chan struct{}),
-		newTopic: make(chan bool),
+		server:    w,
+		streams:   make(map[string]*webSocketStream),
+		closing:   make(chan struct{}),
+		newStream: make(chan bool),
 	}
 	close(c.closing)
 	// Check this doesn't block
