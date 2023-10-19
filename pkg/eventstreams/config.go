@@ -132,6 +132,10 @@ func GenerateConfig(ctx context.Context) *Config {
 	return &Config{
 		TLSConfigs:        tlsConfigs,
 		DisablePrivateIPs: RootConfig.GetBool(ConfigDisablePrivateIPs),
+		Checkpoints: CheckpointsTuningConfig{
+			Asynchronous:            CheckpointsConfig.GetBool(ConfigCheckpointsAsynchronous),
+			UnmatchedEventThreshold: CheckpointsConfig.GetInt64(ConfigCheckpointsUnmatchedEventThreshold),
+		},
 		Defaults: EventStreamDefaults{
 			ErrorHandling:     fftypes.FFEnum(DefaultsConfig.GetString(ConfigDefaultsErrorHandling)),
 			BatchSize:         DefaultsConfig.GetInt(ConfigDefaultsBatchSize),

@@ -98,6 +98,8 @@ func (as *activeStream[CT, DT]) loadCheckpoint() (sequencedID string, err error)
 		}
 		if cp != nil && cp.SequenceID != nil {
 			sequencedID = *cp.SequenceID
+		} else if as.spec.InitialSequenceID != nil {
+			sequencedID = *as.spec.InitialSequenceID
 		}
 		return true, err
 	})
@@ -226,8 +228,9 @@ func (as *activeStream[CT, DT]) pushCheckpoint() bool {
 func (as *activeStream[CT, DT]) popCheckpoint() string {
 	as.checkpointLock.Lock()
 	defer as.checkpointLock.Unlock()
+	checkpointSequenceID := as.dispatchedCheckpoint
 	as.dispatchedCheckpoint = as.queuedCheckpoint
-	return as.dispatchedCheckpoint
+	return checkpointSequenceID
 }
 
 func (as *activeStream[CT, DT]) checkpointRoutine() {
@@ -250,6 +253,8 @@ func (as *activeStream[CT, DT]) checkpointRoutine() {
 			log.L(as.ctx).Warnf("checkpoint cancelled: %s", err)
 			return
 		}
+		// lazy write of stored checkpoint back to stats
+		as.Checkpoint = checkpointSequenceID
 	}
 }
 

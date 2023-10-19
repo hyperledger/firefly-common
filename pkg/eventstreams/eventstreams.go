@@ -378,7 +378,10 @@ func (es *eventStream[CT, DT]) stopOrDelete(ctx context.Context, targetStatus Ev
 			return err
 		}
 	}
+	return es.suspend(ctx)
+}
 
+func (es *eventStream[CT, DT]) suspend(ctx context.Context) error {
 	// initiate a stop, if we're started
 	stopping := es.requestStop(ctx)
 	if stopping != nil {
@@ -401,15 +404,15 @@ func (es *eventStream[CT, DT]) ensureActive() {
 	}
 }
 
-func (es *eventStream[CT, DT]) Stop(ctx context.Context) error {
+func (es *eventStream[CT, DT]) stop(ctx context.Context) error {
 	return es.stopOrDelete(ctx, EventStreamStatusStopped)
 }
 
-func (es *eventStream[CT, DT]) Delete(ctx context.Context) error {
+func (es *eventStream[CT, DT]) delete(ctx context.Context) error {
 	return es.stopOrDelete(ctx, EventStreamStatusDeleted)
 }
 
-func (es *eventStream[CT, DT]) Start(ctx context.Context) error {
+func (es *eventStream[CT, DT]) start(ctx context.Context) error {
 	startedStatus := EventStreamStatusStarted
 	_, newPersistedStatus, _, err := es.checkSetStatus(ctx, &startedStatus)
 	if err != nil {

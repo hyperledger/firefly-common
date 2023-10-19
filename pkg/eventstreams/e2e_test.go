@@ -127,26 +127,81 @@ func TestE2E_DeliveryWebSockets(t *testing.T) {
 
 	expectedNumber := 1
 	for i := 0; i < 10; i++ {
-
-		data := <-wsc.Receive()
-		var batch EventBatch[testData]
-		err = json.Unmarshal(data, &batch)
-		assert.NoError(t, err)
-		// each batch should be 10
-		assert.Len(t, batch.Events, 10)
-		for _, e := range batch.Events {
-			assert.Equal(t, "topic_1", e.Topic)
-			// messages are published 0,1,2 over 10 topics, and we're only getting one of those topics
-			expectedNumber += 10
-		}
-
-		err = wsc.Send(ctx, []byte(fmt.Sprintf(`{"type":"ack","stream":"stream1","batchNumber":%d}`, batch.BatchNumber)))
+		receiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {
+			// each batch should be 10
+			assert.Len(t, batch.Events, 10)
+			for _, e := range batch.Events {
+				assert.Equal(t, "topic_1", e.Topic)
+				// messages are published 0,1,2 over 10 topics, and we're only getting one of those topics
+				expectedNumber += 10
+			}
+		})
 	}
 
 	// Check we ran the loop just once, and from the empty string for the checkpoint (as there was no InitialSequenceID)
 	done()
 	assert.Equal(t, "", ts.sequenceStartedWith)
 	assert.Equal(t, 1, ts.startCount)
+}
+
+func TestE2E_WebsocketDeliveryRestartReset(t *testing.T) {
+	ctx, p, wss, wsc, done := setupE2ETest(t)
+	defer done()
+
+	ts := &testSource{started: make(chan struct{})}
+	close(ts.started) // start delivery immediately - will block as no WS connected
+
+	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig(ctx), p, wss, ts)
+	assert.NoError(t, err)
+
+	// Create a stream to sub-select one topic
+	es1 := &EventStreamSpec[testESConfig]{
+		Name:        ptrTo("stream1"),
+		TopicFilter: ptrTo("topic_1"), // only one of the topics
+		Type:        &EventStreamTypeWebSocket,
+		BatchSize:   ptrTo(10),
+	}
+	created, err := mgr.UpsertStream(ctx, es1)
+	assert.NoError(t, err)
+	assert.True(t, created)
+
+	// Connect our websocket and start it
+	err = wsc.Connect()
+	assert.NoError(t, err)
+	err = wsc.Send(ctx, []byte(`{"type":"start","stream":"stream1"}`))
+	assert.NoError(t, err)
+
+	// Get the first batch
+	receiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {})
+	assert.Equal(t, "", ts.sequenceStartedWith)
+	assert.Equal(t, 1, ts.startCount)
+
+	// Wait for the checkpoint to be reflected in the status
+	var ess *EventStreamWithStatus[testESConfig]
+	for ess == nil || ess.Statistics == nil || ess.Statistics.Checkpoint == "" {
+		time.Sleep(1 * time.Millisecond)
+		ess, err = mgr.GetStreamByID(ctx, es1.ID)
+		assert.NoError(t, err)
+	}
+
+	// Restart and check we get called with the checkpoint - note we don't reconnect the
+	// websocket or restart that - it remains "started" from the websocket protocol
+	// perspective throughout
+	err = mgr.StopStream(ctx, es1.ID)
+	assert.NoError(t, err)
+	err = mgr.StartStream(ctx, es1.ID)
+	assert.NoError(t, err)
+	receiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {})
+	assert.Equal(t, "000000000009", ts.sequenceStartedWith)
+	assert.Equal(t, 2, ts.startCount)
+
+	// Reset it and check we get the reset
+	err = mgr.ResetStream(ctx, es1.ID, "first")
+	assert.NoError(t, err)
+	receiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {})
+	assert.Equal(t, "first", ts.sequenceStartedWith)
+	assert.Equal(t, 3, ts.startCount)
+
 }
 
 // This test demonstrates the CRUD features
@@ -229,7 +284,17 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 
 }
 
-func setupE2ETest(t *testing.T) (context.Context, Persistence[testESConfig], wsserver.WebSocketChannels, wsclient.WSClient, func()) {
+func receiveAck(ctx context.Context, t *testing.T, wsc wsclient.WSClient, cb func(batch *EventBatch[testData])) {
+	data := <-wsc.Receive()
+	var batch EventBatch[testData]
+	err := json.Unmarshal(data, &batch)
+	assert.NoError(t, err)
+	cb(&batch)
+	err = wsc.Send(ctx, []byte(fmt.Sprintf(`{"type":"ack","stream":"stream1","batchNumber":%d}`, batch.BatchNumber)))
+	assert.NoError(t, err)
+}
+
+func setupE2ETest(t *testing.T, extraSetup ...func()) (context.Context, Persistence[testESConfig], wsserver.WebSocketChannels, wsclient.WSClient, func()) {
 	logrus.SetLevel(logrus.TraceLevel)
 
 	ctx := context.Background()
@@ -245,6 +310,10 @@ func setupE2ETest(t *testing.T) (context.Context, Persistence[testESConfig], wss
 	dbConf.Set(dbsql.SQLConfMigrationsAuto, true)
 	dbConf.Set(dbsql.SQLConfMigrationsDirectory, "../../test/es_demo_migrations")
 	dbConf.Set(dbsql.SQLConfMaxConnections, 1)
+
+	for _, fn := range extraSetup {
+		fn()
+	}
 
 	db, err := dbsql.NewSQLiteProvider(ctx, dbConf)
 	assert.NoError(t, err)

@@ -185,7 +185,7 @@ func (esm *esManager[CT, DT]) UpsertStream(ctx context.Context, esSpec *EventStr
 
 	// Runtime handling now the DB it updated
 	if existing != nil {
-		if err := existing.Stop(ctx); err != nil {
+		if err := existing.stop(ctx); err != nil {
 			return false, err
 		}
 	}
@@ -205,7 +205,7 @@ func (esm *esManager[CT, DT]) DeleteStream(ctx context.Context, id *fftypes.UUID
 	if es == nil {
 		return i18n.NewError(ctx, i18n.Msg404NoResult)
 	}
-	if err := es.Delete(ctx); err != nil {
+	if err := es.delete(ctx); err != nil {
 		return err
 	}
 	// Now we can delete it fully from the DB
@@ -221,7 +221,7 @@ func (esm *esManager[CT, DT]) StopStream(ctx context.Context, id *fftypes.UUID) 
 	if es == nil {
 		return i18n.NewError(ctx, i18n.Msg404NoResult)
 	}
-	return es.Stop(ctx)
+	return es.stop(ctx)
 }
 
 func (esm *esManager[CT, DT]) ResetStream(ctx context.Context, id *fftypes.UUID, sequenceID string) error {
@@ -229,15 +229,16 @@ func (esm *esManager[CT, DT]) ResetStream(ctx context.Context, id *fftypes.UUID,
 	if es == nil {
 		return i18n.NewError(ctx, i18n.Msg404NoResult)
 	}
-	// stop any active stream
-	if err := es.Stop(ctx); err != nil {
+	// suspend any active stream
+	if err := es.suspend(ctx); err != nil {
 		return err
 	}
 	// delete any existing checkpoint
 	if err := esm.persistence.Checkpoints().DeleteMany(ctx, CheckpointFilters.NewFilter(ctx).Eq("id", id)); err != nil {
 		return err
 	}
-	// store the initial_sequence_id back to the object
+	// store the initial_sequence_id back to the object, and update our in-memory record
+	es.spec.InitialSequenceID = &sequenceID
 	if err := esm.persistence.EventStreams().UpdateSparse(ctx, &EventStreamSpec[CT]{
 		ResourceBase: dbsql.ResourceBase{
 			ID: id,
@@ -248,7 +249,7 @@ func (esm *esManager[CT, DT]) ResetStream(ctx context.Context, id *fftypes.UUID,
 	}
 	// if the spec status is running, restart it
 	if *es.spec.Status == EventStreamStatusStarted {
-		return es.Start(ctx)
+		return es.start(ctx)
 	}
 	return nil
 }
@@ -258,7 +259,7 @@ func (esm *esManager[CT, DT]) StartStream(ctx context.Context, id *fftypes.UUID)
 	if es == nil {
 		return i18n.NewError(ctx, i18n.Msg404NoResult)
 	}
-	return es.Start(ctx)
+	return es.start(ctx)
 }
 
 func (esm *esManager[CT, DT]) enrichGetStream(ctx context.Context, esSpec *EventStreamSpec[CT]) *EventStreamWithStatus[CT] {
@@ -297,7 +298,7 @@ func (esm *esManager[CT, DT]) GetStreamByID(ctx context.Context, id *fftypes.UUI
 
 func (esm *esManager[CT, DT]) Close(ctx context.Context) {
 	for _, es := range esm.streams {
-		if err := es.Stop(ctx); err != nil {
+		if err := es.stop(ctx); err != nil {
 			log.L(ctx).Warnf("Failed to stop event stream %s: %s", es.spec.ID, err)
 		}
 	}
