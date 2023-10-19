@@ -21,11 +21,13 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/Masterminds/squirrel"
 	sq "github.com/Masterminds/squirrel"
+	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/log"
@@ -117,6 +119,41 @@ type TestHistoryCRUD struct {
 	events      []ChangeEventType
 	postCommit  func()
 	postCommits int
+}
+
+type testSQLiteProvider struct {
+	db     *Database
+	t      *testing.T
+	config config.Section
+}
+
+// newTestProvider creates a real in-memory database provider for e2e testing
+func newSQLiteTestProvider(t *testing.T) (*testSQLiteProvider, func()) {
+	conf := config.RootSection("unittest.db")
+	conf.AddKnownKey("url", "test")
+
+	InitSQLiteConfig(conf)
+
+	dir, err := os.MkdirTemp("", "")
+	assert.NoError(t, err)
+	conf.Set(SQLConfDatasourceURL, "file::memory:")
+	conf.Set(SQLConfMigrationsAuto, true)
+	conf.Set(SQLConfMigrationsDirectory, "../../test/dbmigrations")
+	conf.Set(SQLConfMaxConnections, 1)
+
+	sql, err := NewSQLiteProvider(context.Background(), conf)
+	assert.NoError(t, err)
+	tp := &testSQLiteProvider{
+		db:     sql,
+		t:      t,
+		config: conf,
+	}
+	assert.Equal(t, "sqlite3", sql.provider.(*sqLiteProvider).Name())
+
+	return tp, func() {
+		sql.Close()
+		_ = os.RemoveAll(dir)
+	}
 }
 
 func newCRUDCollection(db *Database, ns string) *TestCRUD {
@@ -293,7 +330,7 @@ func strPtr(s string) *string {
 func TestCRUDWithDBEnd2End(t *testing.T) {
 	log.SetLevel("trace")
 
-	db, done := newSQLiteTestProvider(t)
+	sql, done := newSQLiteTestProvider(t)
 	defer done()
 	ctx := context.Background()
 
@@ -308,7 +345,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 		Field3: fftypes.JSONAnyPtr(`{"some":"stuff"}`),
 	}
 
-	collection := newCRUDCollection(&db.Database, "ns1")
+	collection := newCRUDCollection(sql.db, "ns1")
 	var iCrud CRUD[*TestCRUDable] = collection.CrudBase
 	iCrud.Validate()
 
@@ -485,7 +522,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 func TestHistoryExampleNoNSOrUpdateColumn(t *testing.T) {
 	log.SetLevel("trace")
 
-	db, done := newSQLiteTestProvider(t)
+	sql, done := newSQLiteTestProvider(t)
 	defer done()
 	ctx := context.Background()
 
@@ -507,7 +544,7 @@ func TestHistoryExampleNoNSOrUpdateColumn(t *testing.T) {
 		})
 	}
 
-	collection := newHistoryCollection(&db.Database)
+	collection := newHistoryCollection(sql.db)
 	var iCrud CRUD[*TestHistory] = collection.CrudBase
 	iCrud.Validate()
 
@@ -583,12 +620,12 @@ func TestHistoryExampleNoNSOrUpdateColumn(t *testing.T) {
 func TestLeftJOINExample(t *testing.T) {
 	log.SetLevel("trace")
 
-	db, done := newSQLiteTestProvider(t)
+	sql, done := newSQLiteTestProvider(t)
 	defer done()
 	ctx := context.Background()
 
-	crudables := newCRUDCollection(&db.Database, "ns1")
-	linkables := newLinkableCollection(&db.Database, "ns1")
+	crudables := newCRUDCollection(sql.db, "ns1")
+	linkables := newLinkableCollection(sql.db, "ns1")
 
 	c1 := &TestCRUDable{
 		ResourceBase: ResourceBase{
