@@ -96,6 +96,7 @@ func InitConfig(conf config.Section) {
 
 	DefaultsConfig = conf.SubSection("defaults")
 
+	CheckpointsConfig = conf.SubSection("checkpoints")
 	CheckpointsConfig.AddKnownKey(ConfigCheckpointsAsynchronous, true)
 	CheckpointsConfig.AddKnownKey(ConfigCheckpointsUnmatchedEventThreshold, 250)
 
@@ -113,6 +114,7 @@ func InitConfig(conf config.Section) {
 	WebSocketsDefaultsConfig.AddKnownKey(ConfigWebSocketsDistributionMode, DistributionModeLoadBalance)
 
 	RetrySection = conf.SubSection("retry")
+	retry.InitConfig(RetrySection)
 }
 
 // Optional function to generate config directly from YAML configuration using the config package.

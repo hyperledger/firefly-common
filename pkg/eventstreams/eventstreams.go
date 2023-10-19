@@ -96,7 +96,7 @@ func checkSet[T any](ctx context.Context, storeDefaults bool, fieldName string, 
 		v = defValue
 	}
 	log.L(ctx).Tracef("Resolved value '%v' for field '%s'", v, fieldName)
-	if check(v) {
+	if !check(v) {
 		return i18n.NewError(ctx, i18n.MsgInvalidValue, v, fieldName)
 	}
 	return nil
@@ -117,6 +117,9 @@ func (esc *EventStreamSpec[CT]) Validate(ctx context.Context, tlsConfigs map[str
 		}
 	}
 	if err := fftypes.ValidateFFNameField(ctx, *esc.Name, "name"); err != nil {
+		return err
+	}
+	if err := checkSet(ctx, setDefaults, "status", &esc.Status, EventStreamStatusStarted, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "esstatus", v) }); err != nil {
 		return err
 	}
 	if err := checkSet(ctx, setDefaults, "batchSize", &esc.BatchSize, defaults.BatchSize, func(v int) bool { return v > 0 }); err != nil {
@@ -158,14 +161,14 @@ func (esc *EventStreamSpec[CT]) Validate(ctx context.Context, tlsConfigs map[str
 	return nil
 }
 
-type EventStreamStatus string
+type EventStreamStatus = fftypes.FFEnum
 
-const (
-	EventStreamStatusStarted         EventStreamStatus = "started"
-	EventStreamStatusStopped         EventStreamStatus = "stopped"
-	EventStreamStatusDeleted         EventStreamStatus = "deleted"
-	EventStreamStatusStopping        EventStreamStatus = "stopping"         // not persisted
-	EventStreamStatusStoppingDeleted EventStreamStatus = "stopping_deleted" // not persisted
+var (
+	EventStreamStatusStarted         = fftypes.FFEnumValue("esstatus", "started")
+	EventStreamStatusStopped         = fftypes.FFEnumValue("esstatus", "stopped")
+	EventStreamStatusDeleted         = fftypes.FFEnumValue("esstatus", "deleted")
+	EventStreamStatusStopping        = fftypes.FFEnumValue("esstatus", "stopping")         // not persisted
+	EventStreamStatusStoppingDeleted = fftypes.FFEnumValue("esstatus", "stopping_deleted") // not persisted
 )
 
 type EventStreamStatistics struct {

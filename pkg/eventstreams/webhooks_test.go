@@ -46,7 +46,7 @@ func newTestWebhooks(t *testing.T, whc *WebhookConfig, tweaks ...func()) *webhoo
 	}
 
 	esConfig := GenerateConfig(ctx)
-	ies, err := NewEventStreamManager[testConfigType](ctx, esConfig, &mockEventSource{})
+	ies, err := NewEventStreamManager[testConfigType](ctx, esConfig, nil, nil, &mockEventSource{})
 	assert.NoError(t, err)
 	es := ies.(*esManager[testConfigType])
 

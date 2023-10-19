@@ -26,7 +26,7 @@ import (
 
 func TestNewManagerFailMissingDefault(t *testing.T) {
 
-	_, err := NewEventStreamManager[testConfigType](context.Background(), &Config{}, &mockEventSource{})
+	_, err := NewEventStreamManager[testConfigType](context.Background(), &Config{}, nil, nil, &mockEventSource{})
 	assert.Regexp(t, "FF00217", err)
 
 }
@@ -45,7 +45,6 @@ func (mes *mockEventSource) Validate(ctx context.Context, conf *testConfigType) 
 }
 
 func TestNewManagerFailBadTLS(t *testing.T) {
-
 	_, err := NewEventStreamManager[testConfigType](context.Background(), &Config{
 		TLSConfigs: map[string]*fftls.Config{
 			"tls0": {
@@ -53,7 +52,11 @@ func TestNewManagerFailBadTLS(t *testing.T) {
 				CAFile:  t.TempDir(),
 			},
 		},
-	}, &mockEventSource{})
+	}, nil, nil, &mockEventSource{})
 	assert.Regexp(t, "FF00153", err)
 
+}
+
+func strptr(s string) *string {
+	return &s
 }

@@ -33,6 +33,7 @@ import (
 type Manager[CT any] interface {
 	UpsertStream(ctx context.Context, esSpec *EventStreamSpec[CT]) (bool, error)
 	DeleteStream(ctx context.Context, esSpec *EventStreamSpec[CT]) error
+	GetStreamByID(ctx context.Context, id *fftypes.UUID, opts ...dbsql.GetOption) (*EventStreamSpec[CT], error)
 	ListStreams(ctx context.Context, filter ffapi.Filter) ([]*EventStreamSpec[CT], *ffapi.FilterResult, error)
 	Close(ctx context.Context)
 }
@@ -73,7 +74,7 @@ type esManager[CT any] struct {
 	runtime     Runtime[CT]
 }
 
-func NewEventStreamManager[CT any](ctx context.Context, config *Config, source Runtime[CT]) (es Manager[CT], err error) {
+func NewEventStreamManager[CT any](ctx context.Context, config *Config, p Persistence[CT], wsChannels wsserver.WebSocketChannels, source Runtime[CT]) (es Manager[CT], err error) {
 	// Parse the TLS configs up front
 	tlsConfigs := make(map[string]*tls.Config)
 	for name, tlsJSONConf := range config.TLSConfigs {
@@ -83,10 +84,12 @@ func NewEventStreamManager[CT any](ctx context.Context, config *Config, source R
 		}
 	}
 	return &esManager[CT]{
-		config:     *config,
-		tlsConfigs: tlsConfigs,
-		runtime:    source,
-		streams:    map[fftypes.UUID]*eventStream[CT]{},
+		config:      *config,
+		tlsConfigs:  tlsConfigs,
+		runtime:     source,
+		persistence: p,
+		wsChannels:  wsChannels,
+		streams:     map[fftypes.UUID]*eventStream[CT]{},
 	}, nil
 }
 
@@ -176,6 +179,10 @@ func (esm *esManager[CT]) DeleteStream(ctx context.Context, esSpec *EventStreamS
 
 func (esm *esManager[CT]) ListStreams(ctx context.Context, filter ffapi.Filter) ([]*EventStreamSpec[CT], *ffapi.FilterResult, error) {
 	return esm.persistence.EventStreams().GetMany(ctx, filter)
+}
+
+func (esm *esManager[CT]) GetStreamByID(ctx context.Context, id *fftypes.UUID, opts ...dbsql.GetOption) (*EventStreamSpec[CT], error) {
+	return esm.persistence.EventStreams().GetByID(ctx, id.String(), opts...)
 }
 
 func (esm *esManager[CT]) Close(ctx context.Context) {
