@@ -32,7 +32,6 @@ import (
 // We also provide a channel to listen on for closing of the connection, to allow a select to wake on a blocking send
 type WebSocketChannels interface {
 	GetChannels(streamName string) (senderChannel chan<- interface{}, broadcastChannel chan<- interface{}, receiverChannel <-chan *WebSocketCommandMessageOrError)
-	SendReply(message interface{})
 }
 
 // WebSocketServer is the full server interface with the init call
@@ -48,7 +47,6 @@ type webSocketServer struct {
 	mux               sync.Mutex
 	streams           map[string]*webSocketStream
 	streamMap         map[string]map[string]*webSocketConnection
-	replyMap          map[string]*webSocketConnection
 	newStream         chan bool
 	replyChannel      chan interface{}
 	upgrader          *websocket.Upgrader
@@ -69,7 +67,6 @@ func NewWebSocketServer(bgCtx context.Context) WebSocketServer {
 		connections:       make(map[string]*webSocketConnection),
 		streams:           make(map[string]*webSocketStream),
 		streamMap:         make(map[string]map[string]*webSocketConnection),
-		replyMap:          make(map[string]*webSocketConnection),
 		newStream:         make(chan bool),
 		replyChannel:      make(chan interface{}),
 		processingTimeout: 30 * time.Second,
@@ -79,7 +76,6 @@ func NewWebSocketServer(bgCtx context.Context) WebSocketServer {
 		},
 	}
 	go s.processBroadcasts()
-	go s.processReplies()
 	return s
 }
 
@@ -111,7 +107,6 @@ func (s *webSocketServer) connectionClosed(c *webSocketConnection) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 	delete(s.connections, c.id)
-	delete(s.replyMap, c.id)
 	for _, stream := range c.streams {
 		delete(s.streamMap[stream.streamName], c.id)
 	}
@@ -149,17 +144,9 @@ func (s *webSocketServer) GetChannels(stream string) (chan<- interface{}, chan<-
 	return t.senderChannel, t.broadcastChannel, t.receiverChannel
 }
 
-func (s *webSocketServer) ListenOnStream(c *webSocketConnection, stream string) {
+func (s *webSocketServer) StreamStarted(c *webSocketConnection, stream string) {
 	// Track that this connection is interested in this stream
 	s.streamMap[stream][c.id] = c
-}
-
-func (s *webSocketServer) ListenForReplies(c *webSocketConnection) {
-	s.replyMap[c.id] = c
-}
-
-func (s *webSocketServer) SendReply(message interface{}) {
-	s.replyChannel <- message
 }
 
 func (s *webSocketServer) processBroadcasts() {
@@ -209,16 +196,6 @@ func getConnListFromMap(tm map[string]*webSocketConnection) []*webSocketConnecti
 		wsconns = append(wsconns, c)
 	}
 	return wsconns
-}
-
-func (s *webSocketServer) processReplies() {
-	for {
-		message := <-s.replyChannel
-		s.mux.Lock()
-		wsconns := getConnListFromMap(s.replyMap)
-		s.mux.Unlock()
-		s.broadcastToConnections(wsconns, message)
-	}
 }
 
 func (s *webSocketServer) broadcastToConnections(connections []*webSocketConnection, message interface{}) {

@@ -74,11 +74,12 @@ type DBSerializable interface {
 
 type EventStreamSpec[CT any] struct {
 	dbsql.ResourceBase
-	Name        *string            `ffstruct:"eventstream" json:"name,omitempty"`
-	Status      *EventStreamStatus `ffstruct:"eventstream" json:"status,omitempty"`
-	Type        *EventStreamType   `ffstruct:"eventstream" json:"type,omitempty" ffenum:"estype"`
-	TopicFilter *string            `ffstruct:"eventstream" json:"topicFilter,omitempty" ffenum:"estype"`
-	Config      *CT                `ffstruct:"eventstream" json:"config,omitempty"`
+	Name              *string            `ffstruct:"eventstream" json:"name,omitempty"`
+	Status            *EventStreamStatus `ffstruct:"eventstream" json:"status,omitempty"`
+	Type              *EventStreamType   `ffstruct:"eventstream" json:"type,omitempty" ffenum:"estype"`
+	InitialSequenceID *string            `ffstruct:"eventstream" json:"initialSequenceID,omitempty" ffenum:"estype"`
+	TopicFilter       *string            `ffstruct:"eventstream" json:"topicFilter,omitempty" ffenum:"estype"`
+	Config            *CT                `ffstruct:"eventstream" json:"config,omitempty"`
 
 	ErrorHandling     *ErrorHandlingType  `ffstruct:"eventstream" json:"errorHandling"`
 	BatchSize         *int                `ffstruct:"eventstream" json:"batchSize"`
@@ -276,7 +277,8 @@ func (es *eventStream[CT, DT]) requestStop(ctx context.Context) chan struct{} {
 	persistedStatus := *es.spec.Status
 	// Cancel the active context, and create the stopping task
 	activeState.cancelCtx()
-	es.stopping = make(chan struct{})
+	closedWhenStopped := make(chan struct{})
+	es.stopping = closedWhenStopped
 	go func() {
 		<-activeState.eventLoopDone
 		<-activeState.batchLoopDone
@@ -291,9 +293,10 @@ func (es *eventStream[CT, DT]) requestStop(ctx context.Context) chan struct{} {
 		es.mux.Lock()
 		defer es.mux.Unlock()
 		es.activeState = nil
-		close(es.stopping)
+		es.stopping = nil
+		close(closedWhenStopped)
 	}()
-	return es.stopping
+	return closedWhenStopped
 }
 
 func (es *eventStream[CT, DT]) checkSetStatus(ctx context.Context, targetStatus *EventStreamStatus) (newRuntimeStatus EventStreamStatus, changeToPersist *EventStreamStatus, statistics *EventStreamStatistics, err error) {
@@ -393,7 +396,7 @@ func (es *eventStream[CT, DT]) ensureActive() {
 	// Caller responsible for checking state transitions before invoking
 	es.mux.Lock()
 	defer es.mux.Unlock()
-	if es.stopping != nil && es.activeState == nil {
+	if es.stopping == nil && es.activeState == nil {
 		es.activeState = es.newActiveStream()
 	}
 }

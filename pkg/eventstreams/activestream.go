@@ -53,8 +53,9 @@ type activeStream[CT any, DT any] struct {
 func (es *eventStream[CT, DT]) newActiveStream() *activeStream[CT, DT] {
 	ctx, cancelCtx := context.WithCancel(es.bgCtx)
 	as := &activeStream[CT, DT]{
-		ctx:       ctx,
-		cancelCtx: cancelCtx,
+		eventStream: es,
+		ctx:         ctx,
+		cancelCtx:   cancelCtx,
 		EventStreamStatistics: EventStreamStatistics{
 			StartTime: fftypes.Now(),
 		},
@@ -71,11 +72,11 @@ func (as *activeStream[CT, DT]) runEventLoop() {
 	defer close(as.eventLoopDone)
 
 	// Read the last checkpoint for this stream
-	cp, err := as.loadCheckpoint()
+	checkpointSequenceID, err := as.loadCheckpoint()
 	if err == nil {
 		// Run the inner source read loop until it exits
 		err = as.retry.Do(as.ctx, "source run loop", func(attempt int) (retry bool, err error) {
-			if err = as.runSourceLoop(*cp.SequenceID); err == nil {
+			if err = as.runSourceLoop(checkpointSequenceID); err == nil {
 				log.L(as.ctx).Errorf("source loop error: %s", err)
 				return true, err
 			}
@@ -89,12 +90,18 @@ func (as *activeStream[CT, DT]) runEventLoop() {
 	log.L(as.ctx).Debugf("event loop exiting (%s)", err)
 }
 
-func (as *activeStream[CT, DT]) loadCheckpoint() (cp *EventStreamCheckpoint, err error) {
+func (as *activeStream[CT, DT]) loadCheckpoint() (sequencedID string, err error) {
 	err = as.retry.Do(as.ctx, "load checkpoint", func(attempt int) (retry bool, err error) {
-		cp, err = as.persistence.Checkpoints().GetByID(as.ctx, as.spec.ID.String(), dbsql.FailIfNotFound)
+		cp, err := as.persistence.Checkpoints().GetByID(as.ctx, as.spec.ID.String())
+		if err != nil {
+			return true, err
+		}
+		if cp != nil && cp.SequenceID != nil {
+			sequencedID = *cp.SequenceID
+		}
 		return true, err
 	})
-	return cp, err
+	return sequencedID, err
 }
 
 func (as *activeStream[CT, DT]) checkFilter(event *Event[DT]) bool {
@@ -106,16 +113,21 @@ func (as *activeStream[CT, DT]) checkFilter(event *Event[DT]) bool {
 
 func (as *activeStream[CT, DT]) runSourceLoop(initialCheckpointSequenceID string) error {
 	// Responsibility of the source to block until events are available, or the context is closed.
+	log.L(as.ctx).Infof("Initiating source with checkpoint: %s", initialCheckpointSequenceID)
 	return as.esm.runtime.Run(as.ctx, as.spec, initialCheckpointSequenceID, func(events []*Event[DT]) SourceInstruction {
+		log.L(as.ctx).Debugf("Received batch of %d events from source", len(events))
+
 		// There's no direct connection between any batching used in the source routine,
 		// and our batch based delivery. This is intentional - allowing separate optimization
 		// of each routine for the source data store/stream.
 		for _, event := range events {
-			select {
-			case as.events <- event:
-			case <-as.ctx.Done():
-				// Event stream has has shut down
-				return Exit
+			if event != nil {
+				select {
+				case as.events <- event:
+				case <-as.ctx.Done():
+					// Event stream has has shut down
+					return Exit
+				}
 			}
 		}
 

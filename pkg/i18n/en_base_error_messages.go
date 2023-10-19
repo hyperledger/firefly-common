@@ -172,4 +172,5 @@ var (
 	MsgInvalidValue                                = ffe("FF00234", "Value %v is invalid for field %s")
 	MsgESInvalidTopicFilterRegexp                  = ffe("FF00235", "Invalid topic filter regular expression '%s': %s")
 	MsgESStartedOrStopped                          = ffe("FF00236", "Event stream status must be 'started' or 'stopped' when creating/updating", http.StatusBadRequest)
+	MsgESConfigNotInitialized                      = ffe("FF00237", "Event stream manager configuration not initialized")
 )

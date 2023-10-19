@@ -38,6 +38,13 @@ var EventStreamFilters = &ffapi.QueryFields{
 	"topicfilter": &ffapi.StringField{},
 }
 
+var CheckpointFilters = &ffapi.QueryFields{
+	"id":         &ffapi.UUIDField{},
+	"created":    &ffapi.TimeField{},
+	"updated":    &ffapi.TimeField{},
+	"sequenceid": &ffapi.StringField{},
+}
+
 func NewEventStreamPersistence[CT any](db *dbsql.Database) Persistence[CT] {
 	return &esPersistence[CT]{db: db}
 }
@@ -57,6 +64,7 @@ func (p *esPersistence[CT]) EventStreams() dbsql.CRUD[*EventStreamSpec[CT]] {
 			"name",
 			"status",
 			"type",
+			"initial_sequence_id",
 			"topic_filter",
 			"config",
 			"error_handling",
@@ -91,6 +99,8 @@ func (p *esPersistence[CT]) EventStreams() dbsql.CRUD[*EventStreamSpec[CT]] {
 				return &inst.Status
 			case "type":
 				return &inst.Type
+			case "initial_sequence_id":
+				return &inst.InitialSequenceID
 			case "topic_filter":
 				return &inst.TopicFilter
 			case "config":
@@ -126,7 +136,7 @@ func (p *esPersistence[CT]) Checkpoints() dbsql.CRUD[*EventStreamCheckpoint] {
 			"sequence_id",
 		},
 		FilterFieldMap: map[string]string{
-			"sequence_id": "sequenceid",
+			"sequenceid": "sequence_id",
 		},
 		NilValue:     func() *EventStreamCheckpoint { return nil },
 		NewInstance:  func() *EventStreamCheckpoint { return &EventStreamCheckpoint{} },

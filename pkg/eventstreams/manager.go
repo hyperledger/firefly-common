@@ -37,6 +37,7 @@ type Manager[CT any] interface {
 	ListStreams(ctx context.Context, filter ffapi.Filter) ([]*EventStreamWithStatus[CT], *ffapi.FilterResult, error)
 	StopStream(ctx context.Context, id *fftypes.UUID) error
 	StartStream(ctx context.Context, id *fftypes.UUID) error
+	ResetStream(ctx context.Context, id *fftypes.UUID, sequenceID string) error
 	DeleteStream(ctx context.Context, id *fftypes.UUID) error
 	Close(ctx context.Context)
 }
@@ -82,6 +83,9 @@ func NewEventStreamManager[CT any, DT any](ctx context.Context, config *Config, 
 	var confExample interface{} = new(CT)
 	if _, isDBSerializable := (confExample).(DBSerializable); !isDBSerializable {
 		panic(fmt.Sprintf("Config type must be DB serializable: %T", confExample))
+	}
+	if config.Retry == nil {
+		return nil, i18n.NewError(ctx, i18n.MsgESConfigNotInitialized)
 	}
 
 	// Parse the TLS configs up front
@@ -152,8 +156,11 @@ func (esm *esManager[CT, DT]) Initialize(ctx context.Context) error {
 }
 
 func (esm *esManager[CT, DT]) UpsertStream(ctx context.Context, esSpec *EventStreamSpec[CT]) (bool, error) {
+	var existing *eventStream[CT, DT]
 	if esSpec.ID == nil {
 		esSpec.ID = fftypes.NewUUID()
+	} else {
+		existing = esm.getStream(esSpec.ID)
 	}
 
 	// Only statuses that can be asserted externally are started/stopped
@@ -176,11 +183,20 @@ func (esm *esManager[CT, DT]) UpsertStream(ctx context.Context, esSpec *EventStr
 		return false, err
 	}
 
+	// Runtime handling now the DB it updated
+	if existing != nil {
+		if err := existing.Stop(ctx); err != nil {
+			return false, err
+		}
+	}
 	es, err := esm.initEventStream(ctx, esSpec)
 	if err != nil {
 		return false, err
 	}
 	esm.addStream(ctx, es)
+	if *es.spec.Status == EventStreamStatusStarted {
+		es.ensureActive()
+	}
 	return isNew, nil
 }
 
@@ -206,6 +222,35 @@ func (esm *esManager[CT, DT]) StopStream(ctx context.Context, id *fftypes.UUID) 
 		return i18n.NewError(ctx, i18n.Msg404NoResult)
 	}
 	return es.Stop(ctx)
+}
+
+func (esm *esManager[CT, DT]) ResetStream(ctx context.Context, id *fftypes.UUID, sequenceID string) error {
+	es := esm.getStream(id)
+	if es == nil {
+		return i18n.NewError(ctx, i18n.Msg404NoResult)
+	}
+	// stop any active stream
+	if err := es.Stop(ctx); err != nil {
+		return err
+	}
+	// delete any existing checkpoint
+	if err := esm.persistence.Checkpoints().DeleteMany(ctx, CheckpointFilters.NewFilter(ctx).Eq("id", id)); err != nil {
+		return err
+	}
+	// store the initial_sequence_id back to the object
+	if err := esm.persistence.EventStreams().UpdateSparse(ctx, &EventStreamSpec[CT]{
+		ResourceBase: dbsql.ResourceBase{
+			ID: id,
+		},
+		InitialSequenceID: &sequenceID,
+	}); err != nil {
+		return err
+	}
+	// if the spec status is running, restart it
+	if *es.spec.Status == EventStreamStatusStarted {
+		return es.Start(ctx)
+	}
+	return nil
 }
 
 func (esm *esManager[CT, DT]) StartStream(ctx context.Context, id *fftypes.UUID) error {

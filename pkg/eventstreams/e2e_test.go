@@ -19,10 +19,12 @@ package eventstreams
 import (
 	"context"
 	"database/sql/driver"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/dbsql"
@@ -49,7 +51,11 @@ type testData struct {
 	Field1 string `json:"field1"`
 }
 
-type testSource struct{}
+type testSource struct {
+	started             chan struct{}
+	startCount          int
+	sequenceStartedWith string
+}
 
 func (ts *testSource) Validate(ctx context.Context, config *testESConfig) error {
 	if config.Config1 == "" {
@@ -59,44 +65,106 @@ func (ts *testSource) Validate(ctx context.Context, config *testESConfig) error 
 }
 
 func (ts *testSource) Run(ctx context.Context, spec *EventStreamSpec[testESConfig], checkpointSequenceID string, deliver Deliver[testData]) error {
-	i := 0
+	batchNumber := 0
+	ts.startCount++
+	ts.sequenceStartedWith = checkpointSequenceID
 	for {
+		select {
+		case <-ts.started:
+		case <-ctx.Done():
+			return fmt.Errorf("exiting due to cancelled context")
+		}
+
+		// Broadcast batches of 10 events...
 		events := make([]*Event[testData], 10)
-		for i2 := 0; i2 < 10; i2++ {
-			topic := fmt.Sprintf("topic_%d", i2)
-			events[i] = &Event[testData]{
+		for iEv := 0; iEv < 10; iEv++ {
+			// With one message on each of 10 topics
+			topic := fmt.Sprintf("topic_%d", iEv)
+			events[iEv] = &Event[testData]{
 				Topic:      topic,
-				SequenceID: fmt.Sprintf("%.12d", i),
+				SequenceID: fmt.Sprintf("%.12d", batchNumber),
 				Data: &testData{
-					Field1: fmt.Sprintf("data_%d", i),
+					Field1: fmt.Sprintf("data_%d", batchNumber),
 				},
 			}
 		}
 		if deliver(events) == Exit {
 			return nil
 		}
-		i++
+		time.Sleep(1 * time.Millisecond)
+		batchNumber++
 	}
 }
 
 // This test demonstrates the runtime function of the event stream module through a simple test,
 // using an SQLite database for CRUD operations on the persisted event streams,
 // and a fake stream of events.
+func TestE2E_DeliveryWebSockets(t *testing.T) {
+	ctx, p, wss, wsc, done := setupE2ETest(t)
+
+	ts := &testSource{started: make(chan struct{})}
+	close(ts.started) // start delivery immediately - will block as no WS connected
+
+	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig(ctx), p, wss, ts)
+	assert.NoError(t, err)
+
+	// Create a stream to sub-select one topic
+	es1 := &EventStreamSpec[testESConfig]{
+		Name:        ptrTo("stream1"),
+		TopicFilter: ptrTo("topic_1"), // only one of the topics
+		Type:        &EventStreamTypeWebSocket,
+		BatchSize:   ptrTo(10),
+	}
+	created, err := mgr.UpsertStream(ctx, es1)
+	assert.NoError(t, err)
+	assert.True(t, created)
+
+	// Connect our websocket and start it
+	err = wsc.Connect()
+	assert.NoError(t, err)
+	err = wsc.Send(ctx, []byte(`{"type":"start","stream":"stream1"}`))
+	assert.NoError(t, err)
+
+	expectedNumber := 1
+	for i := 0; i < 10; i++ {
+
+		data := <-wsc.Receive()
+		var batch EventBatch[testData]
+		err = json.Unmarshal(data, &batch)
+		assert.NoError(t, err)
+		// each batch should be 10
+		assert.Len(t, batch.Events, 10)
+		for _, e := range batch.Events {
+			assert.Equal(t, "topic_1", e.Topic)
+			// messages are published 0,1,2 over 10 topics, and we're only getting one of those topics
+			expectedNumber += 10
+		}
+
+		err = wsc.Send(ctx, []byte(fmt.Sprintf(`{"type":"ack","stream":"stream1","batchNumber":%d}`, batch.BatchNumber)))
+	}
+
+	// Check we ran the loop just once, and from the empty string for the checkpoint (as there was no InitialSequenceID)
+	done()
+	assert.Equal(t, "", ts.sequenceStartedWith)
+	assert.Equal(t, 1, ts.startCount)
+}
 
 // This test demonstrates the CRUD features
 func TestE2E_CRUDLifecycle(t *testing.T) {
 	ctx, p, wss, _, done := setupE2ETest(t)
 	defer done()
 
-	ts := &testSource{}
+	ts := &testSource{
+		started: make(chan struct{}), // we never start it
+	}
 
 	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig(ctx), p, wss, ts)
 	assert.NoError(t, err)
 
 	// Create first event stream started
 	es1 := &EventStreamSpec[testESConfig]{
-		Name:        strptr("stream1"),
-		TopicFilter: strptr("topic1"), // only one of the topics
+		Name:        ptrTo("stream1"),
+		TopicFilter: ptrTo("topic1"), // only one of the topics
 		Type:        &EventStreamTypeWebSocket,
 		Config: &testESConfig{
 			Config1: "confValue1",
@@ -108,8 +176,8 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 
 	// Create second event stream stopped
 	es2 := &EventStreamSpec[testESConfig]{
-		Name:        strptr("stream2"),
-		TopicFilter: strptr("topic2"), // only one of the topics
+		Name:        ptrTo("stream2"),
+		TopicFilter: ptrTo("topic2"), // only one of the topics
 		Type:        &EventStreamTypeWebSocket,
 		Status:      &EventStreamStatusStopped,
 		Config: &testESConfig{

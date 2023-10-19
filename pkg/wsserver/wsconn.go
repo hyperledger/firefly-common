@@ -123,19 +123,15 @@ func (c *webSocketConnection) sender() {
 	}
 }
 
-func (c *webSocketConnection) listenStream(t *webSocketStream) {
+func (c *webSocketConnection) startStream(t *webSocketStream) {
 	c.mux.Lock()
 	c.streams[t.streamName] = t
-	c.server.ListenOnStream(c, t.streamName)
+	c.server.StreamStarted(c, t.streamName)
 	c.mux.Unlock()
 	select {
 	case c.newStream <- true:
 	case <-c.closing:
 	}
-}
-
-func (c *webSocketConnection) listenReplies() {
-	c.server.ListenForReplies(c)
 }
 
 func (c *webSocketConnection) listen() {
@@ -156,10 +152,8 @@ func (c *webSocketConnection) listen() {
 		}
 		t := c.server.getStream(stream)
 		switch strings.ToLower(msg.Type) {
-		case "listen":
-			c.listenStream(t)
-		case "listenreplies":
-			c.listenReplies()
+		case "start":
+			c.startStream(t)
 		case "ack":
 			if !c.dispatchAckOrError(t, &msg, nil) {
 				return

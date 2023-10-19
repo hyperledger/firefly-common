@@ -6,6 +6,7 @@ CREATE TABLE eventstreams (
   name                 VARCHAR(64)     NOT NULL,
   status               VARCHAR(64),
   type                 VARCHAR(64),
+  initial_sequence_id  TEXT,
   topic_filter         TEXT,
   config               TEXT,
   error_handling       TEXT,

@@ -49,7 +49,7 @@ func TestConnectSendReceiveCycle(t *testing.T) {
 	assert.NoError(err)
 
 	c.WriteJSON(&WebSocketCommandMessage{
-		Type: "listen",
+		Type: "start",
 	})
 
 	s, _, r := w.GetChannels("")
@@ -102,12 +102,12 @@ func TestConnectStreamIsolation(t *testing.T) {
 	assert.NoError(err)
 
 	c1.WriteJSON(&WebSocketCommandMessage{
-		Type:   "listen",
+		Type:   "start",
 		Stream: "stream1",
 	})
 
 	c2.WriteJSON(&WebSocketCommandMessage{
-		Type:   "listen",
+		Type:   "start",
 		Stream: "stream2",
 	})
 
@@ -153,7 +153,7 @@ func TestConnectAbandonRequest(t *testing.T) {
 	assert.NoError(err)
 
 	c.WriteJSON(&WebSocketCommandMessage{
-		Type: "listen",
+		Type: "start",
 	})
 	_, _, r := w.GetChannels("")
 
@@ -271,7 +271,7 @@ func TestBroadcast(t *testing.T) {
 	assert.NoError(err)
 
 	c.WriteJSON(&WebSocketCommandMessage{
-		Type:   "listen",
+		Type:   "start",
 		Stream: stream,
 	})
 
@@ -309,7 +309,7 @@ func TestBroadcastDefaultStream(t *testing.T) {
 	assert.NoError(err)
 
 	c.WriteJSON(&WebSocketCommandMessage{
-		Type: "listen",
+		Type: "start",
 	})
 
 	// Wait until the client has subscribed to the stream before proceeding
@@ -346,7 +346,7 @@ func TestRecvNotOk(t *testing.T) {
 	assert.NoError(err)
 
 	c.WriteJSON(&WebSocketCommandMessage{
-		Type: "listen",
+		Type: "start",
 	})
 
 	// Wait until the client has subscribed to the stream before proceeding
@@ -357,34 +357,6 @@ func TestRecvNotOk(t *testing.T) {
 	_, b, _ := w.GetChannels(stream)
 	close(b)
 	w.Close()
-}
-
-func TestSendReply(t *testing.T) {
-	assert := assert.New(t)
-
-	w, ts := newTestWebSocketServer()
-	defer ts.Close()
-
-	u, _ := url.Parse(ts.URL)
-	u.Scheme = "ws"
-	u.Path = "/ws"
-	c, _, err := ws.DefaultDialer.Dial(u.String(), nil)
-	assert.NoError(err)
-
-	c.WriteJSON(&WebSocketCommandMessage{
-		Type: "listenReplies",
-	})
-
-	// Wait until the client has subscribed to the stream before proceeding
-	for len(w.replyMap) == 0 {
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	w.SendReply("Hello World")
-
-	var val string
-	c.ReadJSON(&val)
-	assert.Equal("Hello World", val)
 }
 
 func TestListenStreamClosing(t *testing.T) {
@@ -400,7 +372,7 @@ func TestListenStreamClosing(t *testing.T) {
 		newStream: make(chan bool),
 	}
 	close(c.closing)
-	c.listenStream(&webSocketStream{
+	c.startStream(&webSocketStream{
 		streamName: "test",
 	})
 }

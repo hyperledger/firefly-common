@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/hyperledger/firefly-common/pkg/fftls"
+	"github.com/hyperledger/firefly-common/pkg/retry"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -39,6 +40,7 @@ func (mes *mockEventSource) Validate(ctx context.Context, conf *testESConfig) er
 
 func TestNewManagerFailBadTLS(t *testing.T) {
 	_, err := NewEventStreamManager[testESConfig, testData](context.Background(), &Config{
+		Retry: &retry.Retry{},
 		TLSConfigs: map[string]*fftls.Config{
 			"tls0": {
 				Enabled: true,
@@ -50,6 +52,6 @@ func TestNewManagerFailBadTLS(t *testing.T) {
 
 }
 
-func strptr(s string) *string {
-	return &s
+func ptrTo[T any](v T) *T {
+	return &v
 }
