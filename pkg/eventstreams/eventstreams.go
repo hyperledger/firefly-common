@@ -129,7 +129,7 @@ type EventStreamCheckpoint struct {
 }
 
 type EventBatchDispatcher[DT any] interface {
-	AttemptDispatch(ctx context.Context, batchNumber int64, attempt int, events []*Event[DT]) error
+	AttemptDispatch(ctx context.Context, attempt int, events *EventBatch[DT]) error
 }
 
 func checkSet[T any](ctx context.Context, storeDefaults bool, fieldName string, fieldPtr **T, defValue T, check func(v T) bool) error {

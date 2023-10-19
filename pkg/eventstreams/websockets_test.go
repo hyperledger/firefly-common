@@ -54,7 +54,13 @@ func TestWSAttemptIgnoreWrongAcks(t *testing.T) {
 		DistributionMode: &dmw,
 	}, "ut_stream")
 
-	err := wsa.AttemptDispatch(context.Background(), 0, 0, []*Event[testData]{})
+	err := wsa.AttemptDispatch(context.Background(), 0, &EventBatch[testData]{
+		StreamID:    fftypes.NewUUID(),
+		BatchNumber: 1,
+		Events: []*Event[testData]{
+			{Data: &testData{Field1: "12345"}},
+		},
+	})
 	assert.NoError(t, err)
 
 	err = wsa.waitForAck(context.Background(), rc, 23456)
@@ -74,7 +80,13 @@ func TestWSattemptDispatchExitPushingEvent(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	err := wsa.AttemptDispatch(ctx, 0, 0, []*Event[testData]{})
+	err := wsa.AttemptDispatch(ctx, 0, &EventBatch[testData]{
+		StreamID:    fftypes.NewUUID(),
+		BatchNumber: 1,
+		Events: []*Event[testData]{
+			{Data: &testData{Field1: "12345"}},
+		},
+	})
 	assert.Regexp(t, "FF00225", err)
 
 }

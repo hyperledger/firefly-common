@@ -37,11 +37,6 @@ type WebSocketConfig struct {
 	DistributionMode *DistributionMode `ffstruct:"wsconfig" json:"distributionMode,omitempty"`
 }
 
-type WebSocketEventBatch[DT any] struct {
-	BatchNumber int64        `ffstruct:"wsevent" json:"batchNumber"`
-	Events      []*Event[DT] `ffstruct:"wsevent" json:"events"`
-}
-
 // Store in DB as JSON
 func (wc *WebSocketConfig) Scan(src interface{}) error {
 	return fftypes.JSONScan(src, wc)
@@ -73,7 +68,7 @@ func newWebSocketAction[DT any](wsChannels wsserver.WebSocketChannels, spec *Web
 	}
 }
 
-func (w *webSocketAction[DT]) AttemptDispatch(ctx context.Context, batchNumber int64, attempt int, events []*Event[DT]) error {
+func (w *webSocketAction[DT]) AttemptDispatch(ctx context.Context, attempt int, batch *EventBatch[DT]) error {
 	var err error
 
 	// Get a blocking channel to send and receive on our chosen namespace
@@ -89,26 +84,23 @@ func (w *webSocketAction[DT]) AttemptDispatch(ctx context.Context, batchNumber i
 
 	// Send the batch of events
 	select {
-	case channel <- &WebSocketEventBatch[DT]{
-		BatchNumber: batchNumber,
-		Events:      events,
-	}:
+	case channel <- batch:
 		break
 	case <-ctx.Done():
 		err = i18n.NewError(ctx, i18n.MsgWebSocketInterruptedSend)
 	}
 
 	if err == nil && !isBroadcast {
-		log.L(ctx).Infof("Batch %d dispatched (len=%d,attempt=%d)", batchNumber, len(events), attempt)
-		err = w.waitForAck(ctx, receiver, batchNumber)
+		log.L(ctx).Infof("Batch %d dispatched (len=%d,attempt=%d)", batch.BatchNumber, len(batch.Events), attempt)
+		err = w.waitForAck(ctx, receiver, batch.BatchNumber)
 	}
 
 	// Pass back any exception due
 	if err != nil {
-		log.L(ctx).Infof("WebSocket event batch %d delivery failed (len=%d,attempt=%d): %s", batchNumber, len(events), attempt, err)
+		log.L(ctx).Infof("WebSocket event batch %d delivery failed (len=%d,attempt=%d): %s", batch.BatchNumber, len(batch.Events), attempt, err)
 		return err
 	}
-	log.L(ctx).Infof("WebSocket event batch %d complete (len=%d,attempt=%d)", batchNumber, len(events), attempt)
+	log.L(ctx).Infof("WebSocket event batch %d complete (len=%d,attempt=%d)", batch.BatchNumber, len(batch.Events), attempt)
 	return nil
 }
 

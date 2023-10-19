@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -127,7 +128,7 @@ func TestE2E_DeliveryWebSockets(t *testing.T) {
 
 	expectedNumber := 1
 	for i := 0; i < 10; i++ {
-		receiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {
+		wsReceiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {
 			// each batch should be 10
 			assert.Len(t, batch.Events, 10)
 			for _, e := range batch.Events {
@@ -172,7 +173,7 @@ func TestE2E_WebsocketDeliveryRestartReset(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Get the first batch
-	receiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {})
+	wsReceiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {})
 	assert.Equal(t, "", ts.sequenceStartedWith)
 	assert.Equal(t, 1, ts.startCount)
 
@@ -191,17 +192,84 @@ func TestE2E_WebsocketDeliveryRestartReset(t *testing.T) {
 	assert.NoError(t, err)
 	err = mgr.StartStream(ctx, es1.ID)
 	assert.NoError(t, err)
-	receiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {})
+	wsReceiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {})
 	assert.Equal(t, "000000000009", ts.sequenceStartedWith)
 	assert.Equal(t, 2, ts.startCount)
 
 	// Reset it and check we get the reset
 	err = mgr.ResetStream(ctx, es1.ID, "first")
 	assert.NoError(t, err)
-	receiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {})
+	wsReceiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {})
 	assert.Equal(t, "first", ts.sequenceStartedWith)
 	assert.Equal(t, 3, ts.startCount)
 
+}
+
+func TestE2E_DeliveryWebHooks200(t *testing.T) {
+	ctx, p, wss, wsc, done := setupE2ETest(t)
+	defer done()
+
+	ts := &testSource{started: make(chan struct{})}
+	close(ts.started) // start delivery immediately - will block as no WS connected
+
+	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig(ctx), p, wss, ts)
+	assert.NoError(t, err)
+
+	got100 := make(chan struct{})
+	var received int64
+	expectedNumber := 1
+	whServer := httptest.NewServer(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+		assert.Equal(t, http.MethodPut, req.Method)
+		assert.Equal(t, "/some/path", req.URL.Path)
+		assert.Equal(t, "my-value", req.Header.Get("My-Header"))
+
+		var batch EventBatch[testData]
+		err := json.NewDecoder(req.Body).Decode(&batch)
+		assert.NoError(t, err)
+
+		// each batch should be 10
+		assert.Len(t, batch.Events, 10)
+		for _, e := range batch.Events {
+			assert.Equal(t, "topic_1", e.Topic)
+			// messages are published 0,1,2 over 10 topics, and we're only getting one of those topics
+			expectedNumber += 10
+		}
+		if (atomic.AddInt64(&received, 1)) == 100 {
+			close(got100)
+		}
+
+		res.WriteHeader(200)
+	}))
+	defer whServer.Close()
+
+	// Create a stream to sub-select one topic
+	es1 := &EventStreamSpec[testESConfig]{
+		Name:        ptrTo("stream1"),
+		TopicFilter: ptrTo("topic_1"), // only one of the topics
+		Type:        &EventStreamTypeWebhook,
+		BatchSize:   ptrTo(10),
+		Webhook: &WebhookConfig{
+			URL:    ptrTo(whServer.URL + "/some/path"),
+			Method: ptrTo("PUT"),
+			Headers: map[string]string{
+				"my-header": "my-value",
+			},
+		},
+	}
+	created, err := mgr.UpsertStream(ctx, es1)
+	assert.NoError(t, err)
+	assert.True(t, created)
+
+	// Connect our websocket and start it
+	err = wsc.Connect()
+	assert.NoError(t, err)
+	err = wsc.Send(ctx, []byte(`{"type":"start","stream":"stream1"}`))
+	assert.NoError(t, err)
+
+	// Check we ran the loop just once, and from the empty string for the checkpoint (as there was no InitialSequenceID)
+	<-got100
+	assert.Equal(t, "", ts.sequenceStartedWith)
+	assert.Equal(t, 1, ts.startCount)
 }
 
 // This test demonstrates the CRUD features
@@ -284,7 +352,7 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 
 }
 
-func receiveAck(ctx context.Context, t *testing.T, wsc wsclient.WSClient, cb func(batch *EventBatch[testData])) {
+func wsReceiveAck(ctx context.Context, t *testing.T, wsc wsclient.WSClient, cb func(batch *EventBatch[testData])) {
 	data := <-wsc.Receive()
 	var batch EventBatch[testData]
 	err := json.Unmarshal(data, &batch)

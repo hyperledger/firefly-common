@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"database/sql/driver"
 	"net"
+	"net/http"
 	"net/url"
 
 	"github.com/go-resty/resty/v2"
@@ -32,6 +33,7 @@ import (
 
 type WebhookConfig struct {
 	URL           *string             `ffstruct:"whconfig" json:"url,omitempty"`
+	Method        *string             `ffstruct:"whconfig" json:"method,omitempty"`
 	Headers       map[string]string   `ffstruct:"whconfig" json:"headers,omitempty"`
 	TLSConfigName *string             `ffstruct:"whconfig" json:"tlsConfigName,omitempty"`
 	HTTP          *ffresty.HTTPConfig `ffstruct:"whconfig" json:"http,omitempty"`
@@ -93,7 +95,7 @@ func (esm *esManager[CT, DT]) newWebhookAction(ctx context.Context, spec *Webhoo
 	}, nil
 }
 
-func (w *webhookAction[CT, DT]) AttemptDispatch(ctx context.Context, batchNumber int64, attempt int, events []*Event[DT]) error {
+func (w *webhookAction[CT, DT]) AttemptDispatch(ctx context.Context, attempt int, batch *EventBatch[DT]) error {
 	// We perform DNS resolution before each attempt, to exclude private IP address ranges from the target
 	u, _ := url.Parse(*w.spec.URL)
 	addr, err := net.ResolveIPAddr("ip4", u.Hostname())
@@ -103,23 +105,27 @@ func (w *webhookAction[CT, DT]) AttemptDispatch(ctx context.Context, batchNumber
 	if w.isAddressBlocked(addr) {
 		return i18n.NewError(ctx, i18n.MsgBlockWebhookAddress, addr, u.Hostname())
 	}
+	method := http.MethodPost
+	if w.spec.Method != nil && len(*w.spec.Method) > 0 {
+		method = *w.spec.Method
+	}
 	var resBody []byte
 	req := w.client.R().
 		SetContext(ctx).
-		SetBody(events).
+		SetBody(batch).
 		SetResult(&resBody).
 		SetError(&resBody)
 	req.Header.Set("Content-Type", "application/json")
 	for h, v := range w.spec.Headers {
 		req.Header.Set(h, v)
 	}
-	res, err := req.Post(u.String())
+	res, err := req.Execute(method, u.String())
 	if err != nil {
-		log.L(ctx).Errorf("Webhook %s (%s) batch=%d attempt=%d: %s", *w.spec.URL, u, batchNumber, attempt, err)
+		log.L(ctx).Errorf("Webhook %s (%s) batch=%d attempt=%d: %s", *w.spec.URL, u, batch.BatchNumber, attempt, err)
 		return i18n.NewError(ctx, i18n.MsgWebhookErr, err)
 	}
 	if res.IsError() {
-		log.L(ctx).Errorf("Webhook %s (%s) [%d] batch=%d attempt=%d: %s", *w.spec.URL, u, res.StatusCode(), batchNumber, attempt, resBody)
+		log.L(ctx).Errorf("Webhook %s (%s) [%d] batch=%d attempt=%d: %s", *w.spec.URL, u, res.StatusCode(), batch.BatchNumber, attempt, resBody)
 		err = i18n.NewError(ctx, i18n.MsgWebhookFailedStatus, res.StatusCode())
 	}
 	return err

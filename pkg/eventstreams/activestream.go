@@ -270,7 +270,11 @@ func (as *activeStream[CT, DT]) dispatchBatch(batch *eventStreamBatch[DT]) (err 
 	for {
 		// Short exponential back-off retry
 		err := as.retry.Do(as.ctx, "action", func(_ int) (retry bool, err error) {
-			err = as.action.AttemptDispatch(as.ctx, batch.number, as.LastDispatchAttempts, batch.events)
+			err = as.action.AttemptDispatch(as.ctx, as.LastDispatchAttempts, &EventBatch[DT]{
+				StreamID:    as.spec.ID,
+				BatchNumber: batch.number,
+				Events:      batch.events,
+			})
 			if err != nil {
 				log.L(as.ctx).Errorf("Batch %d attempt %d failed. err=%s",
 					batch.number, as.LastDispatchAttempts, err)

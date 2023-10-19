@@ -27,6 +27,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/ffresty"
 	"github.com/hyperledger/firefly-common/pkg/fftls"
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -86,7 +87,13 @@ func TestWebhooksBadHost(t *testing.T) {
 	u := "http://www.sample.invalid/guaranteed-to-fail"
 	wh := newTestWebhooks(t, &WebhookConfig{URL: &u})
 
-	err := wh.AttemptDispatch(context.Background(), 0, 0, []*Event[testData]{{Data: &testData{Field1: "12345"}}})
+	err := wh.AttemptDispatch(context.Background(), 0, &EventBatch[testData]{
+		StreamID:    fftypes.NewUUID(),
+		BatchNumber: 1,
+		Events: []*Event[testData]{
+			{Data: &testData{Field1: "12345"}},
+		},
+	})
 	assert.Regexp(t, "FF00218", err)
 }
 
@@ -96,7 +103,13 @@ func TestWebhooksPrivateBlocked(t *testing.T) {
 		RootConfig.Set(ConfigDisablePrivateIPs, true)
 	})
 
-	err := wh.AttemptDispatch(context.Background(), 0, 0, []*Event[testData]{{Data: &testData{Field1: "12345"}}})
+	err := wh.AttemptDispatch(context.Background(), 0, &EventBatch[testData]{
+		StreamID:    fftypes.NewUUID(),
+		BatchNumber: 1,
+		Events: []*Event[testData]{
+			{Data: &testData{Field1: "12345"}},
+		},
+	})
 	assert.Regexp(t, "FF00220", err)
 }
 
@@ -106,10 +119,10 @@ func TestWebhooksCustomHeaders403(t *testing.T) {
 		assert.Equal(t, "/test/path", r.URL.Path)
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Equal(t, "test-value", r.Header.Get("test-header"))
-		var data []*Event[testData]
-		err := json.NewDecoder(r.Body).Decode(&data)
+		var batch *EventBatch[testData]
+		err := json.NewDecoder(r.Body).Decode(&batch)
 		assert.NoError(t, err)
-		assert.Equal(t, "12345", data[0].Data.Field1)
+		assert.Equal(t, "12345", batch.Events[0].Data.Field1)
 		w.WriteHeader(403)
 	}))
 	defer s.Close()
@@ -122,7 +135,13 @@ func TestWebhooksCustomHeaders403(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		err := wh.AttemptDispatch(context.Background(), 0, 0, []*Event[testData]{{Data: &testData{Field1: "12345"}}})
+		err := wh.AttemptDispatch(context.Background(), 0, &EventBatch[testData]{
+			StreamID:    fftypes.NewUUID(),
+			BatchNumber: 1,
+			Events: []*Event[testData]{
+				{Data: &testData{Field1: "12345"}},
+			},
+		})
 		assert.Regexp(t, "FF00221.*403", err)
 		close(done)
 	}()
@@ -139,7 +158,13 @@ func TestWebhooksCustomHeadersConnectFail(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		err := wh.AttemptDispatch(context.Background(), 0, 0, []*Event[testData]{{Data: &testData{Field1: "12345"}}})
+		err := wh.AttemptDispatch(context.Background(), 0, &EventBatch[testData]{
+			StreamID:    fftypes.NewUUID(),
+			BatchNumber: 1,
+			Events: []*Event[testData]{
+				{Data: &testData{Field1: "12345"}},
+			},
+		})
 		assert.Regexp(t, "FF00219", err)
 		close(done)
 	}()
@@ -169,7 +194,13 @@ func TestWebhooksTLS(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		err := wh.AttemptDispatch(context.Background(), 0, 0, []*Event[testData]{{Data: &testData{Field1: "12345"}}})
+		err := wh.AttemptDispatch(context.Background(), 0, &EventBatch[testData]{
+			StreamID:    fftypes.NewUUID(),
+			BatchNumber: 1,
+			Events: []*Event[testData]{
+				{Data: &testData{Field1: "12345"}},
+			},
+		})
 		assert.NoError(t, err)
 		close(done)
 	}()
