@@ -50,11 +50,11 @@ func TestWSAttemptIgnoreWrongAcks(t *testing.T) {
 	}()
 
 	dmw := DistributionModeBroadcast
-	wsa := newWebSocketAction(mws, &WebSocketConfig{
+	wsa := newWebSocketAction[testData](mws, &WebSocketConfig{
 		DistributionMode: &dmw,
 	}, "ut_stream")
 
-	err := wsa.attemptDispatch(context.Background(), 0, 0, []*Event{})
+	err := wsa.AttemptDispatch(context.Background(), 0, 0, []*Event[testData]{})
 	assert.NoError(t, err)
 
 	err = wsa.waitForAck(context.Background(), rc, 23456)
@@ -68,13 +68,13 @@ func TestWSattemptDispatchExitPushingEvent(t *testing.T) {
 	bc <- []*fftypes.JSONAny{} // block the broadcast channel
 
 	dmw := DistributionModeBroadcast
-	wsa := newWebSocketAction(mws, &WebSocketConfig{
+	wsa := newWebSocketAction[testData](mws, &WebSocketConfig{
 		DistributionMode: &dmw,
 	}, "ut_stream")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	err := wsa.attemptDispatch(ctx, 0, 0, []*Event{})
+	err := wsa.AttemptDispatch(ctx, 0, 0, []*Event[testData]{})
 	assert.Regexp(t, "FF00225", err)
 
 }
@@ -85,7 +85,7 @@ func TestWSattemptDispatchExitReceivingReply(t *testing.T) {
 	_, _, rc := mockWSChannels(mws)
 
 	dmw := DistributionModeBroadcast
-	wsa := newWebSocketAction(mws, &WebSocketConfig{
+	wsa := newWebSocketAction[testData](mws, &WebSocketConfig{
 		DistributionMode: &dmw,
 	}, "ut_stream")
 
@@ -105,7 +105,7 @@ func TestWSattemptDispatchNackFromClient(t *testing.T) {
 	}
 
 	dmw := DistributionModeBroadcast
-	wsa := newWebSocketAction(mws, &WebSocketConfig{
+	wsa := newWebSocketAction[testData](mws, &WebSocketConfig{
 		DistributionMode: &dmw,
 	}, "ut_stream")
 

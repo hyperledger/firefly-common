@@ -28,14 +28,14 @@ import (
 	"github.com/hyperledger/firefly-transaction-manager/pkg/apitypes"
 )
 
-type eventStreamBatch struct {
+type eventStreamBatch[DataType any] struct {
 	number     int64
-	events     []*Event
+	events     []*Event[DataType]
 	batchTimer *time.Timer
 }
 
-type activeStream[CT any] struct {
-	*eventStream[CT]
+type activeStream[CT any, DT any] struct {
+	*eventStream[CT, DT]
 	ctx           context.Context
 	cancelCtx     func()
 	batchNumber   int64
@@ -43,16 +43,16 @@ type activeStream[CT any] struct {
 	EventStreamStatistics
 	eventLoopDone chan struct{}
 	batchLoopDone chan struct{}
-	events        chan *Event
+	events        chan *Event[DT]
 
 	checkpointLock       sync.Mutex
 	dispatchedCheckpoint string
 	queuedCheckpoint     string
 }
 
-func (es *eventStream[CT]) newActiveStream() *activeStream[CT] {
+func (es *eventStream[CT, DT]) newActiveStream() *activeStream[CT, DT] {
 	ctx, cancelCtx := context.WithCancel(es.bgCtx)
-	as := &activeStream[CT]{
+	as := &activeStream[CT, DT]{
 		ctx:       ctx,
 		cancelCtx: cancelCtx,
 		EventStreamStatistics: EventStreamStatistics{
@@ -60,14 +60,14 @@ func (es *eventStream[CT]) newActiveStream() *activeStream[CT] {
 		},
 		eventLoopDone: make(chan struct{}),
 		batchLoopDone: make(chan struct{}),
-		events:        make(chan *Event, *es.spec.BatchSize),
+		events:        make(chan *Event[DT], *es.spec.BatchSize),
 	}
 	go as.runEventLoop()
 	go as.runBatchLoop()
 	return as
 }
 
-func (as *activeStream[CT]) runEventLoop() {
+func (as *activeStream[CT, DT]) runEventLoop() {
 	defer close(as.eventLoopDone)
 
 	// Read the last checkpoint for this stream
@@ -89,7 +89,7 @@ func (as *activeStream[CT]) runEventLoop() {
 	log.L(as.ctx).Debugf("event loop exiting (%s)", err)
 }
 
-func (as *activeStream[CT]) loadCheckpoint() (cp *EventStreamCheckpoint, err error) {
+func (as *activeStream[CT, DT]) loadCheckpoint() (cp *EventStreamCheckpoint, err error) {
 	err = as.retry.Do(as.ctx, "load checkpoint", func(attempt int) (retry bool, err error) {
 		cp, err = as.persistence.Checkpoints().GetByID(as.ctx, as.spec.ID.String(), dbsql.FailIfNotFound)
 		return true, err
@@ -97,16 +97,16 @@ func (as *activeStream[CT]) loadCheckpoint() (cp *EventStreamCheckpoint, err err
 	return cp, err
 }
 
-func (as *activeStream[CT]) checkFilter(event *Event) bool {
+func (as *activeStream[CT, DT]) checkFilter(event *Event[DT]) bool {
 	if as.spec.topicFilterRegexp != nil {
 		return as.spec.topicFilterRegexp.Match([]byte(event.Topic))
 	}
 	return true
 }
 
-func (as *activeStream[CT]) runSourceLoop(initialCheckpointSequenceID string) error {
+func (as *activeStream[CT, DT]) runSourceLoop(initialCheckpointSequenceID string) error {
 	// Responsibility of the source to block until events are available, or the context is closed.
-	return as.esm.runtime.Run(as.ctx, as.spec, initialCheckpointSequenceID, func(events []*Event) SourceInstruction {
+	return as.esm.runtime.Run(as.ctx, as.spec, initialCheckpointSequenceID, func(events []*Event[DT]) SourceInstruction {
 		// There's no direct connection between any batching used in the source routine,
 		// and our batch based delivery. This is intentional - allowing separate optimization
 		// of each routine for the source data store/stream.
@@ -132,10 +132,10 @@ func (as *activeStream[CT]) runSourceLoop(initialCheckpointSequenceID string) er
 
 }
 
-func (as *activeStream[CT]) runBatchLoop() {
+func (as *activeStream[CT, DT]) runBatchLoop() {
 	defer close(as.batchLoopDone)
 
-	var batch *eventStreamBatch
+	var batch *eventStreamBatch[DT]
 	batchTimeout := time.Duration(*as.spec.BatchTimeout)
 	var noBatchActive <-chan time.Time = make(chan time.Time) // never pops
 	batchTimedOut := noBatchActive
@@ -156,10 +156,10 @@ func (as *activeStream[CT]) runBatchLoop() {
 			} else {
 				if batch == nil {
 					as.batchNumber++
-					batch = &eventStreamBatch{
+					batch = &eventStreamBatch[DT]{
 						number:     as.batchNumber,
 						batchTimer: time.NewTimer(batchTimeout),
-						events:     make([]*Event, 0, *as.spec.BatchSize),
+						events:     make([]*Event[DT], 0, *as.spec.BatchSize),
 					}
 					batchTimedOut = batch.batchTimer.C
 				}
@@ -190,7 +190,7 @@ func (as *activeStream[CT]) runBatchLoop() {
 	}
 }
 
-func (as *activeStream[CT]) dispatchCheckpoint() {
+func (as *activeStream[CT, DT]) dispatchCheckpoint() {
 	if as.pushCheckpoint() {
 		if as.esm.config.Checkpoints.Asynchronous {
 			go as.checkpointRoutine() // async
@@ -200,7 +200,7 @@ func (as *activeStream[CT]) dispatchCheckpoint() {
 	}
 }
 
-func (as *activeStream[CT]) pushCheckpoint() bool {
+func (as *activeStream[CT, DT]) pushCheckpoint() bool {
 	as.checkpointLock.Lock()
 	defer as.checkpointLock.Unlock()
 	if as.dispatchedCheckpoint == "" {
@@ -211,14 +211,14 @@ func (as *activeStream[CT]) pushCheckpoint() bool {
 	return false // it'll be picked up before the existing worker ends
 }
 
-func (as *activeStream[CT]) popCheckpoint() string {
+func (as *activeStream[CT, DT]) popCheckpoint() string {
 	as.checkpointLock.Lock()
 	defer as.checkpointLock.Unlock()
 	as.dispatchedCheckpoint = as.queuedCheckpoint
 	return as.dispatchedCheckpoint
 }
 
-func (as *activeStream[CT]) checkpointRoutine() {
+func (as *activeStream[CT, DT]) checkpointRoutine() {
 	for {
 		checkpointSequenceID := as.popCheckpoint()
 		if checkpointSequenceID == "" {
@@ -243,7 +243,7 @@ func (as *activeStream[CT]) checkpointRoutine() {
 
 // performActionWithRetry performs an action, with exponential back-off retry up
 // to a given threshold. Only returns error in the case that the context is closed.
-func (as *activeStream[CT]) dispatchBatch(batch *eventStreamBatch) (err error) {
+func (as *activeStream[CT, DT]) dispatchBatch(batch *eventStreamBatch[DT]) (err error) {
 	as.LastDispatchNumber = batch.number
 	as.LastDispatchTime = fftypes.Now()
 	as.LastDispatchFailure = ""
@@ -253,7 +253,7 @@ func (as *activeStream[CT]) dispatchBatch(batch *eventStreamBatch) (err error) {
 	for {
 		// Short exponential back-off retry
 		err := as.retry.Do(as.ctx, "action", func(_ int) (retry bool, err error) {
-			err = as.action.attemptDispatch(as.ctx, batch.number, as.LastDispatchAttempts, batch.events)
+			err = as.action.AttemptDispatch(as.ctx, batch.number, as.LastDispatchAttempts, batch.events)
 			if err != nil {
 				log.L(as.ctx).Errorf("Batch %d attempt %d failed. err=%s",
 					batch.number, as.LastDispatchAttempts, err)

@@ -24,13 +24,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type testConfigType struct {
-	CustomField1 string `json:"field1"`
-}
-
 func TestEventStreamFields(t *testing.T) {
 
-	es := &EventStreamSpec[testConfigType]{
+	es := &EventStreamSpec[testESConfig]{
 		ResourceBase: dbsql.ResourceBase{
 			ID: fftypes.NewUUID(),
 		},

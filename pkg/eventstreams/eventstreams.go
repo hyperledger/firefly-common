@@ -19,6 +19,8 @@ package eventstreams
 import (
 	"context"
 	"crypto/tls"
+	"database/sql"
+	"database/sql/driver"
 	"regexp"
 	"sync"
 
@@ -53,6 +55,23 @@ var (
 	DispatchStatusSkipped     = fftypes.FFEnumValue("edstatus", "skipped")
 )
 
+type EventStreamStatus = fftypes.FFEnum
+
+var (
+	EventStreamStatusStarted         = fftypes.FFEnumValue("esstatus", "started")
+	EventStreamStatusStopped         = fftypes.FFEnumValue("esstatus", "stopped")
+	EventStreamStatusDeleted         = fftypes.FFEnumValue("esstatus", "deleted")
+	EventStreamStatusStopping        = fftypes.FFEnumValue("esstatus", "stopping")         // not persisted
+	EventStreamStatusStoppingDeleted = fftypes.FFEnumValue("esstatus", "stopping_deleted") // not persisted
+	EventStreamStatusUnknown         = fftypes.FFEnumValue("esstatus", "unknown")          // not persisted
+)
+
+// Let's us check that the config serializes
+type DBSerializable interface {
+	sql.Scanner
+	driver.Valuer
+}
+
 type EventStreamSpec[CT any] struct {
 	dbsql.ResourceBase
 	Name        *string            `ffstruct:"eventstream" json:"name,omitempty"`
@@ -83,6 +102,33 @@ func (esc *EventStreamSpec[CT]) SetCreated(t *fftypes.FFTime) {
 
 func (esc *EventStreamSpec[CT]) SetUpdated(t *fftypes.FFTime) {
 	esc.Updated = t
+}
+
+type EventStreamStatistics struct {
+	StartTime            *fftypes.FFTime `ffstruct:"EventStreamStatistics" json:"startTime"`
+	LastDispatchTime     *fftypes.FFTime `ffstruct:"EventStreamStatistics" json:"lastDispatchTime"`
+	LastDispatchNumber   int64           `ffstruct:"EventStreamStatistics" json:"lastDispatchBatch"`
+	LastDispatchAttempts int             `ffstruct:"EventStreamStatistics" json:"lastDispatchAttempts,omitempty"`
+	LastDispatchFailure  string          `ffstruct:"EventStreamStatistics" json:"lastDispatchFailure,omitempty"`
+	LastDispatchStatus   DispatchStatus  `ffstruct:"EventStreamStatistics" json:"lastDispatchComplete"`
+	HighestDetected      string          `ffstruct:"EventStreamStatistics" json:"highestDetected"`
+	HighestDispatched    string          `ffstruct:"EventStreamStatistics" json:"highestDispatched"`
+	Checkpoint           string          `ffstruct:"EventStreamStatistics" json:"checkpoint"`
+}
+
+type EventStreamWithStatus[CT any] struct {
+	*EventStreamSpec[CT]
+	Status     EventStreamStatus      `ffstruct:"EventStream" json:"status"`
+	Statistics *EventStreamStatistics `ffstruct:"EventStream" json:"statistics,omitempty"`
+}
+
+type EventStreamCheckpoint struct {
+	dbsql.ResourceBase
+	SequenceID *string `ffstruct:"EventStreamCheckpoint" json:"sequenceId,omitempty"`
+}
+
+type EventBatchDispatcher[DT any] interface {
+	AttemptDispatch(ctx context.Context, batchNumber int64, attempt int, events []*Event[DT]) error
 }
 
 func checkSet[T any](ctx context.Context, storeDefaults bool, fieldName string, fieldPtr **T, defValue T, check func(v T) bool) error {
@@ -161,50 +207,13 @@ func (esc *EventStreamSpec[CT]) Validate(ctx context.Context, tlsConfigs map[str
 	return nil
 }
 
-type EventStreamStatus = fftypes.FFEnum
-
-var (
-	EventStreamStatusStarted         = fftypes.FFEnumValue("esstatus", "started")
-	EventStreamStatusStopped         = fftypes.FFEnumValue("esstatus", "stopped")
-	EventStreamStatusDeleted         = fftypes.FFEnumValue("esstatus", "deleted")
-	EventStreamStatusStopping        = fftypes.FFEnumValue("esstatus", "stopping")         // not persisted
-	EventStreamStatusStoppingDeleted = fftypes.FFEnumValue("esstatus", "stopping_deleted") // not persisted
-)
-
-type EventStreamStatistics struct {
-	StartTime            *fftypes.FFTime `ffstruct:"EventStreamStatistics" json:"startTime"`
-	LastDispatchTime     *fftypes.FFTime `ffstruct:"EventStreamStatistics" json:"lastDispatchTime"`
-	LastDispatchNumber   int64           `ffstruct:"EventStreamStatistics" json:"lastDispatchBatch"`
-	LastDispatchAttempts int             `ffstruct:"EventStreamStatistics" json:"lastDispatchAttempts,omitempty"`
-	LastDispatchFailure  string          `ffstruct:"EventStreamStatistics" json:"lastDispatchFailure,omitempty"`
-	LastDispatchStatus   DispatchStatus  `ffstruct:"EventStreamStatistics" json:"lastDispatchComplete"`
-	HighestDetected      string          `ffstruct:"EventStreamStatistics" json:"highestDetected"`
-	HighestDispatched    string          `ffstruct:"EventStreamStatistics" json:"highestDispatched"`
-	Checkpoint           string          `ffstruct:"EventStreamStatistics" json:"checkpoint"`
-}
-
-type EventStreamWithStatus[CT any] struct {
-	EventStreamSpec[CT]
-	Status     EventStreamStatus      `ffstruct:"EventStream" json:"status"`
-	Statistics *EventStreamStatistics `ffstruct:"EventStream" json:"statistics,omitempty"`
-}
-
-type EventStreamCheckpoint struct {
-	dbsql.ResourceBase
-	SequenceID *string `ffstruct:"EventStreamCheckpoint" json:"sequenceId,omitempty"`
-}
-
-type eventStreamAction interface {
-	attemptDispatch(ctx context.Context, batchNumber int64, attempt int, events []*Event) error
-}
-
-type eventStream[CT any] struct {
+type eventStream[CT any, DT any] struct {
 	bgCtx       context.Context
-	esm         *esManager[CT]
+	esm         *esManager[CT, DT]
 	spec        *EventStreamSpec[CT]
 	mux         sync.Mutex
-	action      eventStreamAction
-	activeState *activeStream[CT]
+	action      EventBatchDispatcher[DT]
+	activeState *activeStream[CT, DT]
 	retry       *retry.Retry
 	persistence Persistence[CT]
 	stopping    chan struct{}
@@ -216,16 +225,16 @@ type EventStreamActions[CT any] interface {
 	Status(ctx context.Context) *EventStreamWithStatus[CT]
 }
 
-func (esm *esManager[CT]) initEventStream(
+func (esm *esManager[CT, DT]) initEventStream(
 	bgCtx context.Context,
 	spec *EventStreamSpec[CT],
-) (es *eventStream[CT], err error) {
+) (es *eventStream[CT, DT], err error) {
 	// Validate
 	if err := spec.Validate(bgCtx, esm.tlsConfigs, &esm.config.Defaults, true); err != nil {
 		return nil, err
 	}
 
-	es = &eventStream[CT]{
+	es = &eventStream[CT, DT]{
 		bgCtx:       log.WithLogField(bgCtx, "eventstream", spec.ID.String()),
 		esm:         esm,
 		spec:        spec,
@@ -239,7 +248,7 @@ func (esm *esManager[CT]) initEventStream(
 			return nil, err
 		}
 	case EventStreamTypeWebSocket:
-		es.action = newWebSocketAction(esm.wsChannels, spec.WebSocket, *spec.Name)
+		es.action = newWebSocketAction[DT](esm.wsChannels, spec.WebSocket, *spec.Name)
 	default:
 		return nil, i18n.NewError(es.bgCtx, i18n.MsgESInvalidType, *es.spec.Type)
 	}
@@ -252,7 +261,7 @@ func (esm *esManager[CT]) initEventStream(
 	return es, nil
 }
 
-func (es *eventStream[CT]) requestStop(ctx context.Context) chan struct{} {
+func (es *eventStream[CT, DT]) requestStop(ctx context.Context) chan struct{} {
 	es.mux.Lock()
 	defer es.mux.Unlock()
 	// Check we're active
@@ -287,7 +296,7 @@ func (es *eventStream[CT]) requestStop(ctx context.Context) chan struct{} {
 	return es.stopping
 }
 
-func (es *eventStream[CT]) checkSetStatus(ctx context.Context, targetStatus *EventStreamStatus) (newRuntimeStatus EventStreamStatus, changeToPersist *EventStreamStatus, statistics *EventStreamStatistics, err error) {
+func (es *eventStream[CT, DT]) checkSetStatus(ctx context.Context, targetStatus *EventStreamStatus) (newRuntimeStatus EventStreamStatus, changeToPersist *EventStreamStatus, statistics *EventStreamStatistics, err error) {
 	es.mux.Lock()
 	defer es.mux.Unlock()
 
@@ -317,16 +326,18 @@ func (es *eventStream[CT]) checkSetStatus(ctx context.Context, targetStatus *Eve
 		newRuntimeStatus = EventStreamStatusStopped
 		if es.stopping != nil {
 			newRuntimeStatus = EventStreamStatusStopping
-			// We can only stay in stopped, or go to deleted
-			if targetStatus != nil {
-				switch *targetStatus {
-				case EventStreamStatusStopped:
-					// no change
-				case EventStreamStatusDeleted:
-					transition(EventStreamStatusStoppingDeleted, EventStreamStatusDeleted)
-				default:
-					err = i18n.NewError(ctx, i18n.MsgESStopping)
-				}
+		}
+		// We can only stay in stopped, or go to deleted
+		if targetStatus != nil {
+			switch *targetStatus {
+			case EventStreamStatusStopped:
+				// no change
+			case EventStreamStatusStarted:
+				transition(EventStreamStatusStarted, EventStreamStatusStarted) // note no starting interim runtime status
+			case EventStreamStatusDeleted:
+				transition(EventStreamStatusStoppingDeleted, EventStreamStatusDeleted)
+			default:
+				err = i18n.NewError(ctx, i18n.MsgESStopping)
 			}
 		}
 	case EventStreamStatusStarted:
@@ -349,12 +360,12 @@ func (es *eventStream[CT]) checkSetStatus(ctx context.Context, targetStatus *Eve
 	return newRuntimeStatus, changeToPersist, statistics, err
 }
 
-func (es *eventStream[CT]) persistStatus(ctx context.Context, targetStatus EventStreamStatus) error {
+func (es *eventStream[CT, DT]) persistStatus(ctx context.Context, targetStatus EventStreamStatus) error {
 	fb := EventStreamFilters.NewUpdate(ctx)
 	return es.esm.persistence.EventStreams().Update(ctx, es.spec.ID.String(), fb.Set("status", targetStatus))
 }
 
-func (es *eventStream[CT]) stopOrDelete(ctx context.Context, targetStatus EventStreamStatus) error {
+func (es *eventStream[CT, DT]) stopOrDelete(ctx context.Context, targetStatus EventStreamStatus) error {
 	_, newPersistedStatus, _, err := es.checkSetStatus(ctx, &targetStatus)
 	if err != nil {
 		return err
@@ -378,7 +389,7 @@ func (es *eventStream[CT]) stopOrDelete(ctx context.Context, targetStatus EventS
 	return nil
 }
 
-func (es *eventStream[CT]) ensureActive() {
+func (es *eventStream[CT, DT]) ensureActive() {
 	// Caller responsible for checking state transitions before invoking
 	es.mux.Lock()
 	defer es.mux.Unlock()
@@ -387,15 +398,15 @@ func (es *eventStream[CT]) ensureActive() {
 	}
 }
 
-func (es *eventStream[CT]) Stop(ctx context.Context) error {
+func (es *eventStream[CT, DT]) Stop(ctx context.Context) error {
 	return es.stopOrDelete(ctx, EventStreamStatusStopped)
 }
 
-func (es *eventStream[CT]) Delete(ctx context.Context) error {
+func (es *eventStream[CT, DT]) Delete(ctx context.Context) error {
 	return es.stopOrDelete(ctx, EventStreamStatusDeleted)
 }
 
-func (es *eventStream[CT]) Start(ctx context.Context) error {
+func (es *eventStream[CT, DT]) Start(ctx context.Context) error {
 	startedStatus := EventStreamStatusStarted
 	_, newPersistedStatus, _, err := es.checkSetStatus(ctx, &startedStatus)
 	if err != nil {
@@ -410,10 +421,10 @@ func (es *eventStream[CT]) Start(ctx context.Context) error {
 	return nil
 }
 
-func (es *eventStream[CT]) Status(ctx context.Context) *EventStreamWithStatus[CT] {
+func (es *eventStream[CT, DT]) Status(ctx context.Context) *EventStreamWithStatus[CT] {
 	status, _, statistics, _ := es.checkSetStatus(ctx, nil)
 	return &EventStreamWithStatus[CT]{
-		EventStreamSpec: *es.spec,
+		EventStreamSpec: es.spec,
 		Status:          status,
 		Statistics:      statistics,
 	}

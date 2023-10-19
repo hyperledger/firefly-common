@@ -35,7 +35,7 @@ var EventStreamFilters = &ffapi.QueryFields{
 	"name":        &ffapi.StringField{},
 	"status":      &ffapi.StringField{},
 	"type":        &ffapi.StringField{},
-	"topicFilter": &ffapi.StringField{},
+	"topicfilter": &ffapi.StringField{},
 }
 
 func NewEventStreamPersistence[CT any](db *dbsql.Database) Persistence[CT] {

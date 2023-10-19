@@ -18,14 +18,14 @@ package eventstreams
 
 import "github.com/hyperledger/firefly-common/pkg/fftypes"
 
-type EventBatch struct {
-	StreamID    *fftypes.UUID `json:"streamId"`    // the ID of the event stream for this event
-	BatchNumber int64         `json:"batchNumber"` // should be provided back in the ack
-	Events      []*Event      `json:"events"`      // an array of events allows efficient batch acknowledgment
+type EventBatch[DataType any] struct {
+	StreamID    *fftypes.UUID      `json:"streamId"`    // the ID of the event stream for this event
+	BatchNumber int64              `json:"batchNumber"` // should be provided back in the ack
+	Events      []*Event[DataType] `json:"events"`      // an array of events allows efficient batch acknowledgment
 }
 
-type Event struct {
-	Topic      string `json:"topic,omitempty"` // describes the sub-stream of events (optional) allowing sever-side event filtering (regexp)
-	SequenceID string `json:"sequenceId"`      // deterministic ID for the event, that must be alpha-numerically orderable within the stream (numbers must be padded for ordering)
-	Data       any    `json:"data"`            // can be anything to deliver for the event - must be JSON marshalable
+type Event[DataType any] struct {
+	Topic      string    `json:"topic,omitempty"` // describes the sub-stream of events (optional) allowing sever-side event filtering (regexp)
+	SequenceID string    `json:"sequenceId"`      // deterministic ID for the event, that must be alpha-numerically orderable within the stream (numbers must be padded for ordering)
+	Data       *DataType `json:"data"`            // can be anything to deliver for the event - must be JSON marshalable
 }

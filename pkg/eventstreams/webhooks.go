@@ -65,14 +65,14 @@ func (wc *WebhookConfig) Validate(ctx context.Context, tlsConfigs map[string]*tl
 	return nil
 }
 
-type webhookAction[CT any] struct {
-	esm               *esManager[CT]
+type webhookAction[CT any, DT any] struct {
+	esm               *esManager[CT, DT]
 	disablePrivateIPs bool
 	spec              *WebhookConfig
 	client            *resty.Client
 }
 
-func (esm *esManager[CT]) newWebhookAction(ctx context.Context, spec *WebhookConfig) (*webhookAction[CT], error) {
+func (esm *esManager[CT, DT]) newWebhookAction(ctx context.Context, spec *WebhookConfig) (*webhookAction[CT, DT], error) {
 	if !spec.validated {
 		return nil, i18n.NewError(ctx, i18n.MsgConfigurationNotValidated)
 	}
@@ -85,7 +85,7 @@ func (esm *esManager[CT]) newWebhookAction(ctx context.Context, spec *WebhookCon
 		URL:        *spec.URL,
 		HTTPConfig: *conf,
 	})
-	return &webhookAction[CT]{
+	return &webhookAction[CT, DT]{
 		esm:               esm,
 		spec:              spec,
 		disablePrivateIPs: esm.config.DisablePrivateIPs,
@@ -93,7 +93,7 @@ func (esm *esManager[CT]) newWebhookAction(ctx context.Context, spec *WebhookCon
 	}, nil
 }
 
-func (w *webhookAction[CT]) attemptDispatch(ctx context.Context, batchNumber int64, attempt int, events []*Event) error {
+func (w *webhookAction[CT, DT]) AttemptDispatch(ctx context.Context, batchNumber int64, attempt int, events []*Event[DT]) error {
 	// We perform DNS resolution before each attempt, to exclude private IP address ranges from the target
 	u, _ := url.Parse(*w.spec.URL)
 	addr, err := net.ResolveIPAddr("ip4", u.Hostname())
@@ -126,7 +126,7 @@ func (w *webhookAction[CT]) attemptDispatch(ctx context.Context, batchNumber int
 }
 
 // isAddressBlocked allows blocking of all of the "private" address blocks defined by IPv4
-func (w *webhookAction[CT]) isAddressBlocked(ip *net.IPAddr) bool {
+func (w *webhookAction[CT, DT]) isAddressBlocked(ip *net.IPAddr) bool {
 	ip4 := ip.IP.To4()
 	return w.disablePrivateIPs &&
 		(ip4[0] == 0 ||

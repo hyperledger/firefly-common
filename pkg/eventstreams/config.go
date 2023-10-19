@@ -63,8 +63,9 @@ const (
 	ConfigCheckpointsAsynchronous            = "asynchronous"
 	ConfigCheckpointsUnmatchedEventThreshold = "unmatchedEventThreshold"
 
-	ConfigWebhooksDisablePrivateIPs = "disablePrivateIPs"
-	ConfigWebhooksDefaultTLSConfig  = "tlsConfigName"
+	ConfigDisablePrivateIPs = "disablePrivateIPs"
+
+	ConfigWebhooksDefaultTLSConfig = "tlsConfigName"
 
 	ConfigWebSocketsDistributionMode = "distributionMode"
 
@@ -94,6 +95,8 @@ func InitConfig(conf config.Section) {
 	fftls.InitTLSConfig(tlsSubSection)
 	tlsSubSection.SetDefault(fftls.HTTPConfTLSEnabled, true) // as it's a TLS config
 
+	RootConfig.AddKnownKey(ConfigDisablePrivateIPs)
+
 	DefaultsConfig = conf.SubSection("defaults")
 
 	CheckpointsConfig = conf.SubSection("checkpoints")
@@ -107,7 +110,6 @@ func InitConfig(conf config.Section) {
 	DefaultsConfig.AddKnownKey(ConfigDefaultsBlockedRetryDelay, "1m")
 
 	WebhookDefaultsConfig = DefaultsConfig.SubSection("webhooks")
-	WebhookDefaultsConfig.AddKnownKey(ConfigWebhooksDisablePrivateIPs)
 	ffresty.InitConfig(WebhookDefaultsConfig)
 
 	WebSocketsDefaultsConfig = DefaultsConfig.SubSection("websockets")
@@ -129,7 +131,7 @@ func GenerateConfig(ctx context.Context) *Config {
 	}
 	return &Config{
 		TLSConfigs:        tlsConfigs,
-		DisablePrivateIPs: WebhookDefaultsConfig.GetBool(ConfigWebhooksDisablePrivateIPs),
+		DisablePrivateIPs: RootConfig.GetBool(ConfigDisablePrivateIPs),
 		Defaults: EventStreamDefaults{
 			ErrorHandling:     fftypes.FFEnum(DefaultsConfig.GetString(ConfigDefaultsErrorHandling)),
 			BatchSize:         DefaultsConfig.GetInt(ConfigDefaultsBatchSize),

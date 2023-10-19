@@ -27,28 +27,26 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/ffresty"
 	"github.com/hyperledger/firefly-common/pkg/fftls"
-	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/stretchr/testify/assert"
 )
 
-func newTestWebhooks(t *testing.T, whc *WebhookConfig, tweaks ...func()) *webhookAction[testConfigType] {
+func newTestWebhooks(t *testing.T, whc *WebhookConfig, tweaks ...func()) *webhookAction[testESConfig, testData] {
 
 	ctx := context.Background()
 	config.RootConfigReset()
 
 	conf := config.RootSection("ut")
 	InitConfig(conf)
-	httpConf := conf.SubSection("webhooks")
-	httpConf.Set(ffresty.HTTPConfigRequestTimeout, "1s")
-	httpConf.SubSection("tls").Set(fftls.HTTPConfTLSInsecureSkipHostVerify, true)
+	WebhookDefaultsConfig.Set(ffresty.HTTPConfigRequestTimeout, "1s")
+	WebhookDefaultsConfig.SubSection("tls").Set(fftls.HTTPConfTLSInsecureSkipHostVerify, true)
 	for _, tweak := range tweaks {
 		tweak()
 	}
 
 	esConfig := GenerateConfig(ctx)
-	ies, err := NewEventStreamManager[testConfigType](ctx, esConfig, nil, nil, &mockEventSource{})
+	ies, err := NewEventStreamManager[testESConfig, testData](ctx, esConfig, nil, nil, &mockEventSource{})
 	assert.NoError(t, err)
-	es := ies.(*esManager[testConfigType])
+	es := ies.(*esManager[testESConfig, testData])
 
 	assert.NoError(t, whc.Validate(ctx, es.tlsConfigs))
 
@@ -88,17 +86,17 @@ func TestWebhooksBadHost(t *testing.T) {
 	u := "http://www.sample.invalid/guaranteed-to-fail"
 	wh := newTestWebhooks(t, &WebhookConfig{URL: &u})
 
-	err := wh.attemptDispatch(context.Background(), 0, 0, []*Event{{Data: fftypes.JSONAnyPtr(`{"some": "data"}`)}})
+	err := wh.AttemptDispatch(context.Background(), 0, 0, []*Event[testData]{{Data: &testData{Field1: "12345"}}})
 	assert.Regexp(t, "FF00218", err)
 }
 
 func TestWebhooksPrivateBlocked(t *testing.T) {
 	u := "http://10.0.0.1/one-of-the-private-ranges"
 	wh := newTestWebhooks(t, &WebhookConfig{URL: &u}, func() {
-		WebhookDefaultsConfig.Set(ConfigWebhooksDisablePrivateIPs, true)
+		RootConfig.Set(ConfigDisablePrivateIPs, true)
 	})
 
-	err := wh.attemptDispatch(context.Background(), 0, 0, []*Event{{Data: fftypes.JSONAnyPtr(`{"some": "data"}`)}})
+	err := wh.AttemptDispatch(context.Background(), 0, 0, []*Event[testData]{{Data: &testData{Field1: "12345"}}})
 	assert.Regexp(t, "FF00220", err)
 }
 
@@ -108,10 +106,10 @@ func TestWebhooksCustomHeaders403(t *testing.T) {
 		assert.Equal(t, "/test/path", r.URL.Path)
 		assert.Equal(t, http.MethodPost, r.Method)
 		assert.Equal(t, "test-value", r.Header.Get("test-header"))
-		var data []*fftypes.JSONObject
+		var data []*Event[testData]
 		err := json.NewDecoder(r.Body).Decode(&data)
 		assert.NoError(t, err)
-		assert.Equal(t, "data", data[0].GetString("some"))
+		assert.Equal(t, "12345", data[0].Data.Field1)
 		w.WriteHeader(403)
 	}))
 	defer s.Close()
@@ -124,7 +122,7 @@ func TestWebhooksCustomHeaders403(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		err := wh.attemptDispatch(context.Background(), 0, 0, []*Event{{Data: fftypes.JSONAnyPtr(`{"some": "data"}`)}})
+		err := wh.AttemptDispatch(context.Background(), 0, 0, []*Event[testData]{{Data: &testData{Field1: "12345"}}})
 		assert.Regexp(t, "FF00221.*403", err)
 		close(done)
 	}()
@@ -141,7 +139,7 @@ func TestWebhooksCustomHeadersConnectFail(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		err := wh.attemptDispatch(context.Background(), 0, 0, []*Event{{Data: fftypes.JSONAnyPtr(`{"some": "data"}`)}})
+		err := wh.AttemptDispatch(context.Background(), 0, 0, []*Event[testData]{{Data: &testData{Field1: "12345"}}})
 		assert.Regexp(t, "FF00219", err)
 		close(done)
 	}()
@@ -171,7 +169,7 @@ func TestWebhooksTLS(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		err := wh.attemptDispatch(context.Background(), 0, 0, []*Event{{Data: fftypes.JSONAnyPtr(`{"some": "data"}`)}})
+		err := wh.AttemptDispatch(context.Background(), 0, 0, []*Event[testData]{{Data: &testData{Field1: "12345"}}})
 		assert.NoError(t, err)
 		close(done)
 	}()

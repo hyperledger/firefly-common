@@ -37,9 +37,9 @@ type WebSocketConfig struct {
 	DistributionMode *DistributionMode `ffstruct:"wsconfig" json:"distributionMode,omitempty"`
 }
 
-type WebSocketEventBatch struct {
-	BatchNumber int64    `ffstruct:"wsevent" json:"batchNumber"`
-	Events      []*Event `ffstruct:"wsevent" json:"events"`
+type WebSocketEventBatch[DT any] struct {
+	BatchNumber int64        `ffstruct:"wsevent" json:"batchNumber"`
+	Events      []*Event[DT] `ffstruct:"wsevent" json:"events"`
 }
 
 // Store in DB as JSON
@@ -59,21 +59,21 @@ func (wc *WebSocketConfig) Validate(ctx context.Context, defaults *ConfigWebsock
 	return checkSet(ctx, setDefaults, "errorHandling", &wc.DistributionMode, defaults.DefaultDistributionMode, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "distmode", v) })
 }
 
-type webSocketAction struct {
+type webSocketAction[DT any] struct {
 	topic      string
 	spec       *WebSocketConfig
 	wsChannels wsserver.WebSocketChannels
 }
 
-func newWebSocketAction(wsChannels wsserver.WebSocketChannels, spec *WebSocketConfig, topic string) *webSocketAction {
-	return &webSocketAction{
+func newWebSocketAction[DT any](wsChannels wsserver.WebSocketChannels, spec *WebSocketConfig, topic string) *webSocketAction[DT] {
+	return &webSocketAction[DT]{
 		spec:       spec,
 		wsChannels: wsChannels,
 		topic:      topic,
 	}
 }
 
-func (w *webSocketAction) attemptDispatch(ctx context.Context, batchNumber int64, attempt int, events []*Event) error {
+func (w *webSocketAction[DT]) AttemptDispatch(ctx context.Context, batchNumber int64, attempt int, events []*Event[DT]) error {
 	var err error
 
 	// Get a blocking channel to send and receive on our chosen namespace
@@ -89,7 +89,7 @@ func (w *webSocketAction) attemptDispatch(ctx context.Context, batchNumber int64
 
 	// Send the batch of events
 	select {
-	case channel <- &WebSocketEventBatch{
+	case channel <- &WebSocketEventBatch[DT]{
 		BatchNumber: batchNumber,
 		Events:      events,
 	}:
@@ -112,7 +112,7 @@ func (w *webSocketAction) attemptDispatch(ctx context.Context, batchNumber int64
 	return nil
 }
 
-func (w *webSocketAction) waitForAck(ctx context.Context, receiver <-chan *wsserver.WebSocketCommandMessageOrError, batchNumber int64) error {
+func (w *webSocketAction[DT]) waitForAck(ctx context.Context, receiver <-chan *wsserver.WebSocketCommandMessageOrError, batchNumber int64) error {
 	// Wait for the next ack or exception
 	for {
 		select {
