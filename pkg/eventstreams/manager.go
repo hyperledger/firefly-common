@@ -21,13 +21,19 @@ import (
 	"crypto/tls"
 	"sync"
 
+	"github.com/hyperledger/firefly-common/pkg/dbsql"
+	"github.com/hyperledger/firefly-common/pkg/ffapi"
 	"github.com/hyperledger/firefly-common/pkg/fftls"
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
+	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
 	"github.com/hyperledger/firefly-common/pkg/wsserver"
 )
 
-type Manager interface {
-	// CreateNewStream(ctx context.Context, esSpec *EventStreamSpec)
+type Manager[CT any] interface {
+	UpsertStream(ctx context.Context, esSpec *EventStreamSpec[CT]) (bool, error)
+	DeleteStream(ctx context.Context, esSpec *EventStreamSpec[CT]) error
+	ListStreams(ctx context.Context, filter ffapi.Filter) ([]*EventStreamSpec[CT], *ffapi.FilterResult, error)
 	Close(ctx context.Context)
 }
 
@@ -60,14 +66,14 @@ type Runtime[ConfigType any] interface {
 type esManager[CT any] struct {
 	config      Config
 	mux         sync.Mutex
-	streams     []*eventStream[CT]
+	streams     map[fftypes.UUID]*eventStream[CT]
 	tlsConfigs  map[string]*tls.Config
 	wsChannels  wsserver.WebSocketChannels
 	persistence Persistence[CT]
 	runtime     Runtime[CT]
 }
 
-func NewEventStreamManager[CT any](ctx context.Context, config *Config, source Runtime[CT]) (es Manager, err error) {
+func NewEventStreamManager[CT any](ctx context.Context, config *Config, source Runtime[CT]) (es Manager[CT], err error) {
 	// Parse the TLS configs up front
 	tlsConfigs := make(map[string]*tls.Config)
 	for name, tlsJSONConf := range config.TLSConfigs {
@@ -80,15 +86,21 @@ func NewEventStreamManager[CT any](ctx context.Context, config *Config, source R
 		config:     *config,
 		tlsConfigs: tlsConfigs,
 		runtime:    source,
+		streams:    map[fftypes.UUID]*eventStream[CT]{},
 	}, nil
 }
 
 func (esm *esManager[CT]) addStream(ctx context.Context, es *eventStream[CT]) {
 	log.L(ctx).Infof("Adding stream '%s' [%s] (%s)", *es.spec.Name, es.spec.ID, es.Status(ctx).Status)
-	// Lock and add
 	esm.mux.Lock()
 	defer esm.mux.Unlock()
-	esm.streams = append(esm.streams, es)
+	esm.streams[*es.spec.ID] = es
+}
+
+func (esm *esManager[CT]) removeStream(id *fftypes.UUID) {
+	esm.mux.Lock()
+	defer esm.mux.Unlock()
+	delete(esm.streams, *id)
 }
 
 func (esm *esManager[CT]) Initialize(ctx context.Context) error {
@@ -119,6 +131,51 @@ func (esm *esManager[CT]) Initialize(ctx context.Context) error {
 		skip += pageSize
 	}
 	return nil
+}
+
+func (esm *esManager[CT]) UpsertStream(ctx context.Context, esSpec *EventStreamSpec[CT]) (bool, error) {
+	if esSpec.ID == nil {
+		esSpec.ID = fftypes.NewUUID()
+	}
+
+	// Do a validation that does NOT update the defaults into the structure, so that
+	// the defaults are not persisted into the DB. This means that if the defaults are
+	// changed then any streams with nil fields will pick up the new defaults.
+	if err := esSpec.Validate(ctx, esm.tlsConfigs, &esm.config.Defaults, false); err != nil {
+		return false, err
+	}
+
+	isNew, err := esm.persistence.EventStreams().Upsert(ctx, esSpec, dbsql.UpsertOptimizationExisting)
+	if err != nil {
+		return false, err
+	}
+
+	es, err := esm.initEventStream(ctx, esSpec)
+	if err != nil {
+		return false, err
+	}
+	esm.addStream(ctx, es)
+	return isNew, nil
+}
+
+func (esm *esManager[CT]) DeleteStream(ctx context.Context, esSpec *EventStreamSpec[CT]) error {
+	es := esm.streams[*esSpec.ID]
+	if es == nil {
+		return i18n.NewError(ctx, i18n.Msg404NoResult)
+	}
+	if err := es.Delete(ctx); err != nil {
+		return err
+	}
+	// Now we can delete it fully from the DB
+	if err := esm.persistence.EventStreams().Delete(ctx, esSpec.GetID()); err != nil {
+		return err
+	}
+	esm.removeStream(esSpec.ID)
+	return nil
+}
+
+func (esm *esManager[CT]) ListStreams(ctx context.Context, filter ffapi.Filter) ([]*EventStreamSpec[CT], *ffapi.FilterResult, error) {
+	return esm.persistence.EventStreams().GetMany(ctx, filter)
 }
 
 func (esm *esManager[CT]) Close(ctx context.Context) {

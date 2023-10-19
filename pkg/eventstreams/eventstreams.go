@@ -71,7 +71,6 @@ type EventStreamSpec[CT any] struct {
 	WebSocket *WebSocketConfig `ffstruct:"eventstream" json:"websocket,omitempty"`
 
 	topicFilterRegexp *regexp.Regexp
-	validated         bool
 }
 
 func (esc *EventStreamSpec[CT]) GetID() string {
@@ -156,7 +155,6 @@ func (esc *EventStreamSpec[CT]) Validate(ctx context.Context, tlsConfigs map[str
 	default:
 		return i18n.NewError(ctx, i18n.MsgESInvalidType, *esc.Type)
 	}
-	esc.validated = true
 	return nil
 }
 
@@ -219,6 +217,11 @@ func (esm *esManager[CT]) initEventStream(
 	bgCtx context.Context,
 	spec *EventStreamSpec[CT],
 ) (es *eventStream[CT], err error) {
+	// Validate
+	if err := spec.Validate(bgCtx, esm.tlsConfigs, &esm.config.Defaults, true); err != nil {
+		return nil, err
+	}
+
 	es = &eventStream[CT]{
 		bgCtx:       log.WithLogField(bgCtx, "eventstream", spec.ID.String()),
 		esm:         esm,
