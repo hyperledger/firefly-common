@@ -140,13 +140,17 @@ func (s *Database) RunAsGroup(ctx context.Context, fn func(ctx context.Context) 
 func (s *Database) applyDBMigrations(ctx context.Context, config config.Section, provider Provider) error {
 	driver, err := provider.GetMigrationDriver(s.db)
 	if err == nil {
+		fileURL := "file://" + config.GetString(SQLConfMigrationsDirectory)
+		log.L(ctx).Infof("Running migrations in: %s", fileURL)
 		var m *migrate.Migrate
 		m, err = migrate.NewWithDatabaseInstance(
-			"file://"+config.GetString(SQLConfMigrationsDirectory),
+			fileURL,
 			provider.MigrationsDir(), driver)
 		if err == nil {
 			err = m.Up()
 		}
+		version, dirty, _ := m.Version()
+		log.L(ctx).Infof("Migrations now at: v=%d dirty=%t", version, dirty)
 	}
 	if err != nil && err != migrate.ErrNoChange {
 		return i18n.WrapError(ctx, err, i18n.MsgDBMigrationFailed)

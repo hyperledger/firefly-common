@@ -18,7 +18,10 @@ package eventstreams
 
 import "github.com/hyperledger/firefly-common/pkg/fftypes"
 
+const MessageTypeEventBatch = "event_batch"
+
 type EventBatch[DataType any] struct {
+	Type        string             `json:"type"`        // always MessageTypeEventBatch (for consistent WebSocket flow control)
 	StreamID    *fftypes.UUID      `json:"stream"`      // the ID of the event stream for this event
 	BatchNumber int64              `json:"batchNumber"` // should be provided back in the ack
 	Events      []*Event[DataType] `json:"events"`      // an array of events allows efficient batch acknowledgment
