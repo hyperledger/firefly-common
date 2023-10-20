@@ -18,6 +18,7 @@ package eventstreams
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/hyperledger/firefly-common/pkg/dbsql"
@@ -120,5 +121,175 @@ func TestWebhookConfigSerialization(t *testing.T) {
 	err = wc3.Scan(nil)
 	assert.NoError(t, err)
 	assert.Nil(t, wc3)
+
+}
+
+func TestValidate(t *testing.T) {
+	ctx, es, _, done := newTestEventStream(t)
+	done()
+
+	es.spec = &EventStreamSpec[testESConfig]{}
+	err := es.esm.validateStream(ctx, es.spec, false)
+	assert.Regexp(t, "FF00112", err)
+
+	es.spec.Name = ptrTo("name1")
+	err = es.esm.validateStream(ctx, es.spec, false)
+	assert.NoError(t, err)
+
+	es.esm.runtime.(*mockEventSource).validate = func(ctx context.Context, conf *testESConfig) error {
+		return fmt.Errorf("pop")
+	}
+	err = es.esm.validateStream(ctx, es.spec, false)
+	assert.Regexp(t, "pop", err)
+	es.esm.runtime.(*mockEventSource).validate = func(ctx context.Context, conf *testESConfig) error { return nil }
+
+	es.spec.TopicFilter = ptrTo("((((!Bad Regexp[")
+	err = es.esm.validateStream(ctx, es.spec, false)
+	assert.Regexp(t, "FF00235", err)
+
+	es.spec.TopicFilter = nil
+	es.spec.Type = ptrTo(fftypes.FFEnum("wrong"))
+	err = es.esm.validateStream(ctx, es.spec, false)
+	assert.Regexp(t, "FF00234", err)
+
+	es.spec.Type = ptrTo(EventStreamTypeWebSocket)
+	es.spec.WebSocket = &WebSocketConfig{
+		DistributionMode: ptrTo(fftypes.FFEnum("wrong")),
+	}
+	err = es.esm.validateStream(ctx, es.spec, false)
+	assert.Regexp(t, "FF00234", err)
+
+	es.spec.Type = ptrTo(EventStreamTypeWebhook)
+	err = es.esm.validateStream(ctx, es.spec, false)
+	assert.Regexp(t, "FF00216", err)
+
+	_, err = es.esm.initEventStream(ctx, es.spec)
+	assert.Regexp(t, "FF00216", err)
+}
+
+func TestRequestStopAlreadyStopping(t *testing.T) {
+	ctx, es, _, done := newTestEventStream(t)
+	defer done()
+
+	es.activeState = &activeStream[testESConfig, testData]{}
+	es.stopping = make(chan struct{})
+	s := es.requestStop(ctx)
+	close(s)
+	es.activeState = nil
+
+}
+
+func TestRequestStopPersistFail(t *testing.T) {
+	ctx, es, _, done := newTestEventStream(t, func(mdb *mockPersistence) {
+		mdb.events.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
+	})
+	defer done()
+
+	es.spec.Status = ptrTo(EventStreamStatusDeleted)
+	as := &activeStream[testESConfig, testData]{
+		eventLoopDone: make(chan struct{}),
+		batchLoopDone: make(chan struct{}),
+	}
+	as.ctx, as.cancelCtx = context.WithCancel(ctx)
+	as.cancelCtx()
+	close(as.eventLoopDone)
+	close(as.batchLoopDone)
+	es.activeState = as
+	s := es.requestStop(ctx)
+	<-s
+
+}
+
+func TestCheckSetStatusMachine(t *testing.T) {
+	ctx, es, _, done := newTestEventStream(t)
+	done()
+
+	// FAIL: Deleting -> Started
+	es.spec.Status = ptrTo(EventStreamStatusDeleted)
+	es.stopping = make(chan struct{})
+	newRuntimeStatus, changeToPersist, _, err := es.checkSetStatus(ctx, ptrTo(EventStreamStatusStarted))
+	assert.Equal(t, EventStreamStatusStoppingDeleted, newRuntimeStatus)
+	assert.Nil(t, changeToPersist)
+	assert.Regexp(t, "FF00231", err)
+
+	// FAIL: Stopping -> Started
+	es.spec.Status = ptrTo(EventStreamStatusStopped)
+	es.stopping = make(chan struct{})
+	newRuntimeStatus, changeToPersist, _, err = es.checkSetStatus(ctx, ptrTo(EventStreamStatusStarted))
+	assert.Equal(t, EventStreamStatusStopping, newRuntimeStatus)
+	assert.Nil(t, changeToPersist)
+	assert.Regexp(t, "FF00230", err)
+
+	// NO-OP: Stopping -> Stopping
+	es.spec.Status = ptrTo(EventStreamStatusStopped)
+	es.stopping = make(chan struct{})
+	newRuntimeStatus, changeToPersist, _, err = es.checkSetStatus(ctx, ptrTo(EventStreamStatusStopped))
+	assert.Equal(t, EventStreamStatusStopping, newRuntimeStatus)
+	assert.Nil(t, changeToPersist)
+	assert.NoError(t, err)
+
+	// FAIL: Bad persisted status
+	es.spec.Status = ptrTo(fftypes.FFEnum("wrong"))
+	_, _, _, err = es.checkSetStatus(ctx, ptrTo(EventStreamStatusStarted))
+	assert.Regexp(t, "FF00233", err)
+
+}
+
+func TestStopFailBadStatus(t *testing.T) {
+	ctx, es, _, done := newTestEventStream(t)
+	done()
+
+	// FAIL: Deleting -> Stopped
+	es.spec.Status = ptrTo(EventStreamStatusDeleted)
+	err := es.stop(ctx)
+	assert.Regexp(t, "FF00231", err)
+
+}
+
+func TestStopFailPersistFail(t *testing.T) {
+	ctx, es, _, done := newTestEventStream(t, func(mdb *mockPersistence) {
+		mdb.events.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
+	})
+	done()
+
+	// OK: Started -> Stopping
+	es.spec.Status = ptrTo(EventStreamStatusStarted)
+	err := es.stop(ctx)
+	assert.Regexp(t, "pop", err)
+
+}
+
+func TestStartFailBadStatus(t *testing.T) {
+	ctx, es, _, done := newTestEventStream(t)
+	done()
+
+	// FAIL: Deleting -> Started
+	es.spec.Status = ptrTo(EventStreamStatusDeleted)
+	err := es.start(ctx)
+	assert.Regexp(t, "FF00231", err)
+
+}
+
+func TestStartFailPersistFail(t *testing.T) {
+	ctx, es, _, done := newTestEventStream(t, func(mdb *mockPersistence) {
+		mdb.events.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
+	})
+	done()
+
+	// OK: Stopped -> Started
+	es.spec.Status = ptrTo(EventStreamStatusStopped)
+	err := es.start(ctx)
+	assert.Regexp(t, "pop", err)
+
+}
+
+func TestSuspendTimeout(t *testing.T) {
+	ctx, es, _, done := newTestEventStream(t)
+	done()
+
+	es.activeState = &activeStream[testESConfig, testData]{}
+	es.stopping = make(chan struct{})
+	err := es.suspend(ctx)
+	assert.Regexp(t, "FF00229", err)
 
 }

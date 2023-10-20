@@ -116,6 +116,7 @@ func TestE2E_DeliveryWebSockets(t *testing.T) {
 		TopicFilter: ptrTo("topic_1"), // only one of the topics
 		Type:        &EventStreamTypeWebSocket,
 		BatchSize:   ptrTo(10),
+		Config:      &testESConfig{Config1: "1111"},
 	}
 	created, err := mgr.UpsertStream(ctx, es1)
 	assert.NoError(t, err)
@@ -164,6 +165,7 @@ func TestE2E_DeliveryWebSocketsNack(t *testing.T) {
 		TopicFilter: ptrTo("topic_1"), // only one of the topics
 		Type:        &EventStreamTypeWebSocket,
 		BatchSize:   ptrTo(10),
+		Config:      &testESConfig{Config1: "1111"},
 	}
 	created, err := mgr.UpsertStream(ctx, es1)
 	assert.NoError(t, err)
@@ -209,6 +211,7 @@ func TestE2E_WebsocketDeliveryRestartReset(t *testing.T) {
 		TopicFilter: ptrTo("topic_1"), // only one of the topics
 		Type:        &EventStreamTypeWebSocket,
 		BatchSize:   ptrTo(10),
+		Config:      &testESConfig{Config1: "1111"},
 	}
 	created, err := mgr.UpsertStream(ctx, es1)
 	assert.NoError(t, err)
@@ -297,6 +300,7 @@ func TestE2E_DeliveryWebHooks200(t *testing.T) {
 		TopicFilter: ptrTo("topic_1"), // only one of the topics
 		Type:        &EventStreamTypeWebhook,
 		BatchSize:   ptrTo(10),
+		Config:      &testESConfig{Config1: "1111"},
 		Webhook: &WebhookConfig{
 			URL:    ptrTo(whServer.URL + "/some/path"),
 			Method: ptrTo("PUT"),
@@ -366,6 +370,7 @@ func TestE2E_DeliveryWebHooks500Retry(t *testing.T) {
 		TopicFilter: ptrTo("topic_1"), // only one of the topics
 		Type:        &EventStreamTypeWebhook,
 		BatchSize:   ptrTo(10),
+		Config:      &testESConfig{Config1: "1111"},
 		Webhook: &WebhookConfig{
 			URL:    ptrTo(whServer.URL + "/some/path"),
 			Method: ptrTo("PUT"),

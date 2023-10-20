@@ -51,8 +51,8 @@ func (wc *WebhookConfig) Value() (driver.Value, error) {
 	return fftypes.JSONValue(wc)
 }
 
-// Validate initializes the config ready for use
-func (wc *WebhookConfig) Validate(ctx context.Context, tlsConfigs map[string]*tls.Config) error {
+// validate initializes the config ready for use
+func (wc *WebhookConfig) validate(ctx context.Context, tlsConfigs map[string]*tls.Config) error {
 	if wc.URL == nil || *wc.URL == "" {
 		return i18n.NewError(ctx, i18n.MsgMissingWebhookURL)
 	}
@@ -74,10 +74,7 @@ type webhookAction[CT any, DT any] struct {
 	client            *resty.Client
 }
 
-func (esm *esManager[CT, DT]) newWebhookAction(ctx context.Context, spec *WebhookConfig) (*webhookAction[CT, DT], error) {
-	if !spec.validated {
-		return nil, i18n.NewError(ctx, i18n.MsgConfigurationNotValidated)
-	}
+func (esm *esManager[CT, DT]) newWebhookAction(ctx context.Context, spec *WebhookConfig) *webhookAction[CT, DT] {
 	conf := spec.HTTP
 	if conf == nil {
 		conf = &esm.config.Defaults.WebhookDefaults.HTTPConfig
@@ -92,7 +89,7 @@ func (esm *esManager[CT, DT]) newWebhookAction(ctx context.Context, spec *Webhoo
 		spec:              spec,
 		disablePrivateIPs: esm.config.DisablePrivateIPs,
 		client:            client,
-	}, nil
+	}
 }
 
 func (w *webhookAction[CT, DT]) AttemptDispatch(ctx context.Context, attempt int, batch *EventBatch[DT]) error {

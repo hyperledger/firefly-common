@@ -63,6 +63,10 @@ func (mp *mockPersistence) Checkpoints() dbsql.CRUD[*EventStreamCheckpoint] {
 }
 func (mp *mockPersistence) Close() {}
 
+func ptrTo[T any](v T) *T {
+	return &v
+}
+
 func TestNewManagerFailBadTLS(t *testing.T) {
 	_, err := NewEventStreamManager[testESConfig, testData](context.Background(), &Config{
 		Retry: &retry.Retry{},
@@ -98,7 +102,9 @@ func newMockESManager(t *testing.T, extraSetup ...func(mp *mockPersistence)) (co
 		fn(mp)
 	}
 
-	mes := &mockEventSource{}
+	mes := &mockEventSource{
+		validate: func(ctx context.Context, conf *testESConfig) error { return nil },
+	}
 	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig(ctx), mp, nil, mes)
 	assert.NoError(t, err)
 
@@ -106,8 +112,4 @@ func newMockESManager(t *testing.T, extraSetup ...func(mp *mockPersistence)) (co
 		mgr.Close(ctx)
 		cancelCtx()
 	}
-}
-
-func ptrTo[T any](v T) *T {
-	return &v
 }

@@ -149,11 +149,11 @@ func checkSet[T any](ctx context.Context, storeDefaults bool, fieldName string, 
 	return nil
 }
 
-// Validate checks all the field values, once combined with defaults.
+// validate checks all the field values, once combined with defaults.
 // Optionally it stores the defaults back on the structure, to ensure no nil fields.
 // - When using at runtime: true, so later code doesn't need to worry about nil checks / defaults
 // - When storing to the DB: false, so defaults can be applied dynamically
-func (esc *EventStreamSpec[CT]) Validate(ctx context.Context, tlsConfigs map[string]*tls.Config, defaults *EventStreamDefaults, setDefaults bool) (err error) {
+func (esc *EventStreamSpec[CT]) validate(ctx context.Context, tlsConfigs map[string]*tls.Config, defaults *EventStreamDefaults, validateConf func(context.Context, *CT) error, setDefaults bool) (err error) {
 	if esc.Name == nil {
 		return i18n.NewError(ctx, i18n.MsgMissingRequiredField, "name")
 	}
@@ -163,28 +163,32 @@ func (esc *EventStreamSpec[CT]) Validate(ctx context.Context, tlsConfigs map[str
 			return i18n.NewError(ctx, i18n.MsgESInvalidTopicFilterRegexp, fullMatchFilter, err)
 		}
 	}
-	if err := fftypes.ValidateFFNameField(ctx, *esc.Name, "name"); err != nil {
+	if err := validateConf(ctx, esc.Config); err != nil {
 		return err
 	}
-	if err := checkSet(ctx, setDefaults, "status", &esc.Status, EventStreamStatusStarted, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "esstatus", v) }); err != nil {
-		return err
+	err = fftypes.ValidateFFNameField(ctx, *esc.Name, "name")
+	if err == nil {
+		err = checkSet(ctx, setDefaults, "status", &esc.Status, EventStreamStatusStarted, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "esstatus", v) })
 	}
-	if err := checkSet(ctx, setDefaults, "batchSize", &esc.BatchSize, defaults.BatchSize, func(v int) bool { return v > 0 }); err != nil {
-		return err
+	if err == nil {
+		err = checkSet(ctx, setDefaults, "batchSize", &esc.BatchSize, defaults.BatchSize, func(v int) bool { return v > 0 })
 	}
-	if err := checkSet(ctx, setDefaults, "batchTimeout", &esc.BatchTimeout, defaults.BatchTimeout, func(v fftypes.FFDuration) bool { return v > 0 }); err != nil {
-		return err
+	if err == nil {
+		err = checkSet(ctx, setDefaults, "batchTimeout", &esc.BatchTimeout, defaults.BatchTimeout, func(v fftypes.FFDuration) bool { return v > 0 })
 	}
-	if err := checkSet(ctx, setDefaults, "retryTimeout", &esc.RetryTimeout, defaults.RetryTimeout, func(v fftypes.FFDuration) bool { return v > 0 }); err != nil {
-		return err
+	if err == nil {
+		err = checkSet(ctx, setDefaults, "retryTimeout", &esc.RetryTimeout, defaults.RetryTimeout, func(v fftypes.FFDuration) bool { return v > 0 })
 	}
-	if err := checkSet(ctx, setDefaults, "blockedRetryDelay", &esc.BlockedRetryDelay, defaults.BlockedRetryDelay, func(v fftypes.FFDuration) bool { return v > 0 }); err != nil {
-		return err
+	if err == nil {
+		err = checkSet(ctx, setDefaults, "blockedRetryDelay", &esc.BlockedRetryDelay, defaults.BlockedRetryDelay, func(v fftypes.FFDuration) bool { return v > 0 })
 	}
-	if err := checkSet(ctx, setDefaults, "errorHandling", &esc.ErrorHandling, defaults.ErrorHandling, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "ehtype", v) }); err != nil {
-		return err
+	if err == nil {
+		err = checkSet(ctx, setDefaults, "errorHandling", &esc.ErrorHandling, defaults.ErrorHandling, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "ehtype", v) })
 	}
-	if err := checkSet(ctx, setDefaults, "type", &esc.Type, EventStreamTypeWebSocket, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "estype", v) }); err != nil {
+	if err == nil {
+		err = checkSet(ctx, true /* type always applied */, "type", &esc.Type, EventStreamTypeWebSocket, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "estype", v) })
+	}
+	if err != nil {
 		return err
 	}
 	switch *esc.Type {
@@ -192,18 +196,16 @@ func (esc *EventStreamSpec[CT]) Validate(ctx context.Context, tlsConfigs map[str
 		if esc.WebSocket == nil {
 			esc.WebSocket = &WebSocketConfig{}
 		}
-		if err := esc.WebSocket.Validate(ctx, &defaults.WebSocketDefaults, setDefaults); err != nil {
+		if err := esc.WebSocket.validate(ctx, &defaults.WebSocketDefaults, setDefaults); err != nil {
 			return err
 		}
 	case EventStreamTypeWebhook:
 		if esc.Webhook == nil {
 			esc.Webhook = &WebhookConfig{}
 		}
-		if err := esc.Webhook.Validate(ctx, tlsConfigs); err != nil {
+		if err := esc.Webhook.validate(ctx, tlsConfigs); err != nil {
 			return err
 		}
-	default:
-		return i18n.NewError(ctx, i18n.MsgESInvalidType, *esc.Type)
 	}
 	return nil
 }
@@ -231,7 +233,7 @@ func (esm *esManager[CT, DT]) initEventStream(
 	spec *EventStreamSpec[CT],
 ) (es *eventStream[CT, DT], err error) {
 	// Validate
-	if err := spec.Validate(bgCtx, esm.tlsConfigs, &esm.config.Defaults, true); err != nil {
+	if err := esm.validateStream(bgCtx, spec, true); err != nil {
 		return nil, err
 	}
 
@@ -245,13 +247,9 @@ func (esm *esManager[CT, DT]) initEventStream(
 
 	switch *es.spec.Type {
 	case EventStreamTypeWebhook:
-		if es.action, err = esm.newWebhookAction(es.bgCtx, spec.Webhook); err != nil {
-			return nil, err
-		}
+		es.action = esm.newWebhookAction(es.bgCtx, spec.Webhook)
 	case EventStreamTypeWebSocket:
 		es.action = newWebSocketAction[DT](esm.wsChannels, spec.WebSocket, *spec.Name)
-	default:
-		return nil, i18n.NewError(es.bgCtx, i18n.MsgESInvalidType, *es.spec.Type)
 	}
 
 	log.L(es.bgCtx).Infof("Initialized Event Stream")
@@ -260,6 +258,10 @@ func (esm *esManager[CT, DT]) initEventStream(
 		es.ensureActive()
 	}
 	return es, nil
+}
+
+func (esm *esManager[CT, DT]) validateStream(ctx context.Context, esSpec *EventStreamSpec[CT], setDefaults bool) error {
+	return esSpec.validate(ctx, esm.tlsConfigs, &esm.config.Defaults, esm.runtime.Validate, setDefaults)
 }
 
 func (es *eventStream[CT, DT]) requestStop(ctx context.Context) chan struct{} {
@@ -332,12 +334,12 @@ func (es *eventStream[CT, DT]) checkSetStatus(ctx context.Context, targetStatus 
 		}
 		// We can only stay in stopped, or go to deleted
 		if targetStatus != nil {
-			switch *targetStatus {
-			case EventStreamStatusStopped:
+			switch {
+			case *targetStatus == EventStreamStatusStopped:
 				// no change
-			case EventStreamStatusStarted:
+			case *targetStatus == EventStreamStatusStarted && es.stopping == nil:
 				transition(EventStreamStatusStarted, EventStreamStatusStarted) // note no starting interim runtime status
-			case EventStreamStatusDeleted:
+			case *targetStatus == EventStreamStatusDeleted:
 				transition(EventStreamStatusStoppingDeleted, EventStreamStatusDeleted)
 			default:
 				err = i18n.NewError(ctx, i18n.MsgESStopping)

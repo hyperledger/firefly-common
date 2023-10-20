@@ -178,7 +178,7 @@ func (esm *esManager[CT, DT]) UpsertStream(ctx context.Context, esSpec *EventStr
 	// Do a validation that does NOT update the defaults into the structure, so that
 	// the defaults are not persisted into the DB. This means that if the defaults are
 	// changed then any streams with nil fields will pick up the new defaults.
-	if err := esSpec.Validate(ctx, esm.tlsConfigs, &esm.config.Defaults, false); err != nil {
+	if err := esm.validateStream(ctx, esSpec, false); err != nil {
 		return false, err
 	}
 

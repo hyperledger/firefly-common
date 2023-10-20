@@ -50,8 +50,8 @@ func (wc *WebSocketConfig) Value() (driver.Value, error) {
 	return fftypes.JSONValue(wc)
 }
 
-func (wc *WebSocketConfig) Validate(ctx context.Context, defaults *ConfigWebsocketDefaults, setDefaults bool) error {
-	return checkSet(ctx, setDefaults, "errorHandling", &wc.DistributionMode, defaults.DefaultDistributionMode, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "distmode", v) })
+func (wc *WebSocketConfig) validate(ctx context.Context, defaults *ConfigWebsocketDefaults, setDefaults bool) error {
+	return checkSet(ctx, setDefaults, "distributionMode", &wc.DistributionMode, defaults.DefaultDistributionMode, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "distmode", v) })
 }
 
 type webSocketAction[DT any] struct {

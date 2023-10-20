@@ -44,37 +44,26 @@ func newTestWebhooks(t *testing.T, whc *WebhookConfig, tweaks ...func()) *webhoo
 	})
 	done()
 
-	assert.NoError(t, whc.Validate(ctx, mgr.tlsConfigs))
+	assert.NoError(t, whc.validate(ctx, mgr.tlsConfigs))
 
-	wh, err := mgr.newWebhookAction(context.Background(), whc)
-	assert.NoError(t, err)
-	return wh
+	return mgr.newWebhookAction(context.Background(), whc)
 }
 
 func TestWebhooksConfigValidate(t *testing.T) {
 
 	wc := &WebhookConfig{}
-	assert.Regexp(t, "FF00216", wc.Validate(context.Background(), nil))
+	assert.Regexp(t, "FF00216", wc.validate(context.Background(), nil))
 
 	u := "http://test.example"
 	wc.URL = &u
-	assert.NoError(t, wc.Validate(context.Background(), nil))
+	assert.NoError(t, wc.validate(context.Background(), nil))
 
 	tlsConfName := "wrong"
 	wc = &WebhookConfig{
 		URL:           &u,
 		TLSConfigName: &tlsConfName,
 	}
-	assert.Regexp(t, "FF00223", wc.Validate(context.Background(), nil))
-
-}
-
-func TestWebhooksRejectNotValidated(t *testing.T) {
-
-	u := "http://www.sample.invalid/guaranteed-to-fail"
-	wh := newTestWebhooks(t, &WebhookConfig{URL: &u})
-	_, err := wh.esm.newWebhookAction(context.Background(), &WebhookConfig{})
-	assert.Regexp(t, "FF00224", err)
+	assert.Regexp(t, "FF00223", wc.validate(context.Background(), nil))
 
 }
 
