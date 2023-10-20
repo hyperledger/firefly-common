@@ -35,7 +35,7 @@ import (
 func newTestWebhooks(t *testing.T, whc *WebhookConfig, tweaks ...func()) *webhookAction[testESConfig, testData] {
 
 	ctx, mgr, _, done := newMockESManager(t, func(mdb *mockPersistence) {
-		mdb.events.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil)
+		mdb.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil)
 		WebhookDefaultsConfig.Set(ffresty.HTTPConfigRequestTimeout, "1s")
 		WebhookDefaultsConfig.SubSection("tls").Set(fftls.HTTPConfTLSInsecureSkipHostVerify, true)
 		for _, tweak := range tweaks {

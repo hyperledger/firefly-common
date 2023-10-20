@@ -450,12 +450,19 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 	assert.Equal(t, "stream1", *es1c.Name)
 	assert.Equal(t, EventStreamStatusStarted, es1c.Status)
 
+	// Rename second event stream
+	es2.Name = ptrTo("stream2a")
+	created, err = mgr.UpsertStream(ctx, es2)
+	assert.NoError(t, err)
+	assert.False(t, created)
+
 	// Start and re-stop, then delete the second event stream
 	err = mgr.StartStream(ctx, es2.ID)
 	assert.NoError(t, err)
 	es2c, err := mgr.GetStreamByID(ctx, es2.ID, dbsql.FailIfNotFound)
 	assert.NoError(t, err)
 	assert.Equal(t, EventStreamStatusStarted, es2c.Status)
+	assert.Equal(t, "stream2a", *es2c.Name)
 	err = mgr.StopStream(ctx, es2.ID)
 	assert.NoError(t, err)
 	es2c, err = mgr.GetStreamByID(ctx, es2.ID, dbsql.FailIfNotFound)
@@ -534,6 +541,7 @@ func setupE2ETest(t *testing.T, extraSetup ...func()) (context.Context, Persiste
 	}, nil, nil)
 
 	return ctx, p, wss, wsc, func() {
+		p.Close()
 		server.Close()
 		wsc.Close()
 	}

@@ -186,22 +186,25 @@ func (esm *esManager[CT, DT]) UpsertStream(ctx context.Context, esSpec *EventStr
 	if err != nil {
 		return false, err
 	}
+	return isNew, esm.reInit(ctx, esSpec, existing)
+}
 
-	// Runtime handling now the DB it updated
+func (esm *esManager[CT, DT]) reInit(ctx context.Context, esSpec *EventStreamSpec[CT], existing *eventStream[CT, DT]) error {
+	// Runtime handling now the DB is updated
 	if existing != nil {
-		if err := existing.stop(ctx); err != nil {
-			return false, err
+		if err := existing.suspend(ctx); err != nil {
+			return err
 		}
 	}
 	es, err := esm.initEventStream(ctx, esSpec)
 	if err != nil {
-		return false, err
+		return err
 	}
 	esm.addStream(ctx, es)
 	if *es.spec.Status == EventStreamStatusStarted {
 		es.ensureActive()
 	}
-	return isNew, nil
+	return nil
 }
 
 func (esm *esManager[CT, DT]) DeleteStream(ctx context.Context, id *fftypes.UUID) error {
@@ -302,7 +305,7 @@ func (esm *esManager[CT, DT]) GetStreamByID(ctx context.Context, id *fftypes.UUI
 
 func (esm *esManager[CT, DT]) Close(ctx context.Context) {
 	for _, es := range esm.streams {
-		if err := es.stop(ctx); err != nil {
+		if err := es.suspend(ctx); err != nil {
 			log.L(ctx).Warnf("Failed to stop event stream %s: %s", es.spec.ID, err)
 		}
 	}

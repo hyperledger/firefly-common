@@ -30,7 +30,7 @@ import (
 
 func newTestEventStream(t *testing.T, extraSetup ...func(mdb *mockPersistence)) (context.Context, *eventStream[testESConfig, testData], *mockEventSource, func()) {
 	extraSetup = append(extraSetup, func(mdb *mockPersistence) {
-		mdb.events.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil)
+		mdb.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil)
 	})
 	ctx, mgr, mes, done := newMockESManager(t, extraSetup...)
 	es, err := mgr.initEventStream(ctx, &EventStreamSpec[testESConfig]{
@@ -181,7 +181,7 @@ func TestRequestStopAlreadyStopping(t *testing.T) {
 
 func TestRequestStopPersistFail(t *testing.T) {
 	ctx, es, _, done := newTestEventStream(t, func(mdb *mockPersistence) {
-		mdb.events.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
+		mdb.eventStreams.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
 	})
 	defer done()
 
@@ -248,7 +248,7 @@ func TestStopFailBadStatus(t *testing.T) {
 
 func TestStopFailPersistFail(t *testing.T) {
 	ctx, es, _, done := newTestEventStream(t, func(mdb *mockPersistence) {
-		mdb.events.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
+		mdb.eventStreams.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
 	})
 	done()
 
@@ -272,7 +272,7 @@ func TestStartFailBadStatus(t *testing.T) {
 
 func TestStartFailPersistFail(t *testing.T) {
 	ctx, es, _, done := newTestEventStream(t, func(mdb *mockPersistence) {
-		mdb.events.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
+		mdb.eventStreams.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("pop"))
 	})
 	done()
 
