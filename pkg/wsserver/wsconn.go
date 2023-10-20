@@ -158,7 +158,7 @@ func (c *webSocketConnection) listen() {
 			if !c.dispatchAckOrError(t, &msg, nil) {
 				return
 			}
-		case "error":
+		case "error", "nack":
 			if !c.dispatchAckOrError(t, &msg, i18n.NewError(c.ctx, i18n.MsgWSErrorFromClient, msg.Message)) {
 				return
 			}

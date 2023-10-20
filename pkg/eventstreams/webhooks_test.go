@@ -91,7 +91,7 @@ func TestWebhooksBadHost(t *testing.T) {
 		StreamID:    fftypes.NewUUID(),
 		BatchNumber: 1,
 		Events: []*Event[testData]{
-			{Data: &testData{Field1: "12345"}},
+			{Data: &testData{Field1: 12345}},
 		},
 	})
 	assert.Regexp(t, "FF00218", err)
@@ -107,7 +107,7 @@ func TestWebhooksPrivateBlocked(t *testing.T) {
 		StreamID:    fftypes.NewUUID(),
 		BatchNumber: 1,
 		Events: []*Event[testData]{
-			{Data: &testData{Field1: "12345"}},
+			{Data: &testData{Field1: 12345}},
 		},
 	})
 	assert.Regexp(t, "FF00220", err)
@@ -122,7 +122,7 @@ func TestWebhooksCustomHeaders403(t *testing.T) {
 		var batch *EventBatch[testData]
 		err := json.NewDecoder(r.Body).Decode(&batch)
 		assert.NoError(t, err)
-		assert.Equal(t, "12345", batch.Events[0].Data.Field1)
+		assert.Equal(t, 12345, batch.Events[0].Data.Field1)
 		w.WriteHeader(403)
 	}))
 	defer s.Close()
@@ -139,7 +139,7 @@ func TestWebhooksCustomHeaders403(t *testing.T) {
 			StreamID:    fftypes.NewUUID(),
 			BatchNumber: 1,
 			Events: []*Event[testData]{
-				{Data: &testData{Field1: "12345"}},
+				{Data: &testData{Field1: 12345}},
 			},
 		})
 		assert.Regexp(t, "FF00221.*403", err)
@@ -162,7 +162,7 @@ func TestWebhooksCustomHeadersConnectFail(t *testing.T) {
 			StreamID:    fftypes.NewUUID(),
 			BatchNumber: 1,
 			Events: []*Event[testData]{
-				{Data: &testData{Field1: "12345"}},
+				{Data: &testData{Field1: 12345}},
 			},
 		})
 		assert.Regexp(t, "FF00219", err)
@@ -198,7 +198,7 @@ func TestWebhooksTLS(t *testing.T) {
 			StreamID:    fftypes.NewUUID(),
 			BatchNumber: 1,
 			Events: []*Event[testData]{
-				{Data: &testData{Field1: "12345"}},
+				{Data: &testData{Field1: 12345}},
 			},
 		})
 		assert.NoError(t, err)

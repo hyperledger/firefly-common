@@ -26,6 +26,6 @@ type EventBatch[DataType any] struct {
 
 type Event[DataType any] struct {
 	Topic      string    `json:"topic,omitempty"` // describes the sub-stream of events (optional) allowing sever-side event filtering (regexp)
-	SequenceID string    `json:"sequenceId"`      // deterministic ID for the event, that must be alpha-numerically orderable within the stream (numbers must be padded for ordering)
-	Data       *DataType `json:"data"`            // can be anything to deliver for the event - must be JSON marshalable
+	SequenceID string    `json:"sequenceId"`      // deterministic ID for the event, that must be alpha-numerically orderable within the stream (numbers must be left-padded hex/decimal strings for ordering)
+	Data       *DataType `json:",inline"`         // can be anything to deliver for the event - must be JSON marshalable, and should not define topic or sequence
 }

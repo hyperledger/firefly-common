@@ -30,6 +30,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/dbsql"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
+	"github.com/hyperledger/firefly-common/pkg/retry"
 	"github.com/hyperledger/firefly-common/pkg/wsclient"
 	"github.com/hyperledger/firefly-common/pkg/wsserver"
 	"github.com/sirupsen/logrus"
@@ -49,7 +50,7 @@ func (tc *testESConfig) Value() (driver.Value, error) {
 }
 
 type testData struct {
-	Field1 string `json:"field1"`
+	Field1 int `json:"field1"`
 }
 
 type testSource struct {
@@ -66,7 +67,7 @@ func (ts *testSource) Validate(ctx context.Context, config *testESConfig) error 
 }
 
 func (ts *testSource) Run(ctx context.Context, spec *EventStreamSpec[testESConfig], checkpointSequenceID string, deliver Deliver[testData]) error {
-	batchNumber := 0
+	msgNumber := 0
 	ts.startCount++
 	ts.sequenceStartedWith = checkpointSequenceID
 	for {
@@ -83,17 +84,17 @@ func (ts *testSource) Run(ctx context.Context, spec *EventStreamSpec[testESConfi
 			topic := fmt.Sprintf("topic_%d", iEv)
 			events[iEv] = &Event[testData]{
 				Topic:      topic,
-				SequenceID: fmt.Sprintf("%.12d", batchNumber),
+				SequenceID: fmt.Sprintf("%.12d", msgNumber),
 				Data: &testData{
-					Field1: fmt.Sprintf("data_%d", batchNumber),
+					Field1: msgNumber,
 				},
 			}
+			msgNumber++
 		}
 		if deliver(events) == Exit {
 			return nil
 		}
 		time.Sleep(1 * time.Millisecond)
-		batchNumber++
 	}
 }
 
@@ -133,7 +134,54 @@ func TestE2E_DeliveryWebSockets(t *testing.T) {
 			assert.Len(t, batch.Events, 10)
 			for _, e := range batch.Events {
 				assert.Equal(t, "topic_1", e.Topic)
+				assert.Equal(t, expectedNumber, e.Data.Field1)
 				// messages are published 0,1,2 over 10 topics, and we're only getting one of those topics
+				expectedNumber += 10
+			}
+		})
+	}
+
+	// Check we ran the loop just once, and from the empty string for the checkpoint (as there was no InitialSequenceID)
+	done()
+	assert.Equal(t, "", ts.sequenceStartedWith)
+	assert.Equal(t, 1, ts.startCount)
+}
+
+func TestE2E_DeliveryWebSocketsNack(t *testing.T) {
+	ctx, p, wss, wsc, done := setupE2ETest(t, func() {
+		RetrySection.Set(retry.ConfigMaximumDelay, "1ms" /* spin quickly */)
+	})
+
+	ts := &testSource{started: make(chan struct{})}
+	close(ts.started) // start delivery immediately - will block as no WS connected
+
+	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig(ctx), p, wss, ts)
+	assert.NoError(t, err)
+
+	// Create a stream to sub-select one topic
+	es1 := &EventStreamSpec[testESConfig]{
+		Name:        ptrTo("stream1"),
+		TopicFilter: ptrTo("topic_1"), // only one of the topics
+		Type:        &EventStreamTypeWebSocket,
+		BatchSize:   ptrTo(10),
+	}
+	created, err := mgr.UpsertStream(ctx, es1)
+	assert.NoError(t, err)
+	assert.True(t, created)
+
+	// Connect our websocket and start it
+	err = wsc.Connect()
+	assert.NoError(t, err)
+	err = wsc.Send(ctx, []byte(`{"type":"start","stream":"stream1"}`))
+	assert.NoError(t, err)
+
+	for i := 0; i < 5; i++ {
+		wsReceiveNack(ctx, t, wsc, func(batch *EventBatch[testData]) {
+			expectedNumber := 1 // should be same each time
+			assert.Len(t, batch.Events, 10)
+			for _, e := range batch.Events {
+				assert.Equal(t, "topic_1", e.Topic)
+				assert.Equal(t, expectedNumber, e.Data.Field1) // same message repeated
 				expectedNumber += 10
 			}
 		})
@@ -193,7 +241,7 @@ func TestE2E_WebsocketDeliveryRestartReset(t *testing.T) {
 	err = mgr.StartStream(ctx, es1.ID)
 	assert.NoError(t, err)
 	wsReceiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {})
-	assert.Equal(t, "000000000009", ts.sequenceStartedWith)
+	assert.Equal(t, "000000000091", ts.sequenceStartedWith)
 	assert.Equal(t, 2, ts.startCount)
 
 	// Reset it and check we get the reset
@@ -232,6 +280,7 @@ func TestE2E_DeliveryWebHooks200(t *testing.T) {
 		for _, e := range batch.Events {
 			assert.Equal(t, "topic_1", e.Topic)
 			// messages are published 0,1,2 over 10 topics, and we're only getting one of those topics
+			assert.Equal(t, expectedNumber, e.Data.Field1)
 			expectedNumber += 10
 		}
 		if (atomic.AddInt64(&received, 1)) == 100 {
@@ -268,6 +317,75 @@ func TestE2E_DeliveryWebHooks200(t *testing.T) {
 
 	// Check we ran the loop just once, and from the empty string for the checkpoint (as there was no InitialSequenceID)
 	<-got100
+	assert.Equal(t, "", ts.sequenceStartedWith)
+	assert.Equal(t, 1, ts.startCount)
+}
+
+func TestE2E_DeliveryWebHooks500Retry(t *testing.T) {
+	ctx, p, wss, wsc, done := setupE2ETest(t, func() {
+		RetrySection.Set(retry.ConfigMaximumDelay, "1ms" /* spin quickly */)
+	})
+	defer done()
+
+	ts := &testSource{started: make(chan struct{})}
+	close(ts.started) // start delivery immediately - will block as no WS connected
+
+	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig(ctx), p, wss, ts)
+	assert.NoError(t, err)
+
+	gotFiveTimes := make(chan struct{})
+	var received int64
+	whServer := httptest.NewServer(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+		assert.Equal(t, http.MethodPut, req.Method)
+		assert.Equal(t, "/some/path", req.URL.Path)
+		assert.Equal(t, "my-value", req.Header.Get("My-Header"))
+
+		var batch EventBatch[testData]
+		err := json.NewDecoder(req.Body).Decode(&batch)
+		assert.NoError(t, err)
+
+		// We should get the same batch redelivered
+		expectedNumber := 1
+		assert.Len(t, batch.Events, 10)
+		for _, e := range batch.Events {
+			assert.Equal(t, "topic_1", e.Topic)
+			assert.Equal(t, expectedNumber, e.Data.Field1)
+			expectedNumber += 10
+		}
+		if (atomic.AddInt64(&received, 1)) == 5 {
+			close(gotFiveTimes)
+		}
+
+		res.WriteHeader(500)
+	}))
+	defer whServer.Close()
+
+	// Create a stream to sub-select one topic
+	es1 := &EventStreamSpec[testESConfig]{
+		Name:        ptrTo("stream1"),
+		TopicFilter: ptrTo("topic_1"), // only one of the topics
+		Type:        &EventStreamTypeWebhook,
+		BatchSize:   ptrTo(10),
+		Webhook: &WebhookConfig{
+			URL:    ptrTo(whServer.URL + "/some/path"),
+			Method: ptrTo("PUT"),
+			Headers: map[string]string{
+				"my-header": "my-value",
+			},
+		},
+	}
+	created, err := mgr.UpsertStream(ctx, es1)
+	assert.NoError(t, err)
+	assert.True(t, created)
+
+	// Connect our websocket and start it
+	err = wsc.Connect()
+	assert.NoError(t, err)
+	err = wsc.Send(ctx, []byte(`{"type":"start","stream":"stream1"}`))
+	assert.NoError(t, err)
+
+	// Check we ran the loop just once, and from the empty string for the checkpoint (as there was no InitialSequenceID)
+	<-gotFiveTimes
 	assert.Equal(t, "", ts.sequenceStartedWith)
 	assert.Equal(t, 1, ts.startCount)
 }
@@ -359,6 +477,16 @@ func wsReceiveAck(ctx context.Context, t *testing.T, wsc wsclient.WSClient, cb f
 	assert.NoError(t, err)
 	cb(&batch)
 	err = wsc.Send(ctx, []byte(fmt.Sprintf(`{"type":"ack","stream":"stream1","batchNumber":%d}`, batch.BatchNumber)))
+	assert.NoError(t, err)
+}
+
+func wsReceiveNack(ctx context.Context, t *testing.T, wsc wsclient.WSClient, cb func(batch *EventBatch[testData])) {
+	data := <-wsc.Receive()
+	var batch EventBatch[testData]
+	err := json.Unmarshal(data, &batch)
+	assert.NoError(t, err)
+	cb(&batch)
+	err = wsc.Send(ctx, []byte(fmt.Sprintf(`{"type":"nack","stream":"stream1","batchNumber":%d}`, batch.BatchNumber)))
 	assert.NoError(t, err)
 }
 

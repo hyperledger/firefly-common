@@ -58,7 +58,7 @@ func TestWSAttemptIgnoreWrongAcks(t *testing.T) {
 		StreamID:    fftypes.NewUUID(),
 		BatchNumber: 1,
 		Events: []*Event[testData]{
-			{Data: &testData{Field1: "12345"}},
+			{Data: &testData{Field1: 12345}},
 		},
 	})
 	assert.NoError(t, err)
@@ -84,7 +84,7 @@ func TestWSattemptDispatchExitPushingEvent(t *testing.T) {
 		StreamID:    fftypes.NewUUID(),
 		BatchNumber: 1,
 		Events: []*Event[testData]{
-			{Data: &testData{Field1: "12345"}},
+			{Data: &testData{Field1: 12345}},
 		},
 	})
 	assert.Regexp(t, "FF00225", err)
