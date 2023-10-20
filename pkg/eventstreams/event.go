@@ -16,7 +16,11 @@
 
 package eventstreams
 
-import "github.com/hyperledger/firefly-common/pkg/fftypes"
+import (
+	"encoding/json"
+
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
+)
 
 const MessageTypeEventBatch = "event_batch"
 
@@ -28,7 +32,32 @@ type EventBatch[DataType any] struct {
 }
 
 type Event[DataType any] struct {
-	Topic      string    `json:"topic,omitempty"` // describes the sub-stream of events (optional) allowing sever-side event filtering (regexp)
-	SequenceID string    `json:"sequenceId"`      // deterministic ID for the event, that must be alpha-numerically orderable within the stream (numbers must be left-padded hex/decimal strings for ordering)
-	Data       *DataType `json:",inline"`         // can be anything to deliver for the event - must be JSON marshalable, and should not define topic or sequence
+	EventCommon
+	Data *DataType `json:"-"` // can be anything to deliver for the event - must be JSON marshalable, and should not define topic or sequence. Will be flattened into the struct
+}
+
+type EventCommon struct {
+	Topic      string `json:"topic,omitempty"` // describes the sub-stream of events (optional) allowing sever-side event filtering (regexp)
+	SequenceID string `json:"sequenceId"`      // deterministic ID for the event, that must be alpha-numerically orderable within the stream (numbers must be left-padded hex/decimal strings for ordering)
+}
+
+func (e *Event[DataType]) UnmarshalJSON(b []byte) error {
+	*e = Event[DataType]{}
+	err := json.Unmarshal(b, &e.EventCommon)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, &e.Data)
+}
+
+func (e Event[DataType]) MarshalJSON() ([]byte, error) {
+	dataJSON, err := json.Marshal(e.Data)
+	if err != nil {
+		return nil, err
+	}
+	var m map[string]interface{}
+	_ = json.Unmarshal(dataJSON, &m)
+	m["topic"] = e.Topic
+	m["sequenceId"] = e.SequenceID
+	return json.Marshal(m)
 }

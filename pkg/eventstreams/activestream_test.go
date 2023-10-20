@@ -97,9 +97,11 @@ func TestBatchTimeout(t *testing.T) {
 			<-ctx.Done()
 		} else {
 			deliver([]*Event[testData]{{
-				Topic:      "topic1",
-				SequenceID: "111111",
-				Data:       &testData{Field1: 11111},
+				EventCommon: EventCommon{
+					Topic:      "topic1",
+					SequenceID: "111111",
+				},
+				Data: &testData{Field1: 11111},
 			}})
 			delivered = true
 		}

@@ -117,8 +117,10 @@ func (ims *inMemoryStream) Run(_ context.Context, _ *eventstreams.EventStreamSpe
 		// Deliver it
 		if deliver([]*eventstreams.Event[pubSubMessage]{
 			{
-				Topic:      "topic1",
-				SequenceID: fmt.Sprintf("%.12d", index),
+				EventCommon: eventstreams.EventCommon{
+					Topic:      "topic1",
+					SequenceID: fmt.Sprintf("%.12d", index),
+				},
 				Data: &pubSubMessage{
 					Message: nextMsg,
 				},

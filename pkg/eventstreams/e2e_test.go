@@ -83,8 +83,10 @@ func (ts *testSource) Run(ctx context.Context, spec *EventStreamSpec[testESConfi
 			// With one message on each of 10 topics
 			topic := fmt.Sprintf("topic_%d", iEv)
 			events[iEv] = &Event[testData]{
-				Topic:      topic,
-				SequenceID: fmt.Sprintf("%.12d", msgNumber),
+				EventCommon: EventCommon{
+					Topic:      topic,
+					SequenceID: fmt.Sprintf("%.12d", msgNumber),
+				},
 				Data: &testData{
 					Field1: msgNumber,
 				},
