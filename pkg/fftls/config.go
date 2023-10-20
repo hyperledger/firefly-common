@@ -16,7 +16,9 @@
 
 package fftls
 
-import "github.com/hyperledger/firefly-common/pkg/config"
+import (
+	"github.com/hyperledger/firefly-common/pkg/config"
+)
 
 const (
 	// HTTPConfTLSCAFile the TLS certificate authority file for the HTTP server
@@ -29,12 +31,24 @@ const (
 	HTTPConfTLSEnabled = "enabled"
 	// HTTPConfTLSKeyFile the private key file for TLS on the server
 	HTTPConfTLSKeyFile = "keyFile"
+	// HTTPConfTLSInsecureSkipHostVerify disables host verification - insecure (for dev only)
+	HTTPConfTLSInsecureSkipHostVerify = "insecureSkipHostVerify"
 
 	// HTTPConfTLSRequiredDNAttributes provides a set of regular expressions, to match against the DN of the client. Requires HTTPConfTLSClientAuth
 	HTTPConfTLSRequiredDNAttributes = "requiredDNAttributes"
 
 	defaultHTTPTLSEnabled = false
 )
+
+type Config struct {
+	Enabled                bool                   `ffstruct:"tlsconfig" json:"enabled"`
+	ClientAuth             bool                   `ffstruct:"tlsconfig" json:"clientAuth,omitempty"`
+	CAFile                 string                 `ffstruct:"tlsconfig" json:"caFile,omitempty"`
+	CertFile               string                 `ffstruct:"tlsconfig" json:"certFile,omitempty"`
+	KeyFile                string                 `ffstruct:"tlsconfig" json:"keyFile,omitempty"`
+	InsecureSkipHostVerify bool                   `ffstruct:"tlsconfig" json:"insecureSkipHostVerify"`
+	RequiredDNAttributes   map[string]interface{} `ffstruct:"tlsconfig" json:"requiredDNAttributes,omitempty"`
+}
 
 func InitTLSConfig(conf config.Section) {
 	conf.AddKnownKey(HTTPConfTLSEnabled, defaultHTTPTLSEnabled)
@@ -43,4 +57,17 @@ func InitTLSConfig(conf config.Section) {
 	conf.AddKnownKey(HTTPConfTLSCertFile)
 	conf.AddKnownKey(HTTPConfTLSKeyFile)
 	conf.AddKnownKey(HTTPConfTLSRequiredDNAttributes)
+	conf.AddKnownKey(HTTPConfTLSInsecureSkipHostVerify)
+}
+
+func GenerateConfig(conf config.Section) *Config {
+	return &Config{
+		Enabled:                conf.GetBool(HTTPConfTLSEnabled),
+		ClientAuth:             conf.GetBool(HTTPConfTLSClientAuth),
+		CAFile:                 conf.GetString(HTTPConfTLSCAFile),
+		CertFile:               conf.GetString(HTTPConfTLSCertFile),
+		KeyFile:                conf.GetString(HTTPConfTLSKeyFile),
+		InsecureSkipHostVerify: conf.GetBool(HTTPConfTLSInsecureSkipHostVerify),
+		RequiredDNAttributes:   conf.GetObject(HTTPConfTLSRequiredDNAttributes),
+	}
 }

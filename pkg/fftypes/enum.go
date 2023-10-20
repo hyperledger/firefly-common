@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/hyperledger/firefly-common/pkg/log"
 )
 
 type FFEnum string
@@ -58,15 +59,24 @@ func (ts *FFEnum) UnmarshalText(b []byte) error {
 	return nil
 }
 
-func FFEnumParseString(ctx context.Context, t string, i string) (FFEnum, error) {
+func FFEnumValid(ctx context.Context, t string, val FFEnum) bool {
+	_, err := FFEnumParseString(ctx, t, string(val))
+	if err != nil {
+		log.L(ctx).Debugf("Value '%s' invalid for enum '%s'", val, t)
+		return false
+	}
+	return true
+}
+
+func FFEnumParseString(ctx context.Context, t, val string) (FFEnum, error) {
 	e, ok := enumValues[strings.ToLower(t)]
 	if !ok {
 		return "", i18n.NewError(ctx, i18n.MsgInvalidEnum, t)
 	}
-	for _, val := range e {
-		if val == strings.ToLower(i) {
-			return FFEnum(strings.ToLower(i)), nil
+	for _, possible := range e {
+		if possible == strings.ToLower(val) {
+			return FFEnum(strings.ToLower(val)), nil
 		}
 	}
-	return "", i18n.NewError(ctx, i18n.MsgInvalidEnumValue, i, t, e)
+	return "", i18n.NewError(ctx, i18n.MsgInvalidEnumValue, val, t, e)
 }

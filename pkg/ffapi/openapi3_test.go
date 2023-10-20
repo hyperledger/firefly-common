@@ -392,3 +392,13 @@ func TestBaseURLVariables(t *testing.T) {
 	assert.NoError(t, err)
 	fmt.Print(string(b))
 }
+
+func TestCheckObjectDocumented(t *testing.T) {
+	type Undocumented struct {
+		Field1 string `ffstruct:"ThisDoesNotHaveDocs" json:"field1"`
+	}
+	defer func() {
+		assert.Regexp(t, "FF00158.*ThisDoesNotHaveDocs.field1", recover())
+	}()
+	CheckObjectDocumented(&Undocumented{})
+}

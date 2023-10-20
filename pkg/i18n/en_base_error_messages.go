@@ -16,7 +16,11 @@
 
 package i18n
 
-import "golang.org/x/text/language"
+import (
+	"net/http"
+
+	"golang.org/x/text/language"
+)
 
 var (
 	registeredPrefixes = map[string]string{
@@ -147,4 +151,26 @@ var (
 	MsgDBUnknownGetOption                          = ffe("FF00212", "Unknown get option (%d)", 400)
 	MsgDBPatchNotSupportedForCollection            = ffe("FF00213", "Patch not supported for collection '%s'", 405)
 	MsgCollectionNotConfiguredWithName             = ffe("FF00214", "Name based queries not supported for collection '%s'", 405)
+	MsgScanTypeMismatch                            = ffe("FF00215", "Unexpected type found when scanning value: %T")
+	MsgMissingWebhookURL                           = ffe("FF00216", "'url' is required for webhook configuration", http.StatusBadRequest)
+	MsgESInvalidType                               = ffe("FF00217", "Event stream type is invalid '%s'")
+	MsgInvalidHost                                 = ffe("FF00218", "Cannot send Webhook POST to host '%s'")
+	MsgWebhookErr                                  = ffe("FF00219", "Webhook request failed: %s")
+	MsgBlockWebhookAddress                         = ffe("FF00220", "Cannot send Webhook POST to address '%s' for host '%s'")
+	MsgWebhookFailedStatus                         = ffe("FF00221", "Webhook request failed with status %d")
+	MsgInvalidDistributionMode                     = ffe("FF00222", "Invalid distribution mode for WebSocket: %s", http.StatusBadRequest)
+	MsgUnknownTLSConfiguration                     = ffe("FF00223", "Unknown TLS configuration: %s", http.StatusBadRequest)
+	MsgConfigurationNotValidated                   = ffe("FF00224", "Configuration not validated", http.StatusInternalServerError)
+	MsgWebSocketInterruptedSend                    = ffe("FF00225", "Interrupted waiting for WebSocket connection to send event")
+	MsgWebSocketInterruptedReceive                 = ffe("FF00226", "Interrupted waiting for WebSocket acknowledgment")
+	MsgWSErrorFromClient                           = ffe("FF00227", "Error received from WebSocket client: %s")
+	MsgWebSocketClosed                             = ffe("FF00228", "WebSocket '%s' closed")
+	MsgESContextCancelledWaitingStop               = ffe("FF00229", "Context cancelled waiting for event stream to stop")
+	MsgESStopping                                  = ffe("FF00230", "Event stream is stopping")
+	MsgESDeleting                                  = ffe("FF00231", "Event stream is deleting")
+	MsgESInvalidPersistedStatus                    = ffe("FF00233", "Event stream has unexpected persisted status")
+	MsgInvalidValue                                = ffe("FF00234", "Value '%v' is invalid for field '%s'")
+	MsgESInvalidTopicFilterRegexp                  = ffe("FF00235", "Invalid topic filter regular expression '%s': %s")
+	MsgESStartedOrStopped                          = ffe("FF00236", "Event stream status must be 'started' or 'stopped' when creating/updating", http.StatusBadRequest)
+	MsgESConfigNotInitialized                      = ffe("FF00237", "Event stream manager configuration not initialized")
 )

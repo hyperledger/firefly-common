@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -28,12 +28,13 @@ const (
 	defaultFactor = 2.0
 )
 
-// Retry is a concurrency safe retry structure that configures a simple backoff retry mechanism
+// Retry is a concurrency safe retry structure that configures a simple backoff retry mechanism.
+// Can be loaded directly from JSON/YAML config
 type Retry struct {
-	InitialDelay time.Duration
-	MaximumDelay time.Duration
-	Factor       float64
-	ErrCallback  func(err error)
+	InitialDelay time.Duration   `ffstruct:"RetryConfig" json:"initialDelay,omitempty"`
+	MaximumDelay time.Duration   `ffstruct:"RetryConfig" json:"maximumDelay,omitempty"`
+	Factor       float64         `ffstruct:"RetryConfig" json:"factor,omitempty"`
+	ErrCallback  func(err error) `json:"-"`
 }
 
 // DoCustomLog disables the automatic attempt logging, so the caller should do logging for each attempt

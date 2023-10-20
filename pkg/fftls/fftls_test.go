@@ -60,12 +60,11 @@ func buildSelfSignedTLSKeyPair(t *testing.T, subject pkix.Name) (string, string)
 	return publicKeyFile.Name(), privateKeyFile.Name()
 }
 
-func buildTLSListener(t *testing.T, conf config.Section, tlsType string) (string, func()) {
+func buildTLSListener(t *testing.T, conf config.Section, tlsType TLSType) (string, func()) {
 
 	// Create the TLS Config with the CA pool and enable Client certificate validation
 	tlsConfig, err := ConstructTLSConfig(context.Background(), conf, tlsType)
 	assert.NoError(t, err)
-	tlsConfig.BuildNameToCertificate()
 
 	// Create a Server instance to listen on port 8443 with the TLS config
 	server, err := tls.Listen("tcp4", "127.0.0.1:0", tlsConfig)
@@ -144,7 +143,7 @@ func TestErrInvalidCAFile(t *testing.T) {
 
 }
 
-func TestErrInvalidKeyPariFile(t *testing.T) {
+func TestErrInvalidKeyPairFile(t *testing.T) {
 
 	config.RootConfigReset()
 	notTheKeyFile, notTheCertFile := buildSelfSignedTLSKeyPair(t, pkix.Name{
@@ -194,6 +193,7 @@ func TestMTLSOk(t *testing.T) {
 	tlsConfig, err := ConstructTLSConfig(context.Background(), clientConf, ClientType)
 	assert.NoError(t, err)
 	conn, err := tls.Dial("tcp4", addr, tlsConfig)
+	assert.NoError(t, err)
 	written, err := conn.Write([]byte{42})
 	assert.NoError(t, err)
 	assert.Equal(t, written, 1)
@@ -233,6 +233,7 @@ func TestMTLSMissingClientCert(t *testing.T) {
 	tlsConfig, err := ConstructTLSConfig(context.Background(), clientConf, ClientType)
 	assert.NoError(t, err)
 	conn, err := tls.Dial("tcp4", addr, tlsConfig)
+	assert.NoError(t, err)
 	_, _ = conn.Write([]byte{1})
 	_, err = conn.Read([]byte{1})
 	assert.Regexp(t, "bad certificate", err)
@@ -423,5 +424,44 @@ func TestMTLSDNValidatorEmptyChain(t *testing.T) {
 
 	err = testValidator(nil, [][]*x509.Certificate{{}})
 	assert.Regexp(t, "FF00210", err)
+
+}
+
+func TestConnectSkipVerification(t *testing.T) {
+
+	serverPublicKeyFile, serverKeyFile := buildSelfSignedTLSKeyPair(t, pkix.Name{
+		CommonName: "server.example.com",
+	})
+
+	config.RootConfigReset()
+
+	serverConf := config.RootSection("fftls_server")
+	InitTLSConfig(serverConf)
+	serverConf.Set(HTTPConfTLSEnabled, true)
+	serverConf.Set(HTTPConfTLSCAFile, serverPublicKeyFile)
+	serverConf.Set(HTTPConfTLSCertFile, serverPublicKeyFile)
+	serverConf.Set(HTTPConfTLSKeyFile, serverKeyFile)
+
+	addr, done := buildTLSListener(t, serverConf, ServerType)
+	defer done()
+
+	clientConf := config.RootSection("fftls_client")
+	InitTLSConfig(clientConf)
+	clientConf.Set(HTTPConfTLSEnabled, true)
+	clientConf.Set(HTTPConfTLSInsecureSkipHostVerify, true)
+
+	tlsConfig, err := ConstructTLSConfig(context.Background(), clientConf, ClientType)
+	assert.NoError(t, err)
+	conn, err := tls.Dial("tcp4", addr, tlsConfig)
+	assert.NoError(t, err)
+	written, err := conn.Write([]byte{42})
+	assert.NoError(t, err)
+	assert.Equal(t, written, 1)
+	readBytes := []byte{0}
+	readCount, err := conn.Read(readBytes)
+	assert.NoError(t, err)
+	assert.Equal(t, readCount, 1)
+	assert.Equal(t, []byte{42}, readBytes)
+	_ = conn.Close()
 
 }

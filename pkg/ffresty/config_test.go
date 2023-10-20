@@ -19,9 +19,9 @@ package ffresty
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/hyperledger/firefly-common/pkg/fftls"
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -56,16 +56,16 @@ func TestWSConfigGeneration(t *testing.T) {
 	assert.Equal(t, "http://proxy:12345", config.ProxyURL)
 	assert.Equal(t, "user", config.AuthUsername)
 	assert.Equal(t, "pass", config.AuthPassword)
-	assert.Equal(t, time.Duration(1000000), config.RetryInitialDelay)
-	assert.Equal(t, time.Duration(1000000), config.RetryMaximumDelay)
+	assert.Equal(t, fftypes.FFDuration(1000000), config.RetryInitialDelay)
+	assert.Equal(t, fftypes.FFDuration(1000000), config.RetryMaximumDelay)
 	assert.Equal(t, "(?:429|503)", config.RetryErrorStatusCodeRegex)
 	assert.Equal(t, 1, config.RetryCount)
 	assert.Equal(t, true, config.Retry)
 	assert.Equal(t, true, config.HTTPPassthroughHeadersEnabled)
-	assert.Equal(t, time.Duration(1000000), config.HTTPExpectContinueTimeout)
-	assert.Equal(t, time.Duration(1000000), config.HTTPIdleConnTimeout)
-	assert.Equal(t, time.Duration(1000000), config.HTTPTLSHandshakeTimeout)
-	assert.Equal(t, time.Duration(1000000), config.HTTPConnectionTimeout)
+	assert.Equal(t, fftypes.FFDuration(1000000), config.HTTPExpectContinueTimeout)
+	assert.Equal(t, fftypes.FFDuration(1000000), config.HTTPIdleConnTimeout)
+	assert.Equal(t, fftypes.FFDuration(1000000), config.HTTPTLSHandshakeTimeout)
+	assert.Equal(t, fftypes.FFDuration(1000000), config.HTTPConnectionTimeout)
 	assert.Equal(t, 1, config.HTTPMaxIdleConns)
 	assert.Equal(t, "custom value", config.HTTPHeaders.GetString("custom-header"))
 }
@@ -80,4 +80,8 @@ func TestWSConfigTLSGenerationFail(t *testing.T) {
 	ctx := context.Background()
 	_, err := GenerateConfig(ctx, utConf)
 	assert.Regexp(t, "FF00153", err)
+}
+
+func TestCheckAllFieldsDocumented(t *testing.T) {
+
 }
