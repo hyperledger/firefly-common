@@ -20,8 +20,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/hyperledger/firefly-common/mocks/crudmocks"
+	"github.com/hyperledger/firefly-common/pkg/config"
+	"github.com/hyperledger/firefly-common/pkg/dbsql"
 	"github.com/hyperledger/firefly-common/pkg/fftls"
 	"github.com/hyperledger/firefly-common/pkg/retry"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -38,6 +42,27 @@ func (mes *mockEventSource) Validate(ctx context.Context, conf *testESConfig) er
 	return mes.validate(ctx, conf)
 }
 
+type mockAction struct {
+	attemptDispatch func(ctx context.Context, attempt int, events *EventBatch[testData]) error
+}
+
+func (ma *mockAction) AttemptDispatch(ctx context.Context, attempt int, events *EventBatch[testData]) error {
+	return ma.attemptDispatch(ctx, attempt, events)
+}
+
+type mockPersistence struct {
+	events      *crudmocks.CRUD[*EventStreamSpec[testESConfig]]
+	checkpoints *crudmocks.CRUD[*EventStreamCheckpoint]
+}
+
+func (mp *mockPersistence) EventStreams() dbsql.CRUD[*EventStreamSpec[testESConfig]] {
+	return mp.events
+}
+func (mp *mockPersistence) Checkpoints() dbsql.CRUD[*EventStreamCheckpoint] {
+	return mp.checkpoints
+}
+func (mp *mockPersistence) Close() {}
+
 func TestNewManagerFailBadTLS(t *testing.T) {
 	_, err := NewEventStreamManager[testESConfig, testData](context.Background(), &Config{
 		Retry: &retry.Retry{},
@@ -50,6 +75,37 @@ func TestNewManagerFailBadTLS(t *testing.T) {
 	}, nil, nil, &mockEventSource{})
 	assert.Regexp(t, "FF00153", err)
 
+}
+
+func newMockESManager(t *testing.T, extraSetup ...func(mp *mockPersistence)) (context.Context, *esManager[testESConfig, testData], *mockEventSource, func()) {
+	logrus.SetLevel(logrus.DebugLevel)
+
+	mp := &mockPersistence{
+		events:      crudmocks.NewCRUD[*EventStreamSpec[testESConfig]](t),
+		checkpoints: crudmocks.NewCRUD[*EventStreamCheckpoint](t),
+	}
+
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	config.RootConfigReset()
+	conf := config.RootSection("ut")
+	dbConf := conf.SubSection("db")
+	esConf := conf.SubSection("eventstreams")
+	dbsql.InitSQLiteConfig(dbConf)
+	InitConfig(esConf)
+
+	CheckpointsConfig.Set(ConfigCheckpointsAsynchronous, false)
+	for _, fn := range extraSetup {
+		fn(mp)
+	}
+
+	mes := &mockEventSource{}
+	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig(ctx), mp, nil, mes)
+	assert.NoError(t, err)
+
+	return ctx, mgr.(*esManager[testESConfig, testData]), mes, func() {
+		mgr.Close(ctx)
+		cancelCtx()
+	}
 }
 
 func ptrTo[T any](v T) *T {

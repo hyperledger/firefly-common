@@ -17,12 +17,32 @@
 package eventstreams
 
 import (
+	"context"
 	"testing"
 
 	"github.com/hyperledger/firefly-common/pkg/dbsql"
+	"github.com/hyperledger/firefly-common/pkg/ffapi"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
+
+func newTestEventStream(t *testing.T, extraSetup ...func(mdb *mockPersistence)) (context.Context, *eventStream[testESConfig, testData], *mockEventSource, func()) {
+	extraSetup = append(extraSetup, func(mdb *mockPersistence) {
+		mdb.events.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil)
+	})
+	ctx, mgr, mes, done := newMockESManager(t, extraSetup...)
+	es, err := mgr.initEventStream(ctx, &EventStreamSpec[testESConfig]{
+		ResourceBase: dbsql.ResourceBase{
+			ID: fftypes.NewUUID(),
+		},
+		Name:   ptrTo(t.Name()),
+		Status: ptrTo(EventStreamStatusStopped),
+	})
+	assert.NoError(t, err)
+
+	return ctx, es, mes, done
+}
 
 func TestEventStreamFields(t *testing.T) {
 

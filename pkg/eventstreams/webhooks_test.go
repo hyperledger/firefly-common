@@ -24,34 +24,29 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hyperledger/firefly-common/pkg/config"
+	"github.com/hyperledger/firefly-common/pkg/ffapi"
 	"github.com/hyperledger/firefly-common/pkg/ffresty"
 	"github.com/hyperledger/firefly-common/pkg/fftls"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func newTestWebhooks(t *testing.T, whc *WebhookConfig, tweaks ...func()) *webhookAction[testESConfig, testData] {
 
-	ctx := context.Background()
-	config.RootConfigReset()
+	ctx, mgr, _, done := newMockESManager(t, func(mdb *mockPersistence) {
+		mdb.events.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil)
+		WebhookDefaultsConfig.Set(ffresty.HTTPConfigRequestTimeout, "1s")
+		WebhookDefaultsConfig.SubSection("tls").Set(fftls.HTTPConfTLSInsecureSkipHostVerify, true)
+		for _, tweak := range tweaks {
+			tweak()
+		}
+	})
+	done()
 
-	conf := config.RootSection("ut")
-	InitConfig(conf)
-	WebhookDefaultsConfig.Set(ffresty.HTTPConfigRequestTimeout, "1s")
-	WebhookDefaultsConfig.SubSection("tls").Set(fftls.HTTPConfTLSInsecureSkipHostVerify, true)
-	for _, tweak := range tweaks {
-		tweak()
-	}
+	assert.NoError(t, whc.Validate(ctx, mgr.tlsConfigs))
 
-	esConfig := GenerateConfig(ctx)
-	ies, err := NewEventStreamManager[testESConfig, testData](ctx, esConfig, nil, nil, &mockEventSource{})
-	assert.NoError(t, err)
-	es := ies.(*esManager[testESConfig, testData])
-
-	assert.NoError(t, whc.Validate(ctx, es.tlsConfigs))
-
-	wh, err := es.newWebhookAction(context.Background(), whc)
+	wh, err := mgr.newWebhookAction(context.Background(), whc)
 	assert.NoError(t, err)
 	return wh
 }

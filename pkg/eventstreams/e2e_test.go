@@ -507,6 +507,8 @@ func setupE2ETest(t *testing.T, extraSetup ...func()) (context.Context, Persiste
 	dbConf.Set(dbsql.SQLConfMigrationsDirectory, "../../test/es_demo_migrations")
 	dbConf.Set(dbsql.SQLConfMaxConnections, 1)
 
+	CheckpointsConfig.Set(ConfigCheckpointsAsynchronous, false)
+
 	for _, fn := range extraSetup {
 		fn()
 	}

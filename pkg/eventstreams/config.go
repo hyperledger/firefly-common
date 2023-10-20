@@ -95,7 +95,7 @@ func InitConfig(conf config.Section) {
 	fftls.InitTLSConfig(tlsSubSection)
 	tlsSubSection.SetDefault(fftls.HTTPConfTLSEnabled, true) // as it's a TLS config
 
-	RootConfig.AddKnownKey(ConfigDisablePrivateIPs)
+	conf.AddKnownKey(ConfigDisablePrivateIPs)
 
 	DefaultsConfig = conf.SubSection("defaults")
 

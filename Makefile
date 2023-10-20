@@ -37,6 +37,7 @@ $(eval $(call makemock, pkg/httpserver,            GoHTTPServer,       httpserve
 $(eval $(call makemock, pkg/auth,                  Plugin,             authmocks))
 $(eval $(call makemock, pkg/wsserver,              WebSocketChannels,  wsservermocks))
 $(eval $(call makemock, pkg/wsserver,              WebSocketServer,    wsservermocks))
+$(eval $(call makemock, pkg/dbsql,                 CRUD,               crudmocks))
 
 firefly-common: ${GOFILES}
 		$(VGO) build ./pkg/*

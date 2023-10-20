@@ -76,7 +76,7 @@ func (as *activeStream[CT, DT]) runEventLoop() {
 	if err == nil {
 		// Run the inner source read loop until it exits
 		err = as.retry.Do(as.ctx, "source run loop", func(attempt int) (retry bool, err error) {
-			if err = as.runSourceLoop(checkpointSequenceID); err == nil {
+			if err = as.runSourceLoop(checkpointSequenceID); err != nil {
 				log.L(as.ctx).Errorf("source loop error: %s", err)
 				return true, err
 			}
@@ -87,11 +87,12 @@ func (as *activeStream[CT, DT]) runEventLoop() {
 
 	}
 	// Retry will only return an error if the context is cancelled
-	log.L(as.ctx).Debugf("event loop exiting (%s)", err)
+	log.L(as.ctx).Debugf("event loop exiting (%v)", err)
 }
 
 func (as *activeStream[CT, DT]) loadCheckpoint() (sequencedID string, err error) {
 	err = as.retry.Do(as.ctx, "load checkpoint", func(attempt int) (retry bool, err error) {
+		log.L(as.ctx).Debugf("Loading checkpoint: %s", as.spec.ID)
 		cp, err := as.persistence.Checkpoints().GetByID(as.ctx, as.spec.ID.String())
 		if err != nil {
 			return true, err
@@ -230,6 +231,7 @@ func (as *activeStream[CT, DT]) popCheckpoint() string {
 	defer as.checkpointLock.Unlock()
 	checkpointSequenceID := as.dispatchedCheckpoint
 	as.dispatchedCheckpoint = as.queuedCheckpoint
+	as.queuedCheckpoint = ""
 	return checkpointSequenceID
 }
 

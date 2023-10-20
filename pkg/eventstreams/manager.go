@@ -96,14 +96,18 @@ func NewEventStreamManager[CT any, DT any](ctx context.Context, config *Config, 
 			return nil, err
 		}
 	}
-	return &esManager[CT, DT]{
+	esm := &esManager[CT, DT]{
 		config:      *config,
 		tlsConfigs:  tlsConfigs,
 		runtime:     source,
 		persistence: p,
 		wsChannels:  wsChannels,
 		streams:     map[fftypes.UUID]*eventStream[CT, DT]{},
-	}, nil
+	}
+	if err = esm.initialize(ctx); err != nil {
+		return nil, err
+	}
+	return esm, nil
 }
 
 func (esm *esManager[CT, DT]) addStream(ctx context.Context, es *eventStream[CT, DT]) {
@@ -125,7 +129,7 @@ func (esm *esManager[CT, DT]) removeStream(id *fftypes.UUID) {
 	delete(esm.streams, *id)
 }
 
-func (esm *esManager[CT, DT]) Initialize(ctx context.Context) error {
+func (esm *esManager[CT, DT]) initialize(ctx context.Context) error {
 	const pageSize = 25
 	var skip uint64
 	for {

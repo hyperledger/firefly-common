@@ -236,7 +236,7 @@ func (esm *esManager[CT, DT]) initEventStream(
 	}
 
 	es = &eventStream[CT, DT]{
-		bgCtx:       log.WithLogField(bgCtx, "eventstream", spec.ID.String()),
+		bgCtx:       log.WithLogField(bgCtx, "eventstream", *spec.Name),
 		esm:         esm,
 		spec:        spec,
 		persistence: esm.persistence,
