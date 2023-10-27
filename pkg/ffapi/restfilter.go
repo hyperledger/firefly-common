@@ -52,6 +52,36 @@ func (hs *HandlerFactory) getValues(values url.Values, key string) (results []st
 	return results
 }
 
+func ParseFilterParam(ctx context.Context, fb FilterBuilder, field string, values []string) (Filter, error) {
+	if len(values) == 1 {
+		_, cond, err := getCondition(ctx, fb, field, values[0])
+		if err != nil {
+			return nil, err
+		}
+		return cond, nil
+	}
+
+	if len(values) > 0 {
+		sort.Strings(values)
+		fs := make([]Filter, len(values))
+		andCombine := false
+		for i, value := range values {
+			mods, cond, err := getCondition(ctx, fb, field, value)
+			if err != nil {
+				return nil, err
+			}
+			andCombine = andCombine || mods.andCombine
+			fs[i] = cond
+		}
+		if andCombine {
+			return fb.And(fs...), nil
+		}
+		return fb.Or(fs...), nil
+	}
+
+	return nil, nil
+}
+
 func (hs *HandlerFactory) buildFilter(req *http.Request, ff QueryFactory) (AndFilter, error) {
 	ctx := req.Context()
 	log.L(ctx).Debugf("Query: %s", req.URL.RawQuery)
@@ -61,30 +91,12 @@ func (hs *HandlerFactory) buildFilter(req *http.Request, ff QueryFactory) (AndFi
 	filter := fb.And()
 	_ = req.ParseForm()
 	for _, field := range possibleFields {
-		values := hs.getValues(req.Form, field)
-		if len(values) == 1 {
-			_, cond, err := hs.getCondition(ctx, fb, field, values[0])
-			if err != nil {
-				return nil, err
-			}
-			filter.Condition(cond)
-		} else if len(values) > 0 {
-			sort.Strings(values)
-			fs := make([]Filter, len(values))
-			andCombine := false
-			for i, value := range values {
-				mods, cond, err := hs.getCondition(ctx, fb, field, value)
-				if err != nil {
-					return nil, err
-				}
-				andCombine = andCombine || mods.andCombine
-				fs[i] = cond
-			}
-			if andCombine {
-				filter.Condition(fb.And(fs...))
-			} else {
-				filter.Condition(fb.Or(fs...))
-			}
+		f, err := ParseFilterParam(ctx, fb, field, hs.getValues(req.Form, field))
+		if err != nil {
+			return nil, err
+		}
+		if f != nil {
+			filter.Condition(f)
 		}
 	}
 	skipVals := hs.getValues(req.Form, "skip")
@@ -137,14 +149,14 @@ func (hs *HandlerFactory) buildFilter(req *http.Request, ff QueryFactory) (AndFi
 	return filter, nil
 }
 
-func (hs *HandlerFactory) checkNoModsExceptAnd(ctx context.Context, mods filterModifiers, field, op string, filter Filter) (Filter, error) {
+func checkNoModsExceptAnd(ctx context.Context, mods filterModifiers, field, op string, filter Filter) (Filter, error) {
 	if mods.caseInsensitive || mods.emptyIsNull || mods.negate {
 		return nil, i18n.NewError(ctx, i18n.MsgQueryOpUnsupportedMod, op, field)
 	}
 	return filter, nil
 }
 
-func (hs *HandlerFactory) getCondition(ctx context.Context, fb FilterBuilder, field, value string) (mods filterModifiers, filter Filter, err error) {
+func getCondition(ctx context.Context, fb FilterBuilder, field, value string) (mods filterModifiers, filter Filter, err error) {
 
 	mods = filterModifiers{}
 	operator := make([]rune, 0, 2)
@@ -195,21 +207,21 @@ opFinder:
 	if mods.emptyIsNull && prefixLength == len(value) {
 		matchString = nil
 	}
-	filter, err = hs.mapOperation(ctx, fb, field, matchString, string(operator), mods)
+	filter, err = mapOperation(ctx, fb, field, matchString, string(operator), mods)
 	return mods, filter, err
 }
 
-func (hs *HandlerFactory) mapOperation(ctx context.Context, fb FilterBuilder, field string, matchString driver.Value, op string, mods filterModifiers) (filter Filter, err error) {
+func mapOperation(ctx context.Context, fb FilterBuilder, field string, matchString driver.Value, op string, mods filterModifiers) (filter Filter, err error) {
 
 	switch op {
 	case ">=":
-		return hs.checkNoModsExceptAnd(ctx, mods, field, op, fb.Gte(field, matchString))
+		return checkNoModsExceptAnd(ctx, mods, field, op, fb.Gte(field, matchString))
 	case "<=":
-		return hs.checkNoModsExceptAnd(ctx, mods, field, op, fb.Lte(field, matchString))
+		return checkNoModsExceptAnd(ctx, mods, field, op, fb.Lte(field, matchString))
 	case ">", ">>":
-		return hs.checkNoModsExceptAnd(ctx, mods, field, op, fb.Gt(field, matchString))
+		return checkNoModsExceptAnd(ctx, mods, field, op, fb.Gt(field, matchString))
 	case "<", "<<":
-		return hs.checkNoModsExceptAnd(ctx, mods, field, op, fb.Lt(field, matchString))
+		return checkNoModsExceptAnd(ctx, mods, field, op, fb.Lt(field, matchString))
 	case "@":
 		if mods.caseInsensitive {
 			if mods.negate {
