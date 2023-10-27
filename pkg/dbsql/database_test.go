@@ -499,14 +499,14 @@ func TestRollbackFail(t *testing.T) {
 
 func TestCountQueryBadSQL(t *testing.T) {
 	s, _ := NewMockProvider().UTInit()
-	_, err := s.CountQuery(context.Background(), "table1", nil, sq.Insert("wrong"), "")
+	_, err := s.CountQuery(context.Background(), "table1", nil, sq.Insert("wrong"), nil, "")
 	assert.Regexp(t, "FF00174", err)
 }
 
 func TestCountQueryQueryFailed(t *testing.T) {
 	s, mdb := NewMockProvider().UTInit()
 	mdb.ExpectQuery("^SELECT COUNT\\(\\*\\)").WillReturnError(fmt.Errorf("pop"))
-	_, err := s.CountQuery(context.Background(), "table1", nil, sq.Eq{"col1": "val1"}, "")
+	_, err := s.CountQuery(context.Background(), "table1", nil, sq.Eq{"col1": "val1"}, nil, "")
 	assert.Regexp(t, "FF00176.*pop", err)
 }
 
@@ -516,21 +516,32 @@ func TestCountQueryScanFailTx(t *testing.T) {
 	mdb.ExpectQuery("^SELECT COUNT\\(\\*\\)").WillReturnRows(sqlmock.NewRows([]string{"col1"}).AddRow("not a number"))
 	ctx, tx, _, err := s.BeginOrUseTx(context.Background())
 	assert.NoError(t, err)
-	_, err = s.CountQuery(ctx, "table1", tx, sq.Eq{"col1": "val1"}, "")
+	_, err = s.CountQuery(ctx, "table1", tx, sq.Eq{"col1": "val1"}, nil, "")
 	assert.Regexp(t, "FF00182", err)
 }
 
 func TestCountQueryWithExpr(t *testing.T) {
 	s, mdb := NewMockProvider().UTInit()
 	mdb.ExpectQuery("^SELECT COUNT\\(DISTINCT key\\)").WillReturnRows(sqlmock.NewRows([]string{"col1"}).AddRow(10))
-	_, err := s.CountQuery(context.Background(), "table1", nil, sq.Eq{"col1": "val1"}, "DISTINCT key")
+	_, err := s.CountQuery(context.Background(), "table1", nil, sq.Eq{"col1": "val1"}, nil, "DISTINCT key")
+	assert.NoError(t, err)
+	assert.NoError(t, mdb.ExpectationsWereMet())
+}
+
+func TestCountQueryWithModifier(t *testing.T) {
+	s, mdb := NewMockProvider().UTInit()
+	mdb.ExpectQuery("^SELECT COUNT\\(\\*\\)").WillReturnRows(sqlmock.NewRows([]string{"col1"}).AddRow(10))
+	qm := func(sb sq.SelectBuilder) sq.SelectBuilder {
+		return sb.Where(sq.Eq{"col1": "val1"})
+	}
+	_, err := s.CountQuery(context.Background(), "table1", nil, sq.Eq{"col1": "val1"}, qm, "")
 	assert.NoError(t, err)
 	assert.NoError(t, mdb.ExpectationsWereMet())
 }
 
 func TestQueryResSwallowError(t *testing.T) {
 	s, _ := NewMockProvider().UTInit()
-	res := s.QueryRes(context.Background(), "table1", nil, sq.Insert("wrong"), &ffapi.FilterInfo{
+	res := s.QueryRes(context.Background(), "table1", nil, sq.Insert("wrong"), nil, &ffapi.FilterInfo{
 		Count: true,
 	})
 	assert.Equal(t, int64(-1), *res.TotalCount)

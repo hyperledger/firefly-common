@@ -309,6 +309,22 @@ func (_m *CRUD[T]) InsertMany(ctx context.Context, instances []T, allowPartialSu
 	return r0
 }
 
+// ModifyQuery provides a mock function with given fields: modifier
+func (_m *CRUD[T]) ModifyQuery(modifier func(squirrel.SelectBuilder) squirrel.SelectBuilder) dbsql.CRUDQuery[T] {
+	ret := _m.Called(modifier)
+
+	var r0 dbsql.CRUDQuery[T]
+	if rf, ok := ret.Get(0).(func(func(squirrel.SelectBuilder) squirrel.SelectBuilder) dbsql.CRUDQuery[T]); ok {
+		r0 = rf(modifier)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(dbsql.CRUDQuery[T])
+		}
+	}
+
+	return r0
+}
+
 // Replace provides a mock function with given fields: ctx, inst, hooks
 func (_m *CRUD[T]) Replace(ctx context.Context, inst T, hooks ...dbsql.PostCompletionHook) error {
 	_va := make([]interface{}, len(hooks))
@@ -331,15 +347,15 @@ func (_m *CRUD[T]) Replace(ctx context.Context, inst T, hooks ...dbsql.PostCompl
 }
 
 // Scoped provides a mock function with given fields: scope
-func (_m *CRUD[T]) Scoped(scope squirrel.Eq) *dbsql.CrudBase[T] {
+func (_m *CRUD[T]) Scoped(scope squirrel.Eq) dbsql.CRUD[T] {
 	ret := _m.Called(scope)
 
-	var r0 *dbsql.CrudBase[T]
-	if rf, ok := ret.Get(0).(func(squirrel.Eq) *dbsql.CrudBase[T]); ok {
+	var r0 dbsql.CRUD[T]
+	if rf, ok := ret.Get(0).(func(squirrel.Eq) dbsql.CRUD[T]); ok {
 		r0 = rf(scope)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*dbsql.CrudBase[T])
+			r0 = ret.Get(0).(dbsql.CRUD[T])
 		}
 	}
 

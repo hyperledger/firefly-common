@@ -42,6 +42,8 @@ type Database struct {
 	sequenceColumn string
 }
 
+type QueryModifier = func(sq.SelectBuilder) sq.SelectBuilder
+
 // PreCommitAccumulator is a structure that can accumulate state during
 // the transaction, then has a function that is called just before commit.
 type PreCommitAccumulator interface {
@@ -225,7 +227,7 @@ func (s *Database) Query(ctx context.Context, table string, q sq.SelectBuilder) 
 	return s.QueryTx(ctx, table, nil, q)
 }
 
-func (s *Database) CountQuery(ctx context.Context, table string, tx *TXWrapper, fop sq.Sqlizer, countExpr string) (count int64, err error) {
+func (s *Database) CountQuery(ctx context.Context, table string, tx *TXWrapper, fop sq.Sqlizer, qm QueryModifier, countExpr string) (count int64, err error) {
 	count = -1
 	l := log.L(ctx)
 	if tx == nil {
@@ -237,6 +239,9 @@ func (s *Database) CountQuery(ctx context.Context, table string, tx *TXWrapper, 
 		countExpr = "*"
 	}
 	q := sq.Select(fmt.Sprintf("COUNT(%s)", countExpr)).From(table).Where(fop)
+	if qm != nil {
+		q = qm(q)
+	}
 	sqlQuery, args, err := q.PlaceholderFormat(s.features.PlaceholderFormat).ToSql()
 	if err != nil {
 		return count, i18n.WrapError(ctx, err, i18n.MsgDBQueryBuildFailed)
@@ -263,10 +268,10 @@ func (s *Database) CountQuery(ctx context.Context, table string, tx *TXWrapper, 
 	return count, nil
 }
 
-func (s *Database) QueryRes(ctx context.Context, table string, tx *TXWrapper, fop sq.Sqlizer, fi *ffapi.FilterInfo) *ffapi.FilterResult {
+func (s *Database) QueryRes(ctx context.Context, table string, tx *TXWrapper, fop sq.Sqlizer, qm QueryModifier, fi *ffapi.FilterInfo) *ffapi.FilterResult {
 	fr := &ffapi.FilterResult{}
 	if fi.Count {
-		count, err := s.CountQuery(ctx, table, tx, fop, fi.CountExpr)
+		count, err := s.CountQuery(ctx, table, tx, fop, qm, fi.CountExpr)
 		if err != nil {
 			// Log, but continue
 			log.L(ctx).Warnf("Unable to return count for query: %s", err)
