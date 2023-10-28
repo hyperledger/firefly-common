@@ -309,6 +309,38 @@ func (_m *CRUD[T]) InsertMany(ctx context.Context, instances []T, allowPartialSu
 	return r0
 }
 
+// NewFilterBuilder provides a mock function with given fields: ctx
+func (_m *CRUD[T]) NewFilterBuilder(ctx context.Context) ffapi.FilterBuilder {
+	ret := _m.Called(ctx)
+
+	var r0 ffapi.FilterBuilder
+	if rf, ok := ret.Get(0).(func(context.Context) ffapi.FilterBuilder); ok {
+		r0 = rf(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(ffapi.FilterBuilder)
+		}
+	}
+
+	return r0
+}
+
+// NewUpdateBuilder provides a mock function with given fields: ctx
+func (_m *CRUD[T]) NewUpdateBuilder(ctx context.Context) ffapi.UpdateBuilder {
+	ret := _m.Called(ctx)
+
+	var r0 ffapi.UpdateBuilder
+	if rf, ok := ret.Get(0).(func(context.Context) ffapi.UpdateBuilder); ok {
+		r0 = rf(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(ffapi.UpdateBuilder)
+		}
+	}
+
+	return r0
+}
+
 // Replace provides a mock function with given fields: ctx, inst, hooks
 func (_m *CRUD[T]) Replace(ctx context.Context, inst T, hooks ...dbsql.PostCompletionHook) error {
 	_va := make([]interface{}, len(hooks))
