@@ -33,6 +33,7 @@
     "TLSCA",
     "unserializable",
     "Upsert",
+    "vararg",
     "Warnf",
     "wsclient"
   ],

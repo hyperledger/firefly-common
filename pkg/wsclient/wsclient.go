@@ -80,6 +80,7 @@ type WSClient interface {
 	ReceiveExt() <-chan *WSPayload
 	URL() string
 	SetURL(url string)
+	SetHeader(header, value string)
 	Send(ctx context.Context, message []byte) error
 	Close()
 }
@@ -109,7 +110,7 @@ type wsClient struct {
 }
 
 // WSPreConnectHandler will be called before every connect/reconnect. Any error returned will prevent the websocket from connecting.
-type WSPreConnectHandler func(ctx context.Context) error
+type WSPreConnectHandler func(ctx context.Context, w WSClient) error
 
 // WSPostConnectHandler will be called after every connect/reconnect. Can send data over ws, but must not block listening for data on the ws.
 type WSPostConnectHandler func(ctx context.Context, w WSClient) error
@@ -212,6 +213,10 @@ func (w *wsClient) SetURL(url string) {
 	w.url = url
 }
 
+func (w *wsClient) SetHeader(header, value string) {
+	w.headers.Set(header, value)
+}
+
 func (w *wsClient) Send(ctx context.Context, message []byte) error {
 	// Send
 	select {
@@ -265,7 +270,7 @@ func (w *wsClient) connect(initial bool) error {
 
 		retry = !initial || attempt < w.initialRetryAttempts
 		if w.beforeConnect != nil {
-			if err = w.beforeConnect(w.ctx); err != nil {
+			if err = w.beforeConnect(w.ctx, w); err != nil {
 				l.Warnf("WS %s connect attempt %d failed in beforeConnect", w.url, attempt)
 				return retry, err
 			}

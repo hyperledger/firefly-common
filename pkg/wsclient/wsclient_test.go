@@ -43,13 +43,15 @@ func TestWSClientE2ETLS(t *testing.T) {
 	defer os.Remove(privateKeyFile.Name())
 	defer os.Remove(publicKeyFile.Name())
 	toServer, fromServer, url, close, err := NewTestTLSWSServer(func(req *http.Request) {
+		assert.Equal(t, "in-beforeConnect", req.Header.Get("added-header"))
 		assert.Equal(t, "/test/updated", req.URL.Path)
 	}, publicKeyFile, privateKeyFile)
 	defer close()
 	assert.NoError(t, err)
 
 	first := true
-	beforeConnect := func(ctx context.Context) error {
+	beforeConnect := func(ctx context.Context, w WSClient) error {
+		w.SetHeader("added-header", "in-beforeConnect")
 		if first {
 			first = false
 			return fmt.Errorf("first run fails")
@@ -133,7 +135,7 @@ func TestWSClientE2E(t *testing.T) {
 	defer close()
 
 	first := true
-	beforeConnect := func(ctx context.Context) error {
+	beforeConnect := func(ctx context.Context, w WSClient) error {
 		if first {
 			first = false
 			return fmt.Errorf("first run fails")
@@ -196,7 +198,7 @@ func TestWSClientE2EReceiveExt(t *testing.T) {
 	defer close()
 
 	first := true
-	beforeConnect := func(ctx context.Context) error {
+	beforeConnect := func(ctx context.Context, w WSClient) error {
 		if first {
 			first = false
 			return fmt.Errorf("first run fails")
