@@ -24,6 +24,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +37,7 @@ import (
 
 type WSConfig struct {
 	HTTPURL                string             `json:"httpUrl,omitempty"`
+	WebSocketURL           string             `json:"wsUrl,omitempty"`
 	WSKeyPath              string             `json:"wsKeyPath,omitempty"`
 	ReadBufferSize         int                `json:"readBufferSize,omitempty"`
 	WriteBufferSize        int                `json:"writeBufferSize,omitempty"`
@@ -245,6 +247,14 @@ func (w *wsClient) heartbeatTimeout(ctx context.Context) (context.Context, conte
 }
 
 func buildWSUrl(ctx context.Context, config *WSConfig) (string, error) {
+	if config.WebSocketURL != "" {
+		u, err := url.Parse(config.WebSocketURL)
+		if err != nil || !strings.HasPrefix(u.Scheme, "ws") {
+			return "", i18n.WrapError(ctx, err, i18n.MsgInvalidWebSocketURL, config.WebSocketURL)
+		}
+		return u.String(), nil
+	}
+
 	u, err := url.Parse(config.HTTPURL)
 	if err != nil {
 		return "", i18n.WrapError(ctx, err, i18n.MsgInvalidURL, config.HTTPURL)

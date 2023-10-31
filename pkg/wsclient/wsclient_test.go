@@ -258,7 +258,15 @@ func TestWSClientE2EReceiveExt(t *testing.T) {
 
 }
 
-func TestWSClientBadURL(t *testing.T) {
+func TestWSClientBadWSURL(t *testing.T) {
+	wsConfig := generateConfig()
+	wsConfig.WebSocketURL = ":::"
+
+	_, err := New(context.Background(), wsConfig, nil, nil)
+	assert.Regexp(t, "FF00238", err)
+}
+
+func TestWSClientBadHTTPURL(t *testing.T) {
 	wsConfig := generateConfig()
 	wsConfig.HTTPURL = ":::"
 
@@ -297,7 +305,7 @@ func TestWSFailStartupHttp500(t *testing.T) {
 	defer svr.Close()
 
 	wsConfig := generateConfig()
-	wsConfig.HTTPURL = fmt.Sprintf("ws://%s", svr.Listener.Addr())
+	wsConfig.WebSocketURL = fmt.Sprintf("ws://%s", svr.Listener.Addr())
 	wsConfig.HTTPHeaders = map[string]interface{}{
 		"custom-header": "custom value",
 	}
