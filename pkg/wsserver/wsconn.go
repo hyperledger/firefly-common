@@ -49,6 +49,7 @@ type WebSocketCommandMessageOrError struct {
 type WebSocketCommandMessage struct {
 	Type        string `json:"type,omitempty"`
 	Stream      string `json:"stream,omitempty"` // name of the event stream
+	Name        string `json:"name,omitempty"`   // secondary/fallback field to the event stream
 	Message     string `json:"message,omitempty"`
 	BatchNumber int64  `json:"batchNumber,omitempty"`
 }
@@ -148,7 +149,7 @@ func (c *webSocketConnection) listen() {
 
 		stream := msg.Stream
 		if stream == "" {
-			stream = msg.Stream
+			stream = msg.Name
 		}
 		t := c.server.getStream(stream)
 		switch strings.ToLower(msg.Type) {
