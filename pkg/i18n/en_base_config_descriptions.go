@@ -65,6 +65,7 @@ var (
 	ConfigGlobalWsPath                   = ffc("config.global.ws.path", "The WebSocket sever URL to which FireFly should connect", "WebSocket URL "+StringType)
 	ConfigGlobalWsReadBufferSize         = ffc("config.global.ws.readBufferSize", "The size in bytes of the read buffer for the WebSocket connection", ByteSizeType)
 	ConfigGlobalWsWriteBufferSize        = ffc("config.global.ws.writeBufferSize", "The size in bytes of the write buffer for the WebSocket connection", ByteSizeType)
+	ConfigGlobalWsURL                    = ffc("config.global.ws.url", "URL to use for WebSocket - overrides url one level up (in the HTTP config)", StringType)
 
 	ConfigGlobalTLSCaFile                 = ffc("config.global.tls.caFile", "The path to the CA file for TLS on this API", StringType)
 	ConfigGlobalTLSCertFile               = ffc("config.global.tls.certFile", "The path to the certificate file for TLS on this API", StringType)
