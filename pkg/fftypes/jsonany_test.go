@@ -184,3 +184,11 @@ func TestUnmarshal(t *testing.T) {
 func TestNilHash(t *testing.T) {
 	assert.Nil(t, (*JSONAny)(nil).Hash())
 }
+
+func TestASString(t *testing.T) {
+	j := JSONAnyPtr("\"foo\"")
+	assert.Equal(t, "foo", j.AsString())
+
+	nj := (*JSONAny)(nil)
+	assert.Equal(t, "null", nj.AsString())
+}

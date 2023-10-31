@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -47,6 +47,7 @@ func JSONAnyPtrBytes(b []byte) *JSONAny {
 	return &ja
 }
 
+// Unmarshals a byte array and sets h as a pointer to the result
 func (h *JSONAny) UnmarshalJSON(b []byte) error {
 	if len(b) == 0 {
 		*h = JSONAny(NullString)
@@ -86,12 +87,23 @@ func (h *JSONAny) Hash() *Bytes32 {
 	return &b32
 }
 
+// Returns the raw JSON as a string without unmarshaling
 func (h *JSONAny) String() string {
 	if h == nil {
 		return NullString
 	}
 	b, _ := h.MarshalJSON()
 	return string(b)
+}
+
+// Attempts to unmarshal the JSONAny as a string and return it
+func (h *JSONAny) AsString() string {
+	if h == nil {
+		return NullString
+	}
+	s := ""
+	_ = h.Unmarshal(context.Background(), &s)
+	return s
 }
 
 func (h *JSONAny) Length() int64 {
