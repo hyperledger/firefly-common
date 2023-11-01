@@ -58,8 +58,8 @@ type apiServer[T any] struct {
 	apiPublicURL              string
 	apiDynamicPublicURLHeader string
 	alwaysPaginate            bool
-	metricsEnabled            bool
 	handleYAML                bool
+	metricsEnabled            bool
 	metricsPath               string
 	metricsPublicURL          string
 
@@ -78,6 +78,7 @@ type APIServerOptions[T any] struct {
 	FavIcon32                 []byte
 	PanicOnMissingDescription bool
 	SupportFieldRedaction     bool
+	HandleYAML                bool
 }
 
 type APIServerRouteExt[T any] struct {
@@ -97,7 +98,7 @@ func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APISe
 		metricsEnabled:            options.MetricsConfig.GetBool(ConfMetricsServerEnabled),
 		metricsPath:               options.MetricsConfig.GetString(ConfMetricsServerPath),
 		alwaysPaginate:            options.APIConfig.GetBool(ConfAPIAlwaysPaginate),
-		handleYAML:                options.APIConfig.GetBool(ConfAPIHandleYAML),
+		handleYAML:                options.HandleYAML,
 		apiDynamicPublicURLHeader: options.APIConfig.GetString(ConfAPIDynamicPublicURLHeader),
 		APIServerOptions:          options,
 		started:                   make(chan struct{}),
