@@ -31,6 +31,7 @@ var (
 	ConfAPIRequestTimeout         = "requestTimeout"
 	ConfAPIRequestMaxTimeout      = "requestMaxTimeout"
 	ConfAPIAlwaysPaginate         = "alwaysPaginate"
+	ConfAPIHandleYAML             = "handleYAML"
 	ConfAPIDynamicPublicURLHeader = "dynamicPublicURLHeader"
 )
 
@@ -42,6 +43,7 @@ func InitAPIServerConfig(apiConfig, metricsConfig, corsConfig config.Section) {
 	apiConfig.AddKnownKey(ConfAPIRequestTimeout, "30s")
 	apiConfig.AddKnownKey(ConfAPIRequestMaxTimeout, "10m")
 	apiConfig.AddKnownKey(ConfAPIAlwaysPaginate, false)
+	apiConfig.AddKnownKey(ConfAPIHandleYAML, false)
 	apiConfig.AddKnownKey(ConfAPIDynamicPublicURLHeader)
 
 	httpserver.InitCORSConfig(corsConfig)

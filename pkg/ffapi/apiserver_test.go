@@ -144,6 +144,25 @@ func TestAPIServerInvokeAPIRouteJSON(t *testing.T) {
 	assert.Equal(t, "test_json_output", o.Output1)
 }
 
+func TestAPIServerInvokeAPIRouteYAML(t *testing.T) {
+	um, as, done := newTestAPIServer(t, true)
+	defer done()
+	as.handleYAML = true
+
+	<-as.Started()
+
+	var o sampleOutput
+	res, err := resty.New().R().
+		SetBody(`input1: test_json_input`).
+		SetHeader("Content-Type", "application/x-yaml").
+		SetResult(&o).
+		Post(fmt.Sprintf("%s/api/v1/ut/utresource/id12345/postit", as.APIPublicURL()))
+	assert.NoError(t, err)
+	assert.Equal(t, 200, res.StatusCode())
+	assert.Equal(t, "id12345", um.calledJSONHandler)
+	assert.Equal(t, "test_json_output", o.Output1)
+}
+
 func TestAPIServerInvokeAPIRouteForm(t *testing.T) {
 	um, as, done := newTestAPIServer(t, true)
 	defer done()
@@ -163,6 +182,22 @@ func TestAPIServerInvokeAPIRouteForm(t *testing.T) {
 	assert.Equal(t, "id12345", um.calledJSONHandler)
 	assert.Equal(t, "test_form_output", o.Output1)
 
+}
+func TestAPIServerInvokeAPIRouteYAMLFail(t *testing.T) {
+	_, as, done := newTestAPIServer(t, true)
+	defer done()
+	as.handleYAML = true
+
+	<-as.Started()
+
+	var o sampleOutput
+	res, err := resty.New().R().
+		SetBody(`{{{ !!! not yaml`).
+		SetHeader("Content-Type", "application/x-yaml").
+		SetResult(&o).
+		Post(fmt.Sprintf("%s/api/v1/ut/utresource/id12345/postit", as.APIPublicURL()))
+	assert.NoError(t, err)
+	assert.Equal(t, 400, res.StatusCode())
 }
 
 func TestAPIServerInvokeAPIRouteCheckPathEscaping(t *testing.T) {

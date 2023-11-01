@@ -59,6 +59,7 @@ type apiServer[T any] struct {
 	apiDynamicPublicURLHeader string
 	alwaysPaginate            bool
 	metricsEnabled            bool
+	handleYAML                bool
 	metricsPath               string
 	metricsPublicURL          string
 
@@ -96,6 +97,7 @@ func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APISe
 		metricsEnabled:            options.MetricsConfig.GetBool(ConfMetricsServerEnabled),
 		metricsPath:               options.MetricsConfig.GetString(ConfMetricsServerPath),
 		alwaysPaginate:            options.APIConfig.GetBool(ConfAPIAlwaysPaginate),
+		handleYAML:                options.APIConfig.GetBool(ConfAPIHandleYAML),
 		apiDynamicPublicURLHeader: options.APIConfig.GetString(ConfAPIDynamicPublicURLHeader),
 		APIServerOptions:          options,
 		started:                   make(chan struct{}),
@@ -207,6 +209,7 @@ func (as *apiServer[T]) handlerFactory() *HandlerFactory {
 		MaxFilterLimit:        as.maxFilterLimit,
 		SupportFieldRedaction: as.SupportFieldRedaction,
 		AlwaysPaginate:        as.alwaysPaginate,
+		HandleYAML:            as.handleYAML,
 	}
 }
 
