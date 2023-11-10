@@ -173,4 +173,6 @@ var (
 	MsgESInvalidTopicFilterRegexp                  = ffe("FF00235", "Invalid topic filter regular expression '%s': %s")
 	MsgESStartedOrStopped                          = ffe("FF00236", "Event stream status must be 'started' or 'stopped' when creating/updating", http.StatusBadRequest)
 	MsgESConfigNotInitialized                      = ffe("FF00237", "Event stream manager configuration not initialized")
+	MsgInvalidWebSocketURL                         = ffe("FF00238", "Invalid WebSocket URL (must have ws: or wss: proto, otherwise use httpUrl option): '%s'")
+	MsgRequestYAMLInvalid                          = ffe("FF00239", "Unable to process input as YAML: %s", 400)
 )

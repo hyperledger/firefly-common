@@ -17,6 +17,7 @@
 package ffapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -29,6 +30,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ghodss/yaml"
 	"github.com/gorilla/mux"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
@@ -51,6 +53,7 @@ type HandlerFactory struct {
 	DefaultFilterLimit    uint64
 	MaxFilterSkip         uint64
 	MaxFilterLimit        uint64
+	HandleYAML            bool
 	PassthroughHeaders    []string
 	AlwaysPaginate        bool
 	SupportFieldRedaction bool
@@ -164,6 +167,18 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 					return 400, err
 				}
 				defer multipart.close()
+			case hs.HandleYAML && strings.HasPrefix(req.Header.Get("Content-Type"), "application/x-yaml"):
+				var jsonBytes []byte
+				yamlBytes, err := io.ReadAll(req.Body)
+				if err == nil {
+					jsonBytes, err = yaml.YAMLToJSON(yamlBytes)
+				}
+				if err != nil {
+					return 400, i18n.NewError(req.Context(), i18n.MsgRequestYAMLInvalid, err)
+				}
+				req.Body = io.NopCloser(bytes.NewBuffer(jsonBytes))
+				req.Header.Set("Content-Type", "application/json; charset=utf8")
+				fallthrough
 			case strings.HasPrefix(strings.ToLower(contentType), "application/json"):
 				if jsonInput != nil {
 					err = json.NewDecoder(req.Body).Decode(&jsonInput)

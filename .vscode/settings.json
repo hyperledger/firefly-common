@@ -32,6 +32,7 @@
     "unmarshaling",
     "unserializable",
     "Upsert",
+    "vararg",
     "Warnf",
     "wsclient"
   ],

@@ -679,6 +679,17 @@ func TestLeftJOINExample(t *testing.T) {
 	assert.Equal(t, int64(1), l1s[0].Field3.JSONObject().GetInt64("linked") /* from JOIN */)
 }
 
+func TestQueryFactoryAccessors(t *testing.T) {
+	db, _ := NewMockProvider().UTInit()
+	tc1 := newCRUDCollection(&db.Database, "ns1")
+	assert.NotNil(t, tc1.NewFilterBuilder(context.Background()))
+	assert.NotNil(t, tc1.NewUpdateBuilder(context.Background()))
+
+	tc2 := newLinkableCollection(&db.Database, "ns1")
+	assert.Nil(t, tc2.NewFilterBuilder(context.Background()))
+	assert.Nil(t, tc2.NewUpdateBuilder(context.Background()))
+}
+
 func TestUpsertFailBegin(t *testing.T) {
 	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")

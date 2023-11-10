@@ -24,6 +24,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +37,7 @@ import (
 
 type WSConfig struct {
 	HTTPURL                string             `json:"httpUrl,omitempty"`
+	WebSocketURL           string             `json:"wsUrl,omitempty"`
 	WSKeyPath              string             `json:"wsKeyPath,omitempty"`
 	ReadBufferSize         int                `json:"readBufferSize,omitempty"`
 	WriteBufferSize        int                `json:"writeBufferSize,omitempty"`
@@ -80,6 +82,7 @@ type WSClient interface {
 	ReceiveExt() <-chan *WSPayload
 	URL() string
 	SetURL(url string)
+	SetHeader(header, value string)
 	Send(ctx context.Context, message []byte) error
 	Close()
 }
@@ -109,7 +112,7 @@ type wsClient struct {
 }
 
 // WSPreConnectHandler will be called before every connect/reconnect. Any error returned will prevent the websocket from connecting.
-type WSPreConnectHandler func(ctx context.Context) error
+type WSPreConnectHandler func(ctx context.Context, w WSClient) error
 
 // WSPostConnectHandler will be called after every connect/reconnect. Can send data over ws, but must not block listening for data on the ws.
 type WSPostConnectHandler func(ctx context.Context, w WSClient) error
@@ -212,6 +215,10 @@ func (w *wsClient) SetURL(url string) {
 	w.url = url
 }
 
+func (w *wsClient) SetHeader(header, value string) {
+	w.headers.Set(header, value)
+}
+
 func (w *wsClient) Send(ctx context.Context, message []byte) error {
 	// Send
 	select {
@@ -240,6 +247,14 @@ func (w *wsClient) heartbeatTimeout(ctx context.Context) (context.Context, conte
 }
 
 func buildWSUrl(ctx context.Context, config *WSConfig) (string, error) {
+	if config.WebSocketURL != "" {
+		u, err := url.Parse(config.WebSocketURL)
+		if err != nil || !strings.HasPrefix(u.Scheme, "ws") {
+			return "", i18n.WrapError(ctx, err, i18n.MsgInvalidWebSocketURL, config.WebSocketURL)
+		}
+		return u.String(), nil
+	}
+
 	u, err := url.Parse(config.HTTPURL)
 	if err != nil {
 		return "", i18n.WrapError(ctx, err, i18n.MsgInvalidURL, config.HTTPURL)
@@ -265,7 +280,7 @@ func (w *wsClient) connect(initial bool) error {
 
 		retry = !initial || attempt < w.initialRetryAttempts
 		if w.beforeConnect != nil {
-			if err = w.beforeConnect(w.ctx); err != nil {
+			if err = w.beforeConnect(w.ctx, w); err != nil {
 				l.Warnf("WS %s connect attempt %d failed in beforeConnect", w.url, attempt)
 				return retry, err
 			}

@@ -114,7 +114,9 @@ type CRUD[T Resource] interface {
 	UpdateMany(ctx context.Context, filter ffapi.Filter, update ffapi.Update, hooks ...PostCompletionHook) (err error)
 	Delete(ctx context.Context, id string, hooks ...PostCompletionHook) (err error)
 	DeleteMany(ctx context.Context, filter ffapi.Filter, hooks ...PostCompletionHook) (err error) // no events
-	Scoped(scope sq.Eq) CRUD[T]                                                                   // allows dynamic scoping to a collection
+	NewFilterBuilder(ctx context.Context) ffapi.FilterBuilder
+	NewUpdateBuilder(ctx context.Context) ffapi.UpdateBuilder
+	Scoped(scope sq.Eq) CRUD[T] // allows dynamic scoping to a collection
 }
 
 type CrudBase[T Resource] struct {
@@ -145,6 +147,20 @@ func (c *CrudBase[T]) Scoped(scope sq.Eq) CRUD[T] {
 	cScoped := *c
 	cScoped.ScopedFilter = func() sq.Eq { return scope }
 	return &cScoped
+}
+
+func (c *CrudBase[T]) NewFilterBuilder(ctx context.Context) ffapi.FilterBuilder {
+	if c.QueryFactory == nil {
+		return nil
+	}
+	return c.QueryFactory.NewFilter(ctx)
+}
+
+func (c *CrudBase[T]) NewUpdateBuilder(ctx context.Context) ffapi.UpdateBuilder {
+	if c.QueryFactory == nil {
+		return nil
+	}
+	return c.QueryFactory.NewUpdate(ctx)
 }
 
 func (c *CrudBase[T]) ModifyQuery(newModifier QueryModifier) CRUDQuery[T] {

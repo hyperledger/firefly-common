@@ -43,6 +43,8 @@ const (
 	WSConfigKeyInitialConnectAttempts = "ws.initialConnectAttempts"
 	// WSConfigKeyPath if set will define the path to connect to - allows sharing of the same URL between HTTP and WebSocket connection info
 	WSConfigKeyPath = "ws.path"
+	// WSConfigURL if set will be a completely separate URL for WebSockets (must be a ws: or wss: scheme)
+	WSConfigURL = "ws.url"
 	// WSConfigKeyHeartbeatInterval is the frequency of ping/pong requests, and also used for the timeout to receive a response to the heartbeat
 	WSConfigKeyHeartbeatInterval = "ws.heartbeatInterval"
 	// WSConnectionTimeout is the amount of time to wait while attempting to establish a connection (or automatic reconnection)
@@ -57,6 +59,7 @@ func InitConfig(conf config.Section) {
 	conf.AddKnownKey(WSConfigKeyReadBufferSize, defaultBufferSize)
 	conf.AddKnownKey(WSConfigKeyInitialConnectAttempts, defaultInitialConnectAttempts)
 	conf.AddKnownKey(WSConfigKeyPath)
+	conf.AddKnownKey(WSConfigURL)
 	conf.AddKnownKey(WSConfigKeyHeartbeatInterval, defaultHeartbeatInterval)
 	conf.AddKnownKey(WSConfigKeyConnectionTimeout, defaultConnectionTimeout)
 }
@@ -64,6 +67,7 @@ func InitConfig(conf config.Section) {
 func GenerateConfig(ctx context.Context, conf config.Section) (*WSConfig, error) {
 	wsConfig := &WSConfig{
 		HTTPURL:                conf.GetString(ffresty.HTTPConfigURL),
+		WebSocketURL:           conf.GetString(WSConfigURL),
 		WSKeyPath:              conf.GetString(WSConfigKeyPath),
 		ReadBufferSize:         int(conf.GetByteSize(WSConfigKeyReadBufferSize)),
 		WriteBufferSize:        int(conf.GetByteSize(WSConfigKeyWriteBufferSize)),
