@@ -143,7 +143,9 @@ func (s *Database) filterSelectFinalized(ctx context.Context, tableName string, 
 		sort[i] = fmt.Sprintf("%s%s%s", s.mapFieldName(tableName, sf.Field, typeMap), direction, nulls)
 	}
 	sortString = strings.Join(sort, ", ")
-	sel = sel.OrderBy(sortString)
+	if sortString != "" {
+		sel = sel.OrderBy(sortString)
+	}
 	if fi.Skip > 0 {
 		sel = sel.Offset(fi.Skip)
 	}

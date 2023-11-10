@@ -24,6 +24,7 @@ import (
 type APIRequest struct {
 	Req             *http.Request
 	QP              map[string]string
+	QAP             map[string][]string
 	PP              map[string]string
 	FP              map[string]string
 	Filter          AndFilter

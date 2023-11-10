@@ -316,6 +316,10 @@ func (sg *SwaggerGen) addOutput(ctx context.Context, doc *openapi3.T, route *Rou
 }
 
 func (sg *SwaggerGen) AddParam(ctx context.Context, op *openapi3.Operation, in, name, def, example string, description i18n.MessageKey, deprecated bool, msgArgs ...interface{}) {
+	sg.addParamInternal(ctx, op, in, name, def, example, false, description, deprecated, msgArgs)
+}
+
+func (sg *SwaggerGen) addParamInternal(ctx context.Context, op *openapi3.Operation, in, name, def, example string, isArray bool, description i18n.MessageKey, deprecated bool, msgArgs ...interface{}) {
 	required := false
 	if in == "path" {
 		required = true
@@ -328,6 +332,21 @@ func (sg *SwaggerGen) AddParam(ctx context.Context, op *openapi3.Operation, in, 
 	if example != "" {
 		exampleValue = example
 	}
+	value := &openapi3.Schema{
+		Type:    "string",
+		Default: defValue,
+		Example: exampleValue,
+	}
+	if isArray {
+		value.Type = "array"
+		value.Items = &openapi3.SchemaRef{
+			Value: &openapi3.Schema{
+				Type:    "string",
+				Default: defValue,
+				Example: exampleValue,
+			},
+		}
+	}
 	op.Parameters = append(op.Parameters, &openapi3.ParameterRef{
 		Value: &openapi3.Parameter{
 			In:          in,
@@ -336,11 +355,7 @@ func (sg *SwaggerGen) AddParam(ctx context.Context, op *openapi3.Operation, in, 
 			Deprecated:  deprecated,
 			Description: i18n.Expand(ctx, description, msgArgs...),
 			Schema: &openapi3.SchemaRef{
-				Value: &openapi3.Schema{
-					Type:    "string",
-					Default: defValue,
-					Example: exampleValue,
-				},
+				Value: value,
 			},
 		},
 	})
@@ -403,7 +418,7 @@ func (sg *SwaggerGen) addRoute(ctx context.Context, doc *openapi3.T, route *Rout
 		if q.ExampleFromConf != "" {
 			example = config.GetString(q.ExampleFromConf)
 		}
-		sg.AddParam(ctx, op, "query", q.Name, q.Default, example, q.Description, q.Deprecated)
+		sg.addParamInternal(ctx, op, "query", q.Name, q.Default, example, q.IsArray, q.Description, q.Deprecated)
 	}
 	sg.AddParam(ctx, op, "header", "Request-Timeout", sg.options.DefaultRequestTimeout.String(), "", i18n.APIRequestTimeoutDesc, false)
 

@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -95,6 +95,8 @@ type QueryParam struct {
 	Name string
 	// IsBool if this is a boolean query
 	IsBool bool
+	// IsArray if this is an array parameter (can be specified multiple times)
+	IsArray bool
 	// Default is the value that will be used in the case no value is supplied
 	Default string
 	// Example is a field to fill in, in the helper UI

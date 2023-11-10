@@ -91,12 +91,7 @@ func (r *ResourceBase) SetUpdated(t *fftypes.FFTime) {
 	r.Updated = t
 }
 
-type CRUD[T Resource] interface {
-	Validate()
-	Upsert(ctx context.Context, inst T, optimization UpsertOptimization, hooks ...PostCompletionHook) (created bool, err error)
-	InsertMany(ctx context.Context, instances []T, allowPartialSuccess bool, hooks ...PostCompletionHook) (err error)
-	Insert(ctx context.Context, inst T, hooks ...PostCompletionHook) (err error)
-	Replace(ctx context.Context, inst T, hooks ...PostCompletionHook) (err error)
+type CRUDQuery[T Resource] interface {
 	GetByID(ctx context.Context, id string, getOpts ...GetOption) (inst T, err error)
 	GetByUUIDOrName(ctx context.Context, uuidOrName string, getOpts ...GetOption) (result T, err error)
 	GetByName(ctx context.Context, name string, getOpts ...GetOption) (instance T, err error)
@@ -104,14 +99,24 @@ type CRUD[T Resource] interface {
 	GetSequenceForID(ctx context.Context, id string) (seq int64, err error)
 	GetMany(ctx context.Context, filter ffapi.Filter) (instances []T, fr *ffapi.FilterResult, err error)
 	Count(ctx context.Context, filter ffapi.Filter) (count int64, err error)
+	ModifyQuery(modifier QueryModifier) CRUDQuery[T]
+}
+
+type CRUD[T Resource] interface {
+	CRUDQuery[T]
+	Validate()
+	Upsert(ctx context.Context, inst T, optimization UpsertOptimization, hooks ...PostCompletionHook) (created bool, err error)
+	InsertMany(ctx context.Context, instances []T, allowPartialSuccess bool, hooks ...PostCompletionHook) (err error)
+	Insert(ctx context.Context, inst T, hooks ...PostCompletionHook) (err error)
+	Replace(ctx context.Context, inst T, hooks ...PostCompletionHook) (err error)
 	Update(ctx context.Context, id string, update ffapi.Update, hooks ...PostCompletionHook) (err error)
 	UpdateSparse(ctx context.Context, sparseUpdate T, hooks ...PostCompletionHook) (err error)
 	UpdateMany(ctx context.Context, filter ffapi.Filter, update ffapi.Update, hooks ...PostCompletionHook) (err error)
 	Delete(ctx context.Context, id string, hooks ...PostCompletionHook) (err error)
 	DeleteMany(ctx context.Context, filter ffapi.Filter, hooks ...PostCompletionHook) (err error) // no events
-	Scoped(scope sq.Eq) *CrudBase[T]                                                              // allows dynamic scoping to a collection
 	NewFilterBuilder(ctx context.Context) ffapi.FilterBuilder
 	NewUpdateBuilder(ctx context.Context) ffapi.UpdateBuilder
+	Scoped(scope sq.Eq) CRUD[T] // allows dynamic scoping to a collection
 }
 
 type CrudBase[T Resource] struct {
@@ -135,10 +140,10 @@ type CrudBase[T Resource] struct {
 	// Optional extensions
 	ReadTableAlias    string
 	ReadOnlyColumns   []string
-	ReadQueryModifier func(sq.SelectBuilder) sq.SelectBuilder
+	ReadQueryModifier QueryModifier
 }
 
-func (c *CrudBase[T]) Scoped(scope sq.Eq) *CrudBase[T] {
+func (c *CrudBase[T]) Scoped(scope sq.Eq) CRUD[T] {
 	cScoped := *c
 	cScoped.ScopedFilter = func() sq.Eq { return scope }
 	return &cScoped
@@ -156,6 +161,21 @@ func (c *CrudBase[T]) NewUpdateBuilder(ctx context.Context) ffapi.UpdateBuilder 
 		return nil
 	}
 	return c.QueryFactory.NewUpdate(ctx)
+}
+
+func (c *CrudBase[T]) ModifyQuery(newModifier QueryModifier) CRUDQuery[T] {
+	cModified := *c
+	originalModifier := cModified.ReadQueryModifier
+	cModified.ReadQueryModifier = func(sb sq.SelectBuilder) sq.SelectBuilder {
+		if originalModifier != nil {
+			sb = originalModifier(sb)
+		}
+		if newModifier != nil {
+			sb = newModifier(sb)
+		}
+		return sb
+	}
+	return &cModified
 }
 
 func UUIDValidator(ctx context.Context, idStr string) error {
@@ -672,7 +692,7 @@ func (c *CrudBase[T]) getManyScoped(ctx context.Context, tableFrom string, fi *f
 		}
 		instances = append(instances, inst)
 	}
-	return instances, c.DB.QueryRes(ctx, c.Table, tx, fop, fi), err
+	return instances, c.DB.QueryRes(ctx, c.Table, tx, fop, c.ReadQueryModifier, fi), err
 }
 
 func (c *CrudBase[T]) Count(ctx context.Context, filter ffapi.Filter) (count int64, err error) {
@@ -691,7 +711,7 @@ func (c *CrudBase[T]) Count(ctx context.Context, filter ffapi.Filter) (count int
 			fop,
 		}
 	}
-	return c.DB.CountQuery(ctx, c.Table, nil, fop, "*")
+	return c.DB.CountQuery(ctx, c.Table, nil, fop, c.ReadQueryModifier, "*")
 }
 
 func (c *CrudBase[T]) Update(ctx context.Context, id string, update ffapi.Update, hooks ...PostCompletionHook) (err error) {

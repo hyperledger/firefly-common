@@ -85,6 +85,7 @@ func TestRouteServePOST201WithParams(t *testing.T) {
 			{Name: "param1"},
 			{Name: "param2", IsBool: true},
 			{Name: "param3", IsBool: true},
+			{Name: "param4", IsArray: true},
 		},
 		JSONInputValue:  func() interface{} { return make(map[string]interface{}) },
 		JSONOutputValue: func() interface{} { return make(map[string]interface{}) },
@@ -94,13 +95,14 @@ func TestRouteServePOST201WithParams(t *testing.T) {
 			assert.Equal(t, "thing", r.QP["param1"])
 			assert.Equal(t, "true", r.QP["param2"])
 			assert.Equal(t, "false", r.QP["param3"])
+			assert.Equal(t, []string{"x", "y"}, r.QAP["param4"])
 			return map[string]interface{}{"output1": "value2"}, nil
 		},
 	}}, "", nil)
 	defer done()
 
 	b, _ := json.Marshal(map[string]interface{}{"input1": "value1"})
-	res, err := http.Post(fmt.Sprintf("http://%s/test/stuff?param1=thing&param2&param3=false", s.Addr()), "application/json", bytes.NewReader(b))
+	res, err := http.Post(fmt.Sprintf("http://%s/test/stuff?param1=thing&param2&param3=false&param4=x&param4=y", s.Addr()), "application/json", bytes.NewReader(b))
 	assert.NoError(t, err)
 	assert.Equal(t, 201, res.StatusCode)
 	var resJSON map[string]interface{}

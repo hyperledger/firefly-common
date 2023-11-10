@@ -142,6 +142,19 @@ var testRoutes = []*Route{
 		JSONOutputValue: func() interface{} { return &TestStruct1{} },
 		JSONOutputCodes: []int{http.StatusOK},
 	},
+	{
+		Name:       "op6",
+		Path:       "example3",
+		Method:     http.MethodGet,
+		PathParams: nil,
+		QueryParams: []*QueryParam{
+			{Name: "scope", IsArray: true},
+		},
+		Description:     ExampleDesc,
+		JSONInputValue:  func() interface{} { return &TestStruct1{} },
+		JSONOutputValue: func() interface{} { return &TestStruct1{} },
+		JSONOutputCodes: []int{http.StatusOK},
+	},
 }
 
 type TestInOutType struct {

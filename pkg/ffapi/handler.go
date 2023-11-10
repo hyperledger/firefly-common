@@ -104,9 +104,10 @@ func (hs *HandlerFactory) getFilePart(req *http.Request) (*multipartState, error
 	}
 }
 
-func (hs *HandlerFactory) getParams(req *http.Request, route *Route) (queryParams, pathParams map[string]string) {
+func (hs *HandlerFactory) getParams(req *http.Request, route *Route) (queryParams, pathParams map[string]string, queryArrayParams map[string][]string) {
 	queryParams = make(map[string]string)
 	pathParams = make(map[string]string)
+	queryArrayParams = make(map[string][]string)
 	v := mux.Vars(req)
 	for _, pp := range route.PathParams {
 		paramUnescaped, err := url.QueryUnescape(v[pp.Name]) // Gorilla mux assures this works
@@ -131,10 +132,14 @@ func (hs *HandlerFactory) getParams(req *http.Request, route *Route) (queryParam
 			}
 		}
 		if exists && len(val) > 0 {
-			queryParams[qp.Name] = val[0]
+			if qp.IsArray {
+				queryArrayParams[qp.Name] = val
+			} else {
+				queryParams[qp.Name] = val[0]
+			}
 		}
 	}
-	return queryParams, pathParams
+	return queryParams, pathParams, queryArrayParams
 }
 
 func (hs *HandlerFactory) RoutePath(route *Route) string {
@@ -150,6 +155,7 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 			jsonInput = route.JSONInputValue()
 		}
 		var queryParams, pathParams map[string]string
+		var queryArrayParams map[string][]string
 		var multipart *multipartState
 		contentType := req.Header.Get("Content-Type")
 		var err error
@@ -186,7 +192,7 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 		var status = 400 // if fail parsing input
 		var output interface{}
 		if err == nil {
-			queryParams, pathParams = hs.getParams(req, route)
+			queryParams, pathParams, queryArrayParams = hs.getParams(req, route)
 		}
 
 		var filter AndFilter
@@ -199,6 +205,7 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 				Req:             req,
 				PP:              pathParams,
 				QP:              queryParams,
+				QAP:             queryArrayParams,
 				Filter:          filter,
 				Input:           jsonInput,
 				SuccessStatus:   http.StatusOK,

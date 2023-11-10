@@ -381,6 +381,16 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	assert.NoError(t, err)
 	checkEqualExceptTimes(t, *c1, *c1copy)
 
+	// Check we get it back with custom modifiers
+	collection.ReadQueryModifier = func(sb sq.SelectBuilder) sq.SelectBuilder {
+		return sb.Where(sq.Eq{"ns": "ns1"})
+	}
+	c1copy, err = iCrud.ModifyQuery(func(sb sq.SelectBuilder) sq.SelectBuilder {
+		return sb.Where(sq.Eq{"field1": "hello1"})
+	}).GetByName(ctx, *c1.Name)
+	assert.NoError(t, err)
+	checkEqualExceptTimes(t, *c1, *c1copy)
+
 	// Upsert the existing row optimized
 	c1copy.Field1 = strPtr("hello again - 1")
 	created, err := iCrud.Upsert(ctx, c1copy, UpsertOptimizationExisting)
