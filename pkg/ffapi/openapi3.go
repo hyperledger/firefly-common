@@ -316,7 +316,7 @@ func (sg *SwaggerGen) addOutput(ctx context.Context, doc *openapi3.T, route *Rou
 }
 
 func (sg *SwaggerGen) AddParam(ctx context.Context, op *openapi3.Operation, in, name, def, example string, description i18n.MessageKey, deprecated bool, msgArgs ...interface{}) {
-	sg.addParamInternal(ctx, op, in, name, def, example, false, description, deprecated, msgArgs)
+	sg.addParamInternal(ctx, op, in, name, def, example, false, description, deprecated, msgArgs...)
 }
 
 func (sg *SwaggerGen) addParamInternal(ctx context.Context, op *openapi3.Operation, in, name, def, example string, isArray bool, description i18n.MessageKey, deprecated bool, msgArgs ...interface{}) {
