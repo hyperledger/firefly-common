@@ -253,6 +253,11 @@ func buildWSUrl(ctx context.Context, config *WSConfig) (string, error) {
 	if u.Scheme == "https" {
 		u.Scheme = "wss"
 	}
+	if config.AuthUsername == "" && config.AuthPassword == "" && u.User != nil {
+		config.AuthUsername = u.User.Username()
+		config.AuthPassword, _ = u.User.Password()
+	}
+	u.User = nil
 	return u.String(), nil
 }
 

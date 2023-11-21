@@ -264,6 +264,18 @@ func TestWSClientBadURL(t *testing.T) {
 	assert.Regexp(t, "FF00149", err)
 }
 
+func TestBasicAuthRemap(t *testing.T) {
+	wsConfig := generateConfig()
+	wsConfig.HTTPURL = "https://user:pass@test:12345"
+	wsConfig.WSKeyPath = "/websocket"
+
+	url, err := buildWSUrl(context.Background(), wsConfig)
+	assert.NoError(t, err)
+	assert.Equal(t, "wss://test:12345/websocket", url)
+	assert.Equal(t, "user", wsConfig.AuthUsername)
+	assert.Equal(t, "pass", wsConfig.AuthPassword)
+}
+
 func TestHTTPToWSURLRemap(t *testing.T) {
 	wsConfig := generateConfig()
 	wsConfig.HTTPURL = "http://test:12345"
