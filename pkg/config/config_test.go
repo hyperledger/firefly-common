@@ -453,10 +453,16 @@ func TestConfigWatchE2E(t *testing.T) {
 	logrus.SetLevel(logrus.DebugLevel)
 	tmpDir := t.TempDir()
 
+	// Create the file
+	os.WriteFile(fmt.Sprintf("%s/test.yaml", tmpDir), []byte(`{"ut_conf": "one"}`), 0664)
+
+	// Read initial config
 	viper.SetConfigType("yaml")
 	viper.SetConfigFile(fmt.Sprintf("%s/test.yaml", tmpDir))
+	viper.ReadInConfig()
+	assert.Equal(t, "one", viper.Get("ut_conf"))
 
-	// Start listener on empty dir
+	// Start listener on config file
 	fsListenerDone := make(chan struct{})
 	fsListenerFired := make(chan bool)
 	ctx, cancelCtx := context.WithCancel(context.Background())
@@ -468,11 +474,6 @@ func TestConfigWatchE2E(t *testing.T) {
 		close(fsListenerDone)
 	})
 	assert.NoError(t, err)
-
-	// Create the file
-	os.WriteFile(fmt.Sprintf("%s/test.yaml", tmpDir), []byte(`{"ut_conf": "one"}`), 0664)
-	<-fsListenerFired
-	assert.Equal(t, "one", viper.Get("ut_conf"))
 
 	// Delete and rename in another file
 	os.Remove(fmt.Sprintf("%s/test.yaml", tmpDir))
