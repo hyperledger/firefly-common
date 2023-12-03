@@ -75,6 +75,7 @@ type QueryJSON struct {
 	Skip  *uint64  `ffstruct:"FilterJSON" json:"skip,omitempty"`
 	Limit *uint64  `ffstruct:"FilterJSON" json:"limit,omitempty"`
 	Sort  []string `ffstruct:"FilterJSON" json:"sort,omitempty"`
+	Count *bool    `ffstruct:"FilterJSON" json:"count,omitempty"`
 }
 
 type SimpleFilterValue string
@@ -106,6 +107,9 @@ func (js SimpleFilterValue) String() string {
 
 func (jq *QueryJSON) BuildFilter(ctx context.Context, qf QueryFactory) (Filter, error) {
 	fb := qf.NewFilter(ctx)
+	if jq.Count != nil {
+		fb = fb.Count(*jq.Count)
+	}
 	if jq.Skip != nil {
 		fb = fb.Skip(*jq.Skip)
 	}

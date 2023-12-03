@@ -33,5 +33,6 @@ var (
 	FilterJSONLimit              = ffm("FilterJSON.limit", "Limit on the results to return")
 	FilterJSONSkip               = ffm("FilterJSON.skip", "Number of results to skip before returning entries, for skip+limit based pagination")
 	FilterJSONSort               = ffm("FilterJSON.sort", "Array of fields to sort by. A '-' prefix on a field requests that field is sorted in descending order")
+	FilterJSONCount              = ffm("FilterJSON.count", "If true, the total number of entries that could be returned from the database will be calculated and returned as a 'total' (has a performance cost)")
 	FilterJSONOr                 = ffm("FilterJSON.or", "Array of sub-queries where any sub-query can match to return results (OR combined). Note that within each sub-query all filters must match (AND combined)")
 )

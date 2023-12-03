@@ -114,6 +114,7 @@ func TestBuildQueryJSONEqual(t *testing.T) {
 	err := json.Unmarshal([]byte(`{
 		"skip": 5,
 		"limit": 10,
+		"count": true,
 		"sort": [
 			"tag",
 			"sequence"
@@ -149,7 +150,7 @@ func TestBuildQueryJSONEqual(t *testing.T) {
 	fi, err := filter.Finalize()
 	assert.NoError(t, err)
 
-	assert.Equal(t, "( created == 0 ) && ( tag != 'abc' ) && ( tag := 'ABC' ) && ( tag ;= 'abc' ) sort=tag,sequence skip=5 limit=10", fi.String())
+	assert.Equal(t, "( created == 0 ) && ( tag != 'abc' ) && ( tag := 'ABC' ) && ( tag ;= 'abc' ) sort=tag,sequence skip=5 limit=10 count=true", fi.String())
 }
 
 func TestBuildQueryJSONContains(t *testing.T) {
