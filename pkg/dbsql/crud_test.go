@@ -686,6 +686,7 @@ func TestQueryFactoryAccessors(t *testing.T) {
 	assert.NotNil(t, tc1.NewUpdateBuilder(context.Background()))
 
 	tc2 := newLinkableCollection(&db.Database, "ns1")
+	assert.Nil(t, tc2.GetQueryFactory())
 	assert.Nil(t, tc2.NewFilterBuilder(context.Background()))
 	assert.Nil(t, tc2.NewUpdateBuilder(context.Background()))
 }

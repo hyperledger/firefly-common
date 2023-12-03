@@ -116,6 +116,7 @@ type CRUD[T Resource] interface {
 	DeleteMany(ctx context.Context, filter ffapi.Filter, hooks ...PostCompletionHook) (err error) // no events
 	NewFilterBuilder(ctx context.Context) ffapi.FilterBuilder
 	NewUpdateBuilder(ctx context.Context) ffapi.UpdateBuilder
+	GetQueryFactory() ffapi.QueryFactory
 	Scoped(scope sq.Eq) CRUD[T] // allows dynamic scoping to a collection
 }
 
@@ -147,6 +148,10 @@ func (c *CrudBase[T]) Scoped(scope sq.Eq) CRUD[T] {
 	cScoped := *c
 	cScoped.ScopedFilter = func() sq.Eq { return scope }
 	return &cScoped
+}
+
+func (c *CrudBase[T]) GetQueryFactory() ffapi.QueryFactory {
+	return c.QueryFactory
 }
 
 func (c *CrudBase[T]) NewFilterBuilder(ctx context.Context) ffapi.FilterBuilder {
