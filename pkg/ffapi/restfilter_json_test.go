@@ -357,7 +357,7 @@ func TestBuildQueryJSONIn(t *testing.T) {
 	assert.Equal(t, "( tag IN ['a','b','c'] ) && ( tag NI ['x','y','z'] ) skip=5 limit=10", fi.String())
 }
 
-func TestBadModifiers(t *testing.T) {
+func TestBuildQueryJSONBadModifiers(t *testing.T) {
 
 	var qf1 QueryJSON
 	err := json.Unmarshal([]byte(`{"lessThan": [{"not": true}]}`), &qf1)
@@ -406,4 +406,8 @@ func TestStringableParseFail(t *testing.T) {
 	err = js.UnmarshalJSON([]byte(`{"this": "is an object"}`))
 	assert.Error(t, err)
 
+}
+
+func TestBuildQueryJSONDocumented(t *testing.T) {
+	CheckObjectDocumented(&QueryJSON{})
 }
