@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 )
@@ -122,89 +123,133 @@ func (jq *QueryJSON) BuildFilter(ctx context.Context, qf QueryFactory) (Filter, 
 	return jq.BuildSubFilter(ctx, fb, &jq.FilterJSON)
 }
 
-func (jq *QueryJSON) addSimpleFilters(fb FilterBuilder, jsonFilter *FilterJSON, andFilter AndFilter) AndFilter {
+func validateFilterField(ctx context.Context, fb FilterBuilder, fieldAnyCase string) (string, error) {
+	for _, f := range fb.Fields() {
+		if strings.EqualFold(fieldAnyCase, f) {
+			return f, nil
+		}
+	}
+	return "", i18n.NewError(ctx, i18n.MsgInvalidFilterField, fieldAnyCase)
+}
+
+func (jq *QueryJSON) addSimpleFilters(ctx context.Context, fb FilterBuilder, jsonFilter *FilterJSON, andFilter AndFilter) (AndFilter, error) {
 	for _, e := range jsonFilter.Equal {
+		field, err := validateFilterField(ctx, fb, e.Field)
+		if err != nil {
+			return nil, err
+		}
 		if e.CaseInsensitive {
 			if e.Not {
-				andFilter = andFilter.Condition(fb.NIeq(e.Field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.NIeq(field, e.Value.String()))
 			} else {
-				andFilter = andFilter.Condition(fb.IEq(e.Field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.IEq(field, e.Value.String()))
 			}
 		} else {
 			if e.Not {
-				andFilter = andFilter.Condition(fb.Neq(e.Field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.Neq(field, e.Value.String()))
 			} else {
-				andFilter = andFilter.Condition(fb.Eq(e.Field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.Eq(field, e.Value.String()))
 			}
 		}
 	}
 	for _, e := range jsonFilter.Contains {
+		field, err := validateFilterField(ctx, fb, e.Field)
+		if err != nil {
+			return nil, err
+		}
 		if e.CaseInsensitive {
 			if e.Not {
-				andFilter = andFilter.Condition(fb.NotIContains(e.Field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.NotIContains(field, e.Value.String()))
 			} else {
-				andFilter = andFilter.Condition(fb.IContains(e.Field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.IContains(field, e.Value.String()))
 			}
 		} else {
 			if e.Not {
-				andFilter = andFilter.Condition(fb.NotContains(e.Field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.NotContains(field, e.Value.String()))
 			} else {
-				andFilter = andFilter.Condition(fb.Contains(e.Field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.Contains(field, e.Value.String()))
 			}
 		}
 	}
 	for _, e := range jsonFilter.StartsWith {
+		field, err := validateFilterField(ctx, fb, e.Field)
+		if err != nil {
+			return nil, err
+		}
 		if e.CaseInsensitive {
 			if e.Not {
-				andFilter = andFilter.Condition(fb.NotIStartsWith(e.Field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.NotIStartsWith(field, e.Value.String()))
 			} else {
-				andFilter = andFilter.Condition(fb.IStartsWith(e.Field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.IStartsWith(field, e.Value.String()))
 			}
 		} else {
 			if e.Not {
-				andFilter = andFilter.Condition(fb.NotStartsWith(e.Field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.NotStartsWith(field, e.Value.String()))
 			} else {
-				andFilter = andFilter.Condition(fb.StartsWith(e.Field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.StartsWith(field, e.Value.String()))
 			}
 		}
 	}
-	return andFilter
+	return andFilter, nil
 }
 
 func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonFilter *FilterJSON) (Filter, error) {
-	andFilter := jq.addSimpleFilters(fb, jsonFilter, fb.And())
+	andFilter, err := jq.addSimpleFilters(ctx, fb, jsonFilter, fb.And())
+	if err != nil {
+		return nil, err
+	}
 	for _, e := range jsonFilter.LessThan {
+		field, err := validateFilterField(ctx, fb, e.Field)
+		if err != nil {
+			return nil, err
+		}
 		if e.CaseInsensitive || e.Not {
 			return nil, i18n.NewError(ctx, i18n.MsgJSONQueryOpUnsupportedMod, "lessThan", allMods)
 		}
-		andFilter = andFilter.Condition(fb.Lt(e.Field, e.Value.String()))
+		andFilter = andFilter.Condition(fb.Lt(field, e.Value.String()))
 	}
 	for _, e := range jsonFilter.LessThanOrEqual {
+		field, err := validateFilterField(ctx, fb, e.Field)
+		if err != nil {
+			return nil, err
+		}
 		if e.CaseInsensitive || e.Not {
 			return nil, i18n.NewError(ctx, i18n.MsgJSONQueryOpUnsupportedMod, "lessThanOrEqual", allMods)
 		}
-		andFilter = andFilter.Condition(fb.Lte(e.Field, e.Value.String()))
+		andFilter = andFilter.Condition(fb.Lte(field, e.Value.String()))
 	}
 	for _, e := range jsonFilter.GreaterThan {
+		field, err := validateFilterField(ctx, fb, e.Field)
+		if err != nil {
+			return nil, err
+		}
 		if e.CaseInsensitive || e.Not {
 			return nil, i18n.NewError(ctx, i18n.MsgJSONQueryOpUnsupportedMod, "greaterThan", allMods)
 		}
-		andFilter = andFilter.Condition(fb.Gt(e.Field, e.Value.String()))
+		andFilter = andFilter.Condition(fb.Gt(field, e.Value.String()))
 	}
 	for _, e := range jsonFilter.GreaterThanOrEqual {
+		field, err := validateFilterField(ctx, fb, e.Field)
+		if err != nil {
+			return nil, err
+		}
 		if e.CaseInsensitive || e.Not {
 			return nil, i18n.NewError(ctx, i18n.MsgJSONQueryOpUnsupportedMod, "greaterThanOrEqual", allMods)
 		}
-		andFilter = andFilter.Condition(fb.Gte(e.Field, e.Value.String()))
+		andFilter = andFilter.Condition(fb.Gte(field, e.Value.String()))
 	}
 	for _, e := range jsonFilter.In {
+		field, err := validateFilterField(ctx, fb, e.Field)
+		if err != nil {
+			return nil, err
+		}
 		if e.CaseInsensitive {
 			return nil, i18n.NewError(ctx, i18n.MsgJSONQueryOpUnsupportedMod, "in", justCaseInsensitive)
 		}
 		if e.Not {
-			andFilter = andFilter.Condition(fb.NotIn(e.Field, toDriverValues(e.Values)))
+			andFilter = andFilter.Condition(fb.NotIn(field, toDriverValues(e.Values)))
 		} else {
-			andFilter = andFilter.Condition(fb.In(e.Field, toDriverValues(e.Values)))
+			andFilter = andFilter.Condition(fb.In(field, toDriverValues(e.Values)))
 		}
 	}
 	if len(jsonFilter.Or) > 0 {

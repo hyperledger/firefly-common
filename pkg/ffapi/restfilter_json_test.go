@@ -361,37 +361,37 @@ func TestBuildQueryJSONIn(t *testing.T) {
 func TestBuildQueryJSONBadModifiers(t *testing.T) {
 
 	var qf1 QueryJSON
-	err := json.Unmarshal([]byte(`{"lessThan": [{"not": true}]}`), &qf1)
+	err := json.Unmarshal([]byte(`{"lessThan": [{"not": true, "field": "tag"}]}`), &qf1)
 	assert.NoError(t, err)
 	_, err = qf1.BuildFilter(context.Background(), TestQueryFactory)
 	assert.Regexp(t, "FF00240", err)
 
 	var qf2 QueryJSON
-	err = json.Unmarshal([]byte(`{"lessThanOrEqual": [{"not": true}]}`), &qf2)
+	err = json.Unmarshal([]byte(`{"lessThanOrEqual": [{"not": true, "field": "tag"}]}`), &qf2)
 	assert.NoError(t, err)
 	_, err = qf2.BuildFilter(context.Background(), TestQueryFactory)
 	assert.Regexp(t, "FF00240", err)
 
 	var qf3 QueryJSON
-	err = json.Unmarshal([]byte(`{"greaterThan": [{"not": true}]}`), &qf3)
+	err = json.Unmarshal([]byte(`{"greaterThan": [{"not": true, "field": "tag"}]}`), &qf3)
 	assert.NoError(t, err)
 	_, err = qf3.BuildFilter(context.Background(), TestQueryFactory)
 	assert.Regexp(t, "FF00240", err)
 
 	var qf4 QueryJSON
-	err = json.Unmarshal([]byte(`{"greaterThanOrEqual": [{"not": true}]}`), &qf4)
+	err = json.Unmarshal([]byte(`{"greaterThanOrEqual": [{"not": true, "field": "tag"}]}`), &qf4)
 	assert.NoError(t, err)
 	_, err = qf4.BuildFilter(context.Background(), TestQueryFactory)
 	assert.Regexp(t, "FF00240", err)
 
 	var qf5 QueryJSON
-	err = json.Unmarshal([]byte(`{"in": [{"caseInsensitive": true}]}`), &qf5)
+	err = json.Unmarshal([]byte(`{"in": [{"caseInsensitive": true, "field": "tag"}]}`), &qf5)
 	assert.NoError(t, err)
 	_, err = qf5.BuildFilter(context.Background(), TestQueryFactory)
 	assert.Regexp(t, "FF00240", err)
 
 	var qf6 QueryJSON
-	err = json.Unmarshal([]byte(`{"or": [{"in": [{"caseInsensitive": true}]}] }`), &qf6)
+	err = json.Unmarshal([]byte(`{"or": [{"in": [{"caseInsensitive": true, "field": "tag"}]}] }`), &qf6)
 	assert.NoError(t, err)
 	_, err = qf6.BuildFilter(context.Background(), TestQueryFactory)
 	assert.Regexp(t, "FF00240", err)
@@ -407,6 +407,57 @@ func TestStringableParseFail(t *testing.T) {
 	err = js.UnmarshalJSON([]byte(`{"this": "is an object"}`))
 	assert.Error(t, err)
 
+}
+
+func TestBuildQueryJSONBadFields(t *testing.T) {
+
+	var qf1 QueryJSON
+	err := json.Unmarshal([]byte(`{"equal": [{"field": "wrong"}]}`), &qf1)
+	assert.NoError(t, err)
+	_, err = qf1.BuildFilter(context.Background(), TestQueryFactory)
+	assert.Regexp(t, "FF00142", err)
+
+	var qf2 QueryJSON
+	err = json.Unmarshal([]byte(`{"contains": [{"field": "wrong"}]}`), &qf2)
+	assert.NoError(t, err)
+	_, err = qf2.BuildFilter(context.Background(), TestQueryFactory)
+	assert.Regexp(t, "FF00142", err)
+
+	var qf3 QueryJSON
+	err = json.Unmarshal([]byte(`{"startsWith": [{"field": "wrong"}]}`), &qf3)
+	assert.NoError(t, err)
+	_, err = qf3.BuildFilter(context.Background(), TestQueryFactory)
+	assert.Regexp(t, "FF00142", err)
+
+	var qf4 QueryJSON
+	err = json.Unmarshal([]byte(`{"lessThan": [{"field": "wrong"}]}`), &qf4)
+	assert.NoError(t, err)
+	_, err = qf4.BuildFilter(context.Background(), TestQueryFactory)
+	assert.Regexp(t, "FF00142", err)
+
+	var qf5 QueryJSON
+	err = json.Unmarshal([]byte(`{"lessThanOrEqual": [{"field": "wrong"}]}`), &qf5)
+	assert.NoError(t, err)
+	_, err = qf5.BuildFilter(context.Background(), TestQueryFactory)
+	assert.Regexp(t, "FF00142", err)
+
+	var qf6 QueryJSON
+	err = json.Unmarshal([]byte(`{"greaterThan": [{"field": "wrong"}]}`), &qf6)
+	assert.NoError(t, err)
+	_, err = qf6.BuildFilter(context.Background(), TestQueryFactory)
+	assert.Regexp(t, "FF00142", err)
+
+	var qf7 QueryJSON
+	err = json.Unmarshal([]byte(`{"greaterThanOrEqual": [{"field": "wrong"}]}`), &qf7)
+	assert.NoError(t, err)
+	_, err = qf7.BuildFilter(context.Background(), TestQueryFactory)
+	assert.Regexp(t, "FF00142", err)
+
+	var qf8 QueryJSON
+	err = json.Unmarshal([]byte(`{"in": [{"field": "wrong"}]}`), &qf8)
+	assert.NoError(t, err)
+	_, err = qf8.BuildFilter(context.Background(), TestQueryFactory)
+	assert.Regexp(t, "FF00142", err)
 }
 
 func TestBuildQueryJSONDocumented(t *testing.T) {
