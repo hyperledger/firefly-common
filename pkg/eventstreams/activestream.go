@@ -25,7 +25,6 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
-	"github.com/hyperledger/firefly-transaction-manager/pkg/apitypes"
 )
 
 type eventStreamBatch[DataType any] struct {
@@ -296,7 +295,7 @@ func (as *activeStream[CT, DT]) dispatchBatch(batch *eventStreamBatch[DT]) (err 
 		as.LastDispatchStatus = DispatchStatusBlocked
 		log.L(as.ctx).Errorf("Batch failed short retry after %.2fs secs. ErrorHandling=%s BlockedRetryDelay=%.2fs ",
 			time.Since(*as.LastDispatchTime.Time()).Seconds(), *as.spec.ErrorHandling, time.Duration(*as.spec.BlockedRetryDelay).Seconds())
-		if *as.spec.ErrorHandling == apitypes.ErrorHandlingTypeSkip {
+		if *as.spec.ErrorHandling == ErrorHandlingTypeSkip {
 			// Swallow the error now we have logged it
 			as.LastDispatchStatus = DispatchStatusSkipped
 			return nil
