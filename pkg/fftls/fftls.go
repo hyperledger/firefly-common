@@ -63,7 +63,10 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 	// Support custom CA file
 	var rootCAs *x509.CertPool
 	if config.CAFile != "" {
-		rootCAs = x509.NewCertPool()
+		rootCAs, err = x509.SystemCertPool()
+		if err != nil {
+			return nil, err
+		}
 		var caBytes []byte
 		caBytes, err = os.ReadFile(config.CAFile)
 		if err == nil {
