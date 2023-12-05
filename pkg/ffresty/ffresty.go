@@ -200,6 +200,7 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 		}
 
 		log.L(rCtx).Debugf("==> %s %s%s", req.Method, url, req.URL)
+		log.L(rCtx).Tracef("==> (body) %+v", req.Body)
 		return nil
 	})
 
