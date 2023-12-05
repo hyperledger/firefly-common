@@ -149,7 +149,8 @@ func (p *esPersistence[CT]) Checkpoints() dbsql.CRUD[*EventStreamCheckpoint] {
 		NilValue:     func() *EventStreamCheckpoint { return nil },
 		NewInstance:  func() *EventStreamCheckpoint { return &EventStreamCheckpoint{} },
 		ScopedFilter: func() sq.Eq { return sq.Eq{} },
-		EventHandler: nil,           // set below
+		EventHandler: nil, // set below
+		QueryFactory: CheckpointFilters,
 		IDValidator:  p.idValidator, // checkpoints share the ID of the eventstream
 		GetFieldPtr: func(inst *EventStreamCheckpoint, col string) interface{} {
 			switch col {
