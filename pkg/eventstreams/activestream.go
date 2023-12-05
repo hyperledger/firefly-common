@@ -91,8 +91,8 @@ func (as *activeStream[CT, DT]) runEventLoop() {
 
 func (as *activeStream[CT, DT]) loadCheckpoint() (sequencedID string, err error) {
 	err = as.retry.Do(as.ctx, "load checkpoint", func(attempt int) (retry bool, err error) {
-		log.L(as.ctx).Debugf("Loading checkpoint: %s", as.spec.ID)
-		cp, err := as.persistence.Checkpoints().GetByID(as.ctx, as.spec.ID.String())
+		log.L(as.ctx).Debugf("Loading checkpoint: %s", as.spec.GetID())
+		cp, err := as.persistence.Checkpoints().GetByID(as.ctx, as.spec.GetID())
 		if err != nil {
 			return true, err
 		}
@@ -242,9 +242,7 @@ func (as *activeStream[CT, DT]) checkpointRoutine() {
 		}
 		err := as.retry.Do(as.ctx, "checkpoint", func(attempt int) (retry bool, err error) {
 			_, err = as.esm.persistence.Checkpoints().Upsert(as.ctx, &EventStreamCheckpoint{
-				ResourceBase: dbsql.ResourceBase{
-					ID: as.spec.ID, // the ID of the stream is the ID of the checkpoint
-				},
+				ID:         ptrTo(as.spec.GetID()), // the ID of the stream is the ID of the checkpoint
 				SequenceID: &checkpointSequenceID,
 			}, dbsql.UpsertOptimizationExisting)
 			return true, err
@@ -273,7 +271,7 @@ func (as *activeStream[CT, DT]) dispatchBatch(batch *eventStreamBatch[DT]) (err 
 		err := as.retry.Do(as.ctx, "action", func(_ int) (retry bool, err error) {
 			err = as.action.AttemptDispatch(as.ctx, as.LastDispatchAttempts, &EventBatch[DT]{
 				Type:        MessageTypeEventBatch,
-				StreamID:    as.spec.ID,
+				StreamID:    as.spec.GetID(),
 				BatchNumber: batch.number,
 				Events:      batch.events,
 			})

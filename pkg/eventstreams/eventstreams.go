@@ -24,7 +24,6 @@ import (
 	"regexp"
 	"sync"
 
-	"github.com/hyperledger/firefly-common/pkg/dbsql"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
@@ -73,7 +72,9 @@ type DBSerializable interface {
 }
 
 type EventStreamSpec[CT any] struct {
-	dbsql.ResourceBase
+	ID                *string            `ffstruct:"eventstream" json:"id"`
+	Created           *fftypes.FFTime    `ffstruct:"eventstream" json:"created"`
+	Updated           *fftypes.FFTime    `ffstruct:"eventstream" json:"updated"`
 	Name              *string            `ffstruct:"eventstream" json:"name,omitempty"`
 	Status            *EventStreamStatus `ffstruct:"eventstream" json:"status,omitempty"`
 	Type              *EventStreamType   `ffstruct:"eventstream" json:"type,omitempty" ffenum:"estype"`
@@ -94,7 +95,10 @@ type EventStreamSpec[CT any] struct {
 }
 
 func (esc *EventStreamSpec[CT]) GetID() string {
-	return esc.ID.String()
+	if esc.ID == nil {
+		return ""
+	}
+	return *esc.ID
 }
 
 func (esc *EventStreamSpec[CT]) SetCreated(t *fftypes.FFTime) {
@@ -124,8 +128,25 @@ type EventStreamWithStatus[CT any] struct {
 }
 
 type EventStreamCheckpoint struct {
-	dbsql.ResourceBase
-	SequenceID *string `ffstruct:"EventStreamCheckpoint" json:"sequenceId,omitempty"`
+	ID         *string         `ffstruct:"EventStreamCheckpoint" json:"id"`
+	Created    *fftypes.FFTime `ffstruct:"EventStreamCheckpoint" json:"created"`
+	Updated    *fftypes.FFTime `ffstruct:"EventStreamCheckpoint" json:"updated"`
+	SequenceID *string         `ffstruct:"EventStreamCheckpoint" json:"sequenceId,omitempty"`
+}
+
+func (esc *EventStreamCheckpoint) GetID() string {
+	if esc.ID == nil {
+		return ""
+	}
+	return *esc.ID
+}
+
+func (esc *EventStreamCheckpoint) SetCreated(t *fftypes.FFTime) {
+	esc.Created = t
+}
+
+func (esc *EventStreamCheckpoint) SetUpdated(t *fftypes.FFTime) {
+	esc.Updated = t
 }
 
 type EventBatchDispatcher[DT any] interface {
@@ -367,7 +388,7 @@ func (es *eventStream[CT, DT]) checkSetStatus(ctx context.Context, targetStatus 
 
 func (es *eventStream[CT, DT]) persistStatus(ctx context.Context, targetStatus EventStreamStatus) error {
 	fb := EventStreamFilters.NewUpdate(ctx)
-	return es.esm.persistence.EventStreams().Update(ctx, es.spec.ID.String(), fb.Set("status", targetStatus))
+	return es.esm.persistence.EventStreams().Update(ctx, es.spec.GetID(), fb.Set("status", targetStatus))
 }
 
 func (es *eventStream[CT, DT]) stopOrDelete(ctx context.Context, targetStatus EventStreamStatus) error {

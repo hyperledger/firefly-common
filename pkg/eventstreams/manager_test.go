@@ -38,6 +38,10 @@ type mockEventSource struct {
 	run      func(ctx context.Context, es *EventStreamSpec[testESConfig], checkpointSequenceId string, deliver Deliver[testData]) error
 }
 
+func (mes *mockEventSource) NewID() string {
+	return fftypes.NewUUID().String()
+}
+
 func (mes *mockEventSource) Run(ctx context.Context, es *EventStreamSpec[testESConfig], checkpointSequenceId string, deliver Deliver[testData]) error {
 	return mes.run(ctx, es, checkpointSequenceId, deliver)
 }
@@ -66,10 +70,6 @@ func (mp *mockPersistence) Checkpoints() dbsql.CRUD[*EventStreamCheckpoint] {
 	return mp.checkpoints
 }
 func (mp *mockPersistence) Close() {}
-
-func ptrTo[T any](v T) *T {
-	return &v
-}
 
 func newMockESManager(t *testing.T, extraSetup ...func(mp *mockPersistence)) (context.Context, *esManager[testESConfig, testData], *mockEventSource, func()) {
 	logrus.SetLevel(logrus.DebugLevel)
@@ -155,9 +155,7 @@ func TestInitFail(t *testing.T) {
 
 func TestInitWithStreams(t *testing.T) {
 	es := &EventStreamSpec[testESConfig]{
-		ResourceBase: dbsql.ResourceBase{
-			ID: fftypes.NewUUID(),
-		},
+		ID:     ptrTo(fftypes.NewUUID().String()),
 		Name:   ptrTo("stream1"),
 		Status: ptrTo(EventStreamStatusStarted),
 	}
@@ -178,9 +176,7 @@ func TestInitWithStreamsCleanupFail(t *testing.T) {
 	ctx := context.Background()
 	InitConfig(config.RootSection("ut"))
 	es := &EventStreamSpec[testESConfig]{
-		ResourceBase: dbsql.ResourceBase{
-			ID: fftypes.NewUUID(),
-		},
+		ID:     ptrTo(fftypes.NewUUID().String()),
 		Name:   ptrTo("stream1"),
 		Status: ptrTo(EventStreamStatusDeleted),
 	}
@@ -198,9 +194,7 @@ func TestInitWithStreamsInitFail(t *testing.T) {
 	ctx := context.Background()
 	InitConfig(config.RootSection("ut"))
 	es := &EventStreamSpec[testESConfig]{
-		ResourceBase: dbsql.ResourceBase{
-			ID: fftypes.NewUUID(),
-		},
+		ID:     ptrTo(fftypes.NewUUID().String()),
 		Name:   ptrTo("stream1"),
 		Status: ptrTo(EventStreamStatusStarted),
 	}
@@ -215,9 +209,7 @@ func TestInitWithStreamsInitFail(t *testing.T) {
 
 func TestUpsertStreamDeleted(t *testing.T) {
 	es := &EventStreamSpec[testESConfig]{
-		ResourceBase: dbsql.ResourceBase{
-			ID: fftypes.NewUUID(),
-		},
+		ID:     ptrTo(fftypes.NewUUID().String()),
 		Name:   ptrTo("stream1"),
 		Status: ptrTo(EventStreamStatusStopped),
 	}
@@ -227,7 +219,7 @@ func TestUpsertStreamDeleted(t *testing.T) {
 	})
 	defer done()
 
-	esm.getStream(es.ID).spec.Status = ptrTo(EventStreamStatusDeleted)
+	esm.getStream(es.GetID()).spec.Status = ptrTo(EventStreamStatusDeleted)
 	_, err := esm.UpsertStream(ctx, es)
 	assert.Regexp(t, "FF00236", err)
 
@@ -235,9 +227,7 @@ func TestUpsertStreamDeleted(t *testing.T) {
 
 func TestUpsertStreamBadUpdate(t *testing.T) {
 	es := &EventStreamSpec[testESConfig]{
-		ResourceBase: dbsql.ResourceBase{
-			ID: fftypes.NewUUID(),
-		},
+		ID:     ptrTo(fftypes.NewUUID().String()),
 		Name:   ptrTo("stream1"),
 		Status: ptrTo(EventStreamStatusStopped),
 	}
@@ -256,9 +246,7 @@ func TestUpsertStreamBadUpdate(t *testing.T) {
 
 func TestUpsertStreamUpsertFail(t *testing.T) {
 	es := &EventStreamSpec[testESConfig]{
-		ResourceBase: dbsql.ResourceBase{
-			ID: fftypes.NewUUID(),
-		},
+		ID:     ptrTo(fftypes.NewUUID().String()),
 		Name:   ptrTo("stream1"),
 		Status: ptrTo(EventStreamStatusStopped),
 	}
@@ -276,9 +264,7 @@ func TestUpsertStreamUpsertFail(t *testing.T) {
 
 func TestUpsertReInitExistingFailTimeout(t *testing.T) {
 	es := &EventStreamSpec[testESConfig]{
-		ResourceBase: dbsql.ResourceBase{
-			ID: fftypes.NewUUID(),
-		},
+		ID:     ptrTo(fftypes.NewUUID().String()),
 		Name:   ptrTo("stream1"),
 		Status: ptrTo(EventStreamStatusStopped),
 	}
@@ -298,9 +284,7 @@ func TestUpsertReInitExistingFailTimeout(t *testing.T) {
 
 func TestUpsertReInitExistingFailInit(t *testing.T) {
 	es := &EventStreamSpec[testESConfig]{
-		ResourceBase: dbsql.ResourceBase{
-			ID: fftypes.NewUUID(),
-		},
+		ID:     ptrTo(fftypes.NewUUID().String()),
 		Name:   ptrTo("stream1"),
 		Status: ptrTo(fftypes.FFEnum("wrong")),
 	}
@@ -320,7 +304,7 @@ func TestDeleteStreamNotKnown(t *testing.T) {
 	})
 	defer done()
 
-	err := esm.DeleteStream(ctx, fftypes.NewUUID())
+	err := esm.DeleteStream(ctx, fftypes.NewUUID().String())
 	assert.Regexp(t, "FF00164", err)
 
 }
@@ -331,7 +315,7 @@ func TestResetStreamNotKnown(t *testing.T) {
 	})
 	defer done()
 
-	err := esm.ResetStream(ctx, fftypes.NewUUID(), "")
+	err := esm.ResetStream(ctx, fftypes.NewUUID().String(), "")
 	assert.Regexp(t, "FF00164", err)
 
 }
@@ -342,7 +326,7 @@ func TestStopStreamNotKnown(t *testing.T) {
 	})
 	defer done()
 
-	err := esm.StopStream(ctx, fftypes.NewUUID())
+	err := esm.StopStream(ctx, fftypes.NewUUID().String())
 	assert.Regexp(t, "FF00164", err)
 
 }
@@ -353,7 +337,7 @@ func TestStartStreamNotKnown(t *testing.T) {
 	})
 	defer done()
 
-	err := esm.StartStream(ctx, fftypes.NewUUID())
+	err := esm.StartStream(ctx, fftypes.NewUUID().String())
 	assert.Regexp(t, "FF00164", err)
 
 }
@@ -365,9 +349,7 @@ func TestEnrichStreamNotKnown(t *testing.T) {
 	defer done()
 
 	es := esm.enrichGetStream(ctx, &EventStreamSpec[testESConfig]{
-		ResourceBase: dbsql.ResourceBase{
-			ID: fftypes.NewUUID(),
-		},
+		ID: ptrTo(fftypes.NewUUID().String()),
 	})
 	assert.NotNil(t, es)
 	assert.Equal(t, EventStreamStatusUnknown, es.Status)
@@ -376,9 +358,7 @@ func TestEnrichStreamNotKnown(t *testing.T) {
 
 func TestDeleteStreamFail(t *testing.T) {
 	es := &EventStreamSpec[testESConfig]{
-		ResourceBase: dbsql.ResourceBase{
-			ID: fftypes.NewUUID(),
-		},
+		ID:     ptrTo(fftypes.NewUUID().String()),
 		Name:   ptrTo("stream1"),
 		Status: ptrTo(EventStreamStatusStopped),
 	}
@@ -389,16 +369,14 @@ func TestDeleteStreamFail(t *testing.T) {
 	})
 	defer done()
 
-	err := esm.DeleteStream(ctx, es.ID)
+	err := esm.DeleteStream(ctx, es.GetID())
 	assert.Regexp(t, "pop", err)
 
 }
 
 func TestDeleteStreamFailDelete(t *testing.T) {
 	es := &EventStreamSpec[testESConfig]{
-		ResourceBase: dbsql.ResourceBase{
-			ID: fftypes.NewUUID(),
-		},
+		ID:     ptrTo(fftypes.NewUUID().String()),
 		Name:   ptrTo("stream1"),
 		Status: ptrTo(EventStreamStatusStopped),
 	}
@@ -410,7 +388,7 @@ func TestDeleteStreamFailDelete(t *testing.T) {
 	})
 	defer done()
 
-	err := esm.DeleteStream(ctx, es.ID)
+	err := esm.DeleteStream(ctx, es.GetID())
 	assert.Regexp(t, "pop", err)
 
 }
@@ -425,15 +403,13 @@ func TestResetStreamStopFailTimeout(t *testing.T) {
 		activeState: &activeStream[testESConfig, testData]{},
 		stopping:    make(chan struct{}),
 		spec: &EventStreamSpec[testESConfig]{
-			ResourceBase: dbsql.ResourceBase{
-				ID: fftypes.NewUUID(),
-			},
+			ID:     ptrTo(fftypes.NewUUID().String()),
 			Name:   ptrTo("stream1"),
 			Status: ptrTo(EventStreamStatusStopped),
 		},
 	}
 	esm.addStream(ctx, existing)
-	err := esm.ResetStream(ctx, existing.spec.ID, "")
+	err := esm.ResetStream(ctx, existing.spec.GetID(), "")
 	assert.Regexp(t, "FF00229", err)
 
 }
@@ -447,15 +423,13 @@ func TestResetStreamStopFailDeleteCheckpoint(t *testing.T) {
 
 	existing := &eventStream[testESConfig, testData]{
 		spec: &EventStreamSpec[testESConfig]{
-			ResourceBase: dbsql.ResourceBase{
-				ID: fftypes.NewUUID(),
-			},
+			ID:     ptrTo(fftypes.NewUUID().String()),
 			Name:   ptrTo("stream1"),
 			Status: ptrTo(EventStreamStatusStopped),
 		},
 	}
 	esm.addStream(ctx, existing)
-	err := esm.ResetStream(ctx, existing.spec.ID, "")
+	err := esm.ResetStream(ctx, existing.spec.GetID(), "")
 	assert.Regexp(t, "pop", err)
 
 }
@@ -470,15 +444,13 @@ func TestResetStreamStopFailUpdateSequence(t *testing.T) {
 
 	existing := &eventStream[testESConfig, testData]{
 		spec: &EventStreamSpec[testESConfig]{
-			ResourceBase: dbsql.ResourceBase{
-				ID: fftypes.NewUUID(),
-			},
+			ID:     ptrTo(fftypes.NewUUID().String()),
 			Name:   ptrTo("stream1"),
 			Status: ptrTo(EventStreamStatusStopped),
 		},
 	}
 	esm.addStream(ctx, existing)
-	err := esm.ResetStream(ctx, existing.spec.ID, "12345")
+	err := esm.ResetStream(ctx, existing.spec.GetID(), "12345")
 	assert.Regexp(t, "pop", err)
 
 }
@@ -493,15 +465,13 @@ func TestResetStreamNoOp(t *testing.T) {
 
 	existing := &eventStream[testESConfig, testData]{
 		spec: &EventStreamSpec[testESConfig]{
-			ResourceBase: dbsql.ResourceBase{
-				ID: fftypes.NewUUID(),
-			},
+			ID:     ptrTo(fftypes.NewUUID().String()),
 			Name:   ptrTo("stream1"),
 			Status: ptrTo(EventStreamStatusStopped),
 		},
 	}
 	esm.addStream(ctx, existing)
-	err := esm.ResetStream(ctx, existing.spec.ID, "12345")
+	err := esm.ResetStream(ctx, existing.spec.GetID(), "12345")
 	assert.NoError(t, err)
 
 }
@@ -525,7 +495,7 @@ func TestGetStreamByIDFail(t *testing.T) {
 	})
 	defer done()
 
-	_, err := esm.GetStreamByID(ctx, fftypes.NewUUID())
+	_, err := esm.GetStreamByID(ctx, fftypes.NewUUID().String())
 	assert.Regexp(t, "pop", err)
 
 }
@@ -538,9 +508,7 @@ func TestCloseSuspendFail(t *testing.T) {
 
 	existing := &eventStream[testESConfig, testData]{
 		spec: &EventStreamSpec[testESConfig]{
-			ResourceBase: dbsql.ResourceBase{
-				ID: fftypes.NewUUID(),
-			},
+			ID:     ptrTo(fftypes.NewUUID().String()),
 			Name:   ptrTo("stream1"),
 			Status: ptrTo(EventStreamStatusStopped),
 		},

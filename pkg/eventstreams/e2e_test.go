@@ -100,6 +100,10 @@ func (ts *testSource) Run(ctx context.Context, spec *EventStreamSpec[testESConfi
 	}
 }
 
+func (ts *testSource) NewID() string {
+	return fftypes.NewUUID().String()
+}
+
 // This test demonstrates the runtime function of the event stream module through a simple test,
 // using an SQLite database for CRUD operations on the persisted event streams,
 // and a fake stream of events.
@@ -234,23 +238,23 @@ func TestE2E_WebsocketDeliveryRestartReset(t *testing.T) {
 	var ess *EventStreamWithStatus[testESConfig]
 	for ess == nil || ess.Statistics == nil || ess.Statistics.Checkpoint == "" {
 		time.Sleep(1 * time.Millisecond)
-		ess, err = mgr.GetStreamByID(ctx, es1.ID)
+		ess, err = mgr.GetStreamByID(ctx, es1.GetID())
 		assert.NoError(t, err)
 	}
 
 	// Restart and check we get called with the checkpoint - note we don't reconnect the
 	// websocket or restart that - it remains "started" from the websocket protocol
 	// perspective throughout
-	err = mgr.StopStream(ctx, es1.ID)
+	err = mgr.StopStream(ctx, es1.GetID())
 	assert.NoError(t, err)
-	err = mgr.StartStream(ctx, es1.ID)
+	err = mgr.StartStream(ctx, es1.GetID())
 	assert.NoError(t, err)
 	wsReceiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {})
 	assert.Equal(t, "000000000091", ts.sequenceStartedWith)
 	assert.Equal(t, 2, ts.startCount)
 
 	// Reset it and check we get the reset
-	err = mgr.ResetStream(ctx, es1.ID, "first")
+	err = mgr.ResetStream(ctx, es1.GetID(), "first")
 	assert.NoError(t, err)
 	wsReceiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {})
 	assert.Equal(t, "first", ts.sequenceStartedWith)
@@ -447,7 +451,7 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 	assert.Equal(t, EventStreamStatusStopped, esList[0].Status)
 
 	// Get the first by ID
-	es1c, err := mgr.GetStreamByID(ctx, es1.ID, dbsql.FailIfNotFound)
+	es1c, err := mgr.GetStreamByID(ctx, es1.GetID(), dbsql.FailIfNotFound)
 	assert.NoError(t, err)
 	assert.Equal(t, "stream1", *es1c.Name)
 	assert.Equal(t, EventStreamStatusStarted, es1c.Status)
@@ -459,22 +463,22 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 	assert.False(t, created)
 
 	// Start and re-stop, then delete the second event stream
-	err = mgr.StartStream(ctx, es2.ID)
+	err = mgr.StartStream(ctx, es2.GetID())
 	assert.NoError(t, err)
-	es2c, err := mgr.GetStreamByID(ctx, es2.ID, dbsql.FailIfNotFound)
+	es2c, err := mgr.GetStreamByID(ctx, es2.GetID(), dbsql.FailIfNotFound)
 	assert.NoError(t, err)
 	assert.Equal(t, EventStreamStatusStarted, es2c.Status)
 	assert.Equal(t, "stream2a", *es2c.Name)
-	err = mgr.StopStream(ctx, es2.ID)
+	err = mgr.StopStream(ctx, es2.GetID())
 	assert.NoError(t, err)
-	es2c, err = mgr.GetStreamByID(ctx, es2.ID, dbsql.FailIfNotFound)
+	es2c, err = mgr.GetStreamByID(ctx, es2.GetID(), dbsql.FailIfNotFound)
 	assert.NoError(t, err)
 	assert.Equal(t, EventStreamStatusStopped, es2c.Status)
-	err = mgr.DeleteStream(ctx, es2.ID)
+	err = mgr.DeleteStream(ctx, es2.GetID())
 	assert.NoError(t, err)
 
 	// Delete the first stream (which is running still)
-	err = mgr.DeleteStream(ctx, es1.ID)
+	err = mgr.DeleteStream(ctx, es1.GetID())
 	assert.NoError(t, err)
 
 	// Check no streams left
@@ -530,7 +534,7 @@ func setupE2ETest(t *testing.T, extraSetup ...func()) (context.Context, Persiste
 	db, err := dbsql.NewSQLiteProvider(ctx, dbConf)
 	assert.NoError(t, err)
 
-	p := NewEventStreamPersistence[testESConfig](db)
+	p := NewEventStreamPersistence[testESConfig](db, dbsql.UUIDValidator)
 	p.EventStreams().Validate()
 	p.Checkpoints().Validate()
 

@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/hyperledger/firefly-common/pkg/dbsql"
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/stretchr/testify/assert"
@@ -34,9 +33,7 @@ func newTestEventStream(t *testing.T, extraSetup ...func(mdb *mockPersistence)) 
 	})
 	ctx, mgr, mes, done := newMockESManager(t, extraSetup...)
 	es, err := mgr.initEventStream(ctx, &EventStreamSpec[testESConfig]{
-		ResourceBase: dbsql.ResourceBase{
-			ID: fftypes.NewUUID(),
-		},
+		ID:     ptrTo(fftypes.NewUUID().String()),
 		Name:   ptrTo(t.Name()),
 		Status: ptrTo(EventStreamStatusStopped),
 	})
@@ -48,11 +45,9 @@ func newTestEventStream(t *testing.T, extraSetup ...func(mdb *mockPersistence)) 
 func TestEventStreamFields(t *testing.T) {
 
 	es := &EventStreamSpec[testESConfig]{
-		ResourceBase: dbsql.ResourceBase{
-			ID: fftypes.NewUUID(),
-		},
+		ID: ptrTo(fftypes.NewUUID().String()),
 	}
-	assert.Equal(t, es.ID.String(), es.GetID())
+	assert.Equal(t, es.GetID(), es.GetID())
 	t1 := fftypes.Now()
 	es.SetCreated(t1)
 	assert.Equal(t, t1, es.Created)
@@ -292,4 +287,9 @@ func TestSuspendTimeout(t *testing.T) {
 	err := es.suspend(ctx)
 	assert.Regexp(t, "FF00229", err)
 
+}
+
+func TestGetIDNil(t *testing.T) {
+	assert.Empty(t, (&EventStreamSpec[testESConfig]{}).GetID())
+	assert.Empty(t, (&EventStreamCheckpoint{}).GetID())
 }
