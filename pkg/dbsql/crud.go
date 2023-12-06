@@ -295,7 +295,23 @@ func (c *CrudBase[T]) updateFromInstance(ctx context.Context, tx *TXWrapper, ins
 
 func (c *CrudBase[T]) getFieldValue(inst T, col string) interface{} {
 	// Validate() will have checked this is safe for microservices (as long as they use that at build time in their UTs)
-	return reflect.ValueOf(c.GetFieldPtr(inst, col)).Elem().Interface()
+	val := reflect.ValueOf(c.GetFieldPtr(inst, col)).Elem().Interface()
+	// Primarily for debugging, we de-reference simple pointer type in fields
+	switch vt := val.(type) {
+	case *string:
+		if vt != nil {
+			val = *vt
+		}
+	case *int64:
+		if vt != nil {
+			val = *vt
+		}
+	case *bool:
+		if vt != nil {
+			val = *vt
+		}
+	}
+	return val
 }
 
 func (c *CrudBase[T]) setInsertTimestamps(inst T) {

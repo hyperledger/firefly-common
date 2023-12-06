@@ -41,6 +41,8 @@ type TestCRUDable struct {
 	Field1 *string           `json:"f1"`
 	Field2 *fftypes.FFBigInt `json:"f2"`
 	Field3 *fftypes.JSONAny  `json:"f3"`
+	Field4 *int64            `json:"f4"`
+	Field5 *bool             `json:"f5"`
 }
 
 var CRUDableQueryFactory = &ffapi.QueryFields{
@@ -52,6 +54,9 @@ var CRUDableQueryFactory = &ffapi.QueryFields{
 	"f1":      &ffapi.StringField{},
 	"f2":      &ffapi.BigIntField{},
 	"f3":      &ffapi.JSONField{},
+	"f4":      &ffapi.Int64Field{},
+	"f5":      &ffapi.JSONField{},
+	"f6":      &ffapi.BoolField{},
 }
 
 // TestHistory shows a simple object:
@@ -170,6 +175,8 @@ func newCRUDCollection(db *Database, ns string) *TestCRUD {
 				"field1",
 				"field2",
 				"field3",
+				"field4",
+				"field5",
 			},
 			FilterFieldMap: map[string]string{
 				"f1": "field1",
@@ -201,6 +208,10 @@ func newCRUDCollection(db *Database, ns string) *TestCRUD {
 					return &inst.Field2
 				case "field3":
 					return &inst.Field3
+				case "field4":
+					return &inst.Field4
+				case "field5":
+					return &inst.Field5
 				}
 				return nil
 			},
@@ -323,8 +334,8 @@ func checkEqualExceptTimes(t *testing.T, o1, o2 TestCRUDable) {
 	assert.JSONEq(t, string(j1), string(j2))
 }
 
-func strPtr(s string) *string {
-	return &s
+func ptrTo[T any](v T) *T {
+	return &v
 }
 
 func TestCRUDWithDBEnd2End(t *testing.T) {
@@ -338,11 +349,13 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 		ResourceBase: ResourceBase{
 			ID: fftypes.NewUUID(),
 		},
-		Name:   strPtr("bob"),
-		NS:     strPtr("ns1"),
-		Field1: strPtr("hello1"),
+		Name:   ptrTo("bob"),
+		NS:     ptrTo("ns1"),
+		Field1: ptrTo("hello1"),
 		Field2: fftypes.NewFFBigInt(12345),
 		Field3: fftypes.JSONAnyPtr(`{"some":"stuff"}`),
+		Field4: ptrTo(int64(12345)),
+		Field5: ptrTo(true),
 	}
 
 	collection := newCRUDCollection(sql.db, "ns1")
@@ -392,7 +405,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	checkEqualExceptTimes(t, *c1, *c1copy)
 
 	// Upsert the existing row optimized
-	c1copy.Field1 = strPtr("hello again - 1")
+	c1copy.Field1 = ptrTo("hello again - 1")
 	created, err := iCrud.Upsert(ctx, c1copy, UpsertOptimizationExisting)
 	assert.NoError(t, err)
 	assert.False(t, created)
@@ -404,7 +417,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	collection.events = nil
 
 	// Upsert the existing row un-optimized
-	c1copy.Field1 = strPtr("hello again - 2")
+	c1copy.Field1 = ptrTo("hello again - 2")
 	created, err = iCrud.Upsert(ctx, c1copy, UpsertOptimizationNew, collection.postCommit)
 	assert.NoError(t, err)
 	assert.False(t, created)
@@ -413,7 +426,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	checkEqualExceptTimes(t, *c1copy, *c1copy2)
 
 	// Explicitly replace it
-	c1copy.Field1 = strPtr("hello again - 3")
+	c1copy.Field1 = ptrTo("hello again - 3")
 	err = iCrud.Replace(ctx, c1copy, collection.postCommit)
 	assert.NoError(t, err)
 	c1copy3, err := iCrud.GetByID(ctx, c1.ID.String())
@@ -421,7 +434,7 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	checkEqualExceptTimes(t, *c1copy, *c1copy3)
 
 	// Explicitly update it
-	c1copy.Field1 = strPtr("hello again - 4")
+	c1copy.Field1 = ptrTo("hello again - 4")
 	err = iCrud.Update(ctx, c1copy.ID.String(), CRUDableQueryFactory.NewUpdate(ctx).Set(
 		"f1", *c1copy.Field1,
 	), collection.postCommit)
@@ -431,12 +444,12 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	checkEqualExceptTimes(t, *c1copy, *c1copy4)
 
 	// Use simple PATCH semantics to updated it
-	c1copy.Field1 = strPtr("hello again - 5")
+	c1copy.Field1 = ptrTo("hello again - 5")
 	sparseUpdate := &TestCRUDable{
 		ResourceBase: ResourceBase{
 			ID: c1copy.ID,
 		},
-		Field1: strPtr("hello again - 5"),
+		Field1: ptrTo("hello again - 5"),
 	}
 	err = iCrud.UpdateSparse(ctx, sparseUpdate, collection.postCommit)
 	assert.NoError(t, err)
@@ -447,8 +460,8 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	// Cannot replace something that doesn't exist
 	c2 := *c1
 	c2.ID = fftypes.NewUUID()
-	c2.NS = strPtr("ns1")
-	c2.Field1 = strPtr("bonjour")
+	c2.NS = ptrTo("ns1")
+	c2.Field1 = ptrTo("bonjour")
 	err = iCrud.Replace(ctx, &c2, collection.postCommit)
 	assert.Regexp(t, "FF00205", err)
 
@@ -487,8 +500,8 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 			ResourceBase: ResourceBase{
 				ID: fftypes.NewUUID(),
 			},
-			NS:     strPtr("ns1"),
-			Field1: strPtr(fmt.Sprintf("crudable[%.5d]", i)),
+			NS:     ptrTo("ns1"),
+			Field1: ptrTo(fmt.Sprintf("crudable[%.5d]", i)),
 			Field2: fftypes.NewFFBigInt(919191),
 		}
 	}
@@ -641,8 +654,8 @@ func TestLeftJOINExample(t *testing.T) {
 		ResourceBase: ResourceBase{
 			ID: fftypes.NewUUID(),
 		},
-		NS:     strPtr("ns1"),
-		Field1: strPtr("linked1"),
+		NS:     ptrTo("ns1"),
+		Field1: ptrTo("linked1"),
 		Field2: fftypes.NewFFBigInt(11111),
 		Field3: fftypes.JSONAnyPtr(`{"linked":1}`),
 	}
