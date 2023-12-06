@@ -121,7 +121,7 @@ func (s *Database) SequenceColumn() string {
 }
 
 func (s *Database) RunAsGroup(ctx context.Context, fn func(ctx context.Context) error) error {
-	if tx := getTXFromContext(ctx); tx != nil {
+	if tx := GetTXFromContext(ctx); tx != nil {
 		// transaction already exists - just continue using it
 		return fn(ctx)
 	}
@@ -160,7 +160,7 @@ func (s *Database) applyDBMigrations(ctx context.Context, config config.Section,
 	return nil
 }
 
-func getTXFromContext(ctx context.Context) *TXWrapper {
+func GetTXFromContext(ctx context.Context) *TXWrapper {
 	ctxKey := txContextKey{}
 	txi := ctx.Value(ctxKey)
 	if txi != nil {
@@ -173,7 +173,7 @@ func getTXFromContext(ctx context.Context) *TXWrapper {
 
 func (s *Database) BeginOrUseTx(ctx context.Context) (ctx1 context.Context, tx *TXWrapper, autoCommit bool, err error) {
 
-	tx = getTXFromContext(ctx)
+	tx = GetTXFromContext(ctx)
 	if tx != nil {
 		// There is s transaction on the context already.
 		// return existing with auto-commit flag, to prevent early commit
@@ -200,7 +200,7 @@ func (s *Database) QueryTx(ctx context.Context, table string, tx *TXWrapper, q s
 	if tx == nil {
 		// If there is a transaction in the context, we should use it to provide consistency
 		// in the read operations (read after insert for example).
-		tx = getTXFromContext(ctx)
+		tx = GetTXFromContext(ctx)
 	}
 
 	l := log.L(ctx)
@@ -234,7 +234,7 @@ func (s *Database) CountQuery(ctx context.Context, table string, tx *TXWrapper, 
 	if tx == nil {
 		// If there is a transaction in the context, we should use it to provide consistency
 		// in the read operations (read after insert for example).
-		tx = getTXFromContext(ctx)
+		tx = GetTXFromContext(ctx)
 	}
 	if countExpr == "" {
 		countExpr = "*"
