@@ -45,6 +45,7 @@ type MockProviderConfig struct {
 	OpenError               error
 	GetMigrationDriverError error
 	IndividualSort          bool
+	MultiRowInsert          bool
 }
 
 func NewMockProvider() *MockProvider {
@@ -85,6 +86,7 @@ func (mp *MockProvider) Features() SQLFeatures {
 	features.AcquireLock = func(lockName string) string {
 		return fmt.Sprintf(`<acquire lock %s>`, lockName)
 	}
+	features.MultiRowInsert = mp.MultiRowInsert
 	return features
 }
 

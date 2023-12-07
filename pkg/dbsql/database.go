@@ -303,11 +303,13 @@ func (s *Database) InsertTxRows(ctx context.Context, table string, tx *TXWrapper
 	before := time.Now()
 	l.Tracef(`SQL-> insert query: %s (args: %+v)`, sqlQuery, args)
 	if useQuery {
+		noInsert := false
 		result, err := tx.sqlTX.QueryContext(ctx, sqlQuery, args...)
 		for i := 0; i < len(sequences) && err == nil; i++ {
 			if result.Next() {
 				err = result.Scan(&sequences[i])
 			} else {
+				noInsert = true
 				err = i18n.NewError(ctx, i18n.MsgDBNoSequence, i+1)
 			}
 		}
@@ -315,7 +317,11 @@ func (s *Database) InsertTxRows(ctx context.Context, table string, tx *TXWrapper
 			result.Close()
 		}
 		if err != nil {
-			l.Errorf(`SQL insert failed (conflictEmptyRequested=%t): %s sql=[ %s ]: %s`, requestConflictEmptyResult, err, sqlQuery, err)
+			if requestConflictEmptyResult && noInsert {
+				l.Infof(`SQL insert returning partial result: %s`, err)
+			} else {
+				l.Errorf(`SQL insert failed (conflictEmptyRequested=%t) sql=[ %s ]: %s`, requestConflictEmptyResult, sqlQuery, err)
+			}
 			return i18n.WrapError(ctx, err, i18n.MsgDBInsertFailed)
 		}
 	} else {
