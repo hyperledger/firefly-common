@@ -130,6 +130,7 @@ type CrudBase[T Resource] struct {
 	ImmutableColumns []string
 	NameField        string                                        // If supporting name semantics
 	QueryFactory     ffapi.QueryFactory                            // Must be set when name is set
+	DefaultSort      func() []interface{}                          // optionally override the default sort - array of *ffapi.SortField or string
 	IDValidator      func(ctx context.Context, idStr string) error // if IDs must conform to a pattern, such as a UUID (prebuilt UUIDValidator provided for that)
 
 	NilValue     func() T // nil value typed to T
@@ -688,10 +689,14 @@ func (c *CrudBase[T]) GetByUUIDOrName(ctx context.Context, uuidOrName string, ge
 }
 
 func (c *CrudBase[T]) getManyScoped(ctx context.Context, tableFrom string, fi *ffapi.FilterInfo, cols, readCols []string, preconditions []sq.Sqlizer) (instances []T, fr *ffapi.FilterResult, err error) {
+	defaultSort := []interface{}{
+		&ffapi.SortField{Field: c.DB.sequenceColumn, Descending: true},
+	}
+	if c.DefaultSort != nil {
+		defaultSort = c.DefaultSort()
+	}
 	query, fop, fi, err := c.DB.filterSelectFinalized(ctx, c.ReadTableAlias, sq.Select(readCols...).From(tableFrom), fi, c.FilterFieldMap,
-		[]interface{}{
-			&ffapi.SortField{Field: c.DB.sequenceColumn, Descending: true},
-		}, preconditions...)
+		defaultSort, preconditions...)
 	if err != nil {
 		return nil, nil, err
 	}

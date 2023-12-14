@@ -291,6 +291,10 @@ func newLinkableCollection(db *Database, ns string) *CrudBase[*TestLinkable] {
 		ReadQueryModifier: func(query sq.SelectBuilder) sq.SelectBuilder {
 			return query.LeftJoin("crudables AS c ON c.id = l.crud_id")
 		},
+		DefaultSort: func() []interface{} {
+			// Return an empty list
+			return []interface{}{}
+		},
 		NilValue:     func() *TestLinkable { return nil },
 		NewInstance:  func() *TestLinkable { return &TestLinkable{} },
 		ScopedFilter: func() squirrel.Eq { return sq.Eq{"l.ns": ns} },
