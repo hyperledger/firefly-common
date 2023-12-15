@@ -44,6 +44,7 @@ const APIServerMetricsSubSystemName = "api_server_rest"
 type APIServer interface {
 	Serve(ctx context.Context) error
 	Started() <-chan struct{}
+	MuxRouter(ctx context.Context) *mux.Router
 	APIPublicURL() string // valid to call after server is successfully started
 }
 
@@ -62,6 +63,7 @@ type apiServer[T any] struct {
 	metricsEnabled            bool
 	metricsPath               string
 	metricsPublicURL          string
+	mux                       *mux.Router
 
 	APIServerOptions[T]
 }
@@ -119,6 +121,14 @@ func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APISe
 	return as
 }
 
+// Can be called before Serve, but MUST use the background context if so
+func (as *apiServer[T]) MuxRouter(ctx context.Context) *mux.Router {
+	if as.mux == nil {
+		as.mux = as.createMuxRouter(ctx)
+	}
+	return as.mux
+}
+
 // Serve is the main entry point for the API Server
 func (as *apiServer[T]) Serve(ctx context.Context) (err error) {
 	started := false
@@ -132,7 +142,7 @@ func (as *apiServer[T]) Serve(ctx context.Context) (err error) {
 	httpErrChan := make(chan error)
 	metricsErrChan := make(chan error)
 
-	apiHTTPServer, err := httpserver.NewHTTPServer(ctx, "api", as.createMuxRouter(ctx), httpErrChan, as.APIConfig, as.CORSConfig, &httpserver.ServerOptions{
+	apiHTTPServer, err := httpserver.NewHTTPServer(ctx, "api", as.MuxRouter(ctx), httpErrChan, as.APIConfig, as.CORSConfig, &httpserver.ServerOptions{
 		MaximumRequestTimeout: as.requestMaxTimeout,
 	})
 	if err != nil {
