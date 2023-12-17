@@ -31,7 +31,10 @@ type EventBatch[DataType any] struct {
 
 type Event[DataType any] struct {
 	EventCommon
-	Data *DataType `json:"-"` // can be anything to deliver for the event - must be JSON marshalable, and should not define topic or sequence. Will be flattened into the struct
+	// Data can be anything to deliver for the event - must be JSON marshalable.
+	// Will be flattened into the struct.
+	// Can define topic and/or sequenceId, but these will overridden with EventCommon strings in the JSON serialization.
+	Data *DataType `json:"-"`
 }
 
 type EventCommon struct {
