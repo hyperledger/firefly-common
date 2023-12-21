@@ -40,6 +40,18 @@ func TestBuildQueryJSONNestedAndOr(t *testing.T) {
 				"value": "a"
 			}
 		],
+		"eq": [
+			{
+				"field": "masked",
+				"value": true
+			}
+		],
+		"neq": [
+			{
+				"field": "sequence",
+				"value": 999
+			}
+		],
 		"greaterThan": [
 			{
 				"field": "sequence",
@@ -79,7 +91,7 @@ func TestBuildQueryJSONNestedAndOr(t *testing.T) {
 	fi, err := filter.Finalize()
 	assert.NoError(t, err)
 
-	assert.Equal(t, "( tag == 'a' ) && ( sequence >> 10 ) && ( ( ( masked == true ) && ( tag IN ['a','b','c'] ) ) || ( masked == false ) ) sort=tag,-sequence skip=5 limit=10", fi.String())
+	assert.Equal(t, "( tag == 'a' ) && ( masked == true ) && ( sequence != 999 ) && ( sequence >> 10 ) && ( ( ( masked == true ) && ( tag IN ['a','b','c'] ) ) || ( masked == false ) ) sort=tag,-sequence skip=5 limit=10", fi.String())
 }
 
 func TestBuildQuerySingleNestedOr(t *testing.T) {
