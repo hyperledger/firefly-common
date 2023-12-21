@@ -219,7 +219,11 @@ func joinShortNames(long, short, negated []*FilterJSONKeyValue) []*FilterJSONKey
 func joinInAndNin(in, nin []*FilterJSONKeyValues) []*FilterJSONKeyValues {
 	res := make([]*FilterJSONKeyValues, len(in)+len(nin))
 	copy(res, in)
-	copy(res[len(in):], nin)
+	negs := res[len(in):]
+	copy(negs, nin)
+	for _, n := range negs {
+		n.Not = true
+	}
 	return res
 }
 
