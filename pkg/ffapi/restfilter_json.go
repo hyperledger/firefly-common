@@ -67,17 +67,13 @@ type FilterJSON struct {
 	Contains           []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"contains,omitempty"`
 	StartsWith         []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"startsWith,omitempty"`
 	LessThan           []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"lessThan,omitempty"`
-	LT                 []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"lt,omitempty"`  // short name
-	NLT                []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"nlt,omitempty"` // negated short name
+	LT                 []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"lt,omitempty"` // short name
 	LessThanOrEqual    []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"lessThanOrEqual,omitempty"`
-	LTE                []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"lte,omitempty"`  // short name
-	NLTE               []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"nlte,omitempty"` // negated short name
+	LTE                []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"lte,omitempty"` // short name
 	GreaterThan        []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"greaterThan,omitempty"`
-	GT                 []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"gt,omitempty"`  // short name
-	NGT                []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"ngt,omitempty"` // negated short name
+	GT                 []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"gt,omitempty"` // short name
 	GreaterThanOrEqual []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"greaterThanOrEqual,omitempty"`
-	GTE                []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"gte,omitempty"`  // short name
-	NGTE               []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"ngte,omitempty"` // negated short name
+	GTE                []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"gte,omitempty"` // short name
 	In                 []*FilterJSONKeyValues `ffstruct:"FilterJSON" json:"in,omitempty"`
 	NIn                []*FilterJSONKeyValues `ffstruct:"FilterJSON" json:"nin,omitempty"` // negated short name
 }
@@ -232,7 +228,7 @@ func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonF
 	if err != nil {
 		return nil, err
 	}
-	for _, e := range joinShortNames(jsonFilter.LessThan, jsonFilter.LT, jsonFilter.NLT) {
+	for _, e := range joinShortNames(jsonFilter.LessThan, jsonFilter.LT, nil) {
 		field, err := validateFilterField(ctx, fb, e.Field)
 		if err != nil {
 			return nil, err
@@ -242,7 +238,7 @@ func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonF
 		}
 		andFilter = andFilter.Condition(fb.Lt(field, e.Value.String()))
 	}
-	for _, e := range joinShortNames(jsonFilter.LessThanOrEqual, jsonFilter.LTE, jsonFilter.NLTE) {
+	for _, e := range joinShortNames(jsonFilter.LessThanOrEqual, jsonFilter.LTE, nil) {
 		field, err := validateFilterField(ctx, fb, e.Field)
 		if err != nil {
 			return nil, err
@@ -252,7 +248,7 @@ func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonF
 		}
 		andFilter = andFilter.Condition(fb.Lte(field, e.Value.String()))
 	}
-	for _, e := range joinShortNames(jsonFilter.GreaterThan, jsonFilter.GT, jsonFilter.NGT) {
+	for _, e := range joinShortNames(jsonFilter.GreaterThan, jsonFilter.GT, nil) {
 		field, err := validateFilterField(ctx, fb, e.Field)
 		if err != nil {
 			return nil, err
@@ -262,7 +258,7 @@ func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonF
 		}
 		andFilter = andFilter.Condition(fb.Gt(field, e.Value.String()))
 	}
-	for _, e := range joinShortNames(jsonFilter.GreaterThanOrEqual, jsonFilter.GTE, jsonFilter.NGTE) {
+	for _, e := range joinShortNames(jsonFilter.GreaterThanOrEqual, jsonFilter.GTE, nil) {
 		field, err := validateFilterField(ctx, fb, e.Field)
 		if err != nil {
 			return nil, err
