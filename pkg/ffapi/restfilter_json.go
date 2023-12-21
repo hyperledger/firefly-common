@@ -291,14 +291,14 @@ func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonF
 			}
 			childFilter.Condition(subFilter)
 		}
-		if len(childFilter.Conditions()) == 1 {
-			andFilter.Condition(childFilter.Conditions()[0])
+		if len(childFilter.GetConditions()) == 1 {
+			andFilter.Condition(childFilter.GetConditions()[0])
 		} else {
 			andFilter.Condition(childFilter)
 		}
 	}
-	if len(andFilter.Conditions()) == 1 {
-		return andFilter.Conditions()[0], nil
+	if len(andFilter.GetConditions()) == 1 {
+		return andFilter.GetConditions()[0], nil
 	}
 	return andFilter, nil
 }
