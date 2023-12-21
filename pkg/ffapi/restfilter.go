@@ -29,19 +29,6 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/log"
 )
 
-type FilterResultsWithCount struct {
-	Count int64       `json:"count"`
-	Total *int64      `json:"total,omitempty"` // omitted if a count was not calculated (AlwaysPaginate enabled, and count not specified)
-	Items interface{} `json:"items"`
-}
-
-type filterModifiers struct {
-	negate          bool
-	caseInsensitive bool
-	emptyIsNull     bool
-	andCombine      bool
-}
-
 func (hs *HandlerFactory) getValues(values url.Values, key string) (results []string) {
 	for queryName, queryValues := range values {
 		// We choose to be case insensitive for our filters, so protocolID and protocolid can be used interchangeably

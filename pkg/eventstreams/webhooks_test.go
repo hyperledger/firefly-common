@@ -72,7 +72,7 @@ func TestWebhooksBadHost(t *testing.T) {
 	wh := newTestWebhooks(t, &WebhookConfig{URL: &u})
 
 	err := wh.AttemptDispatch(context.Background(), 0, &EventBatch[testData]{
-		StreamID:    fftypes.NewUUID(),
+		StreamID:    fftypes.NewUUID().String(),
 		BatchNumber: 1,
 		Events: []*Event[testData]{
 			{Data: &testData{Field1: 12345}},
@@ -88,7 +88,7 @@ func TestWebhooksPrivateBlocked(t *testing.T) {
 	})
 
 	err := wh.AttemptDispatch(context.Background(), 0, &EventBatch[testData]{
-		StreamID:    fftypes.NewUUID(),
+		StreamID:    fftypes.NewUUID().String(),
 		BatchNumber: 1,
 		Events: []*Event[testData]{
 			{Data: &testData{Field1: 12345}},
@@ -120,7 +120,7 @@ func TestWebhooksCustomHeaders403(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		err := wh.AttemptDispatch(context.Background(), 0, &EventBatch[testData]{
-			StreamID:    fftypes.NewUUID(),
+			StreamID:    fftypes.NewUUID().String(),
 			BatchNumber: 1,
 			Events: []*Event[testData]{
 				{Data: &testData{Field1: 12345}},
@@ -143,7 +143,7 @@ func TestWebhooksCustomHeadersConnectFail(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		err := wh.AttemptDispatch(context.Background(), 0, &EventBatch[testData]{
-			StreamID:    fftypes.NewUUID(),
+			StreamID:    fftypes.NewUUID().String(),
 			BatchNumber: 1,
 			Events: []*Event[testData]{
 				{Data: &testData{Field1: 12345}},
@@ -179,7 +179,7 @@ func TestWebhooksTLS(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		err := wh.AttemptDispatch(context.Background(), 0, &EventBatch[testData]{
-			StreamID:    fftypes.NewUUID(),
+			StreamID:    fftypes.NewUUID().String(),
 			BatchNumber: 1,
 			Events: []*Event[testData]{
 				{Data: &testData{Field1: 12345}},

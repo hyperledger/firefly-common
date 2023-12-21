@@ -89,6 +89,10 @@ type inMemoryStream struct {
 	newMessages sync.Cond
 }
 
+func (ims *inMemoryStream) NewID() string {
+	return fftypes.NewUUID().String()
+}
+
 func (ims *inMemoryStream) Validate(_ context.Context, _ *pubSubConfig) error {
 	return nil // no config defined in pubSubConfig to validate
 }
@@ -157,7 +161,7 @@ func setup(ctx context.Context) (pubSubESManager, *inMemoryStream, func()) {
 	u.Scheme = "ws"
 	log.L(ctx).Infof("Running on: %s", u)
 
-	p := eventstreams.NewEventStreamPersistence[pubSubConfig](sql)
+	p := eventstreams.NewEventStreamPersistence[pubSubConfig](sql, dbsql.UUIDValidator)
 	c := eventstreams.GenerateConfig(ctx)
 	ims := &inMemoryStream{
 		messages:    []string{},

@@ -18,22 +18,23 @@ package eventstreams
 
 import (
 	"encoding/json"
-
-	"github.com/hyperledger/firefly-common/pkg/fftypes"
 )
 
 const MessageTypeEventBatch = "event_batch"
 
 type EventBatch[DataType any] struct {
 	Type        string             `json:"type"`        // always MessageTypeEventBatch (for consistent WebSocket flow control)
-	StreamID    *fftypes.UUID      `json:"stream"`      // the ID of the event stream for this event
+	StreamID    string             `json:"stream"`      // the ID of the event stream for this event
 	BatchNumber int64              `json:"batchNumber"` // should be provided back in the ack
 	Events      []*Event[DataType] `json:"events"`      // an array of events allows efficient batch acknowledgment
 }
 
 type Event[DataType any] struct {
 	EventCommon
-	Data *DataType `json:"-"` // can be anything to deliver for the event - must be JSON marshalable, and should not define topic or sequence. Will be flattened into the struct
+	// Data can be anything to deliver for the event - must be JSON marshalable.
+	// Will be flattened into the struct.
+	// Can define topic and/or sequenceId, but these will overridden with EventCommon strings in the JSON serialization.
+	Data *DataType `json:"-"`
 }
 
 type EventCommon struct {

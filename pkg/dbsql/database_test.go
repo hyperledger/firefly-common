@@ -164,6 +164,20 @@ func TestInsertTxPostgreSQLReturnedSyntax(t *testing.T) {
 	assert.Equal(t, int64(12345), sequence)
 }
 
+func TestInsertFailMultipleReturnPartialResult(t *testing.T) {
+	mp := NewMockProvider()
+	mp.MultiRowInsert = true
+	s, mdb := mp.UTInit()
+	mdb.ExpectBegin()
+	mdb.ExpectQuery("INSERT.*").WillReturnRows(sqlmock.NewRows([]string{s.SequenceColumn()}))
+	ctx, tx, _, err := s.BeginOrUseTx(context.Background())
+	assert.NoError(t, err)
+	s.FakePSQLInsert = true
+	sb := sq.Insert("table").Columns("col1").Values(("val1"))
+	_, err = s.InsertTxExt(ctx, "table1", tx, sb, nil, true)
+	assert.Regexp(t, "FF00177", err)
+}
+
 func TestInsertTxPostgreSQLReturnedSyntaxFail(t *testing.T) {
 	s, mdb := NewMockProvider().UTInit()
 	mdb.ExpectBegin()

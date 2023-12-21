@@ -116,6 +116,7 @@ type CRUD[T Resource] interface {
 	DeleteMany(ctx context.Context, filter ffapi.Filter, hooks ...PostCompletionHook) (err error) // no events
 	NewFilterBuilder(ctx context.Context) ffapi.FilterBuilder
 	NewUpdateBuilder(ctx context.Context) ffapi.UpdateBuilder
+	GetQueryFactory() ffapi.QueryFactory
 	Scoped(scope sq.Eq) CRUD[T] // allows dynamic scoping to a collection
 }
 
@@ -129,6 +130,7 @@ type CrudBase[T Resource] struct {
 	ImmutableColumns []string
 	NameField        string                                        // If supporting name semantics
 	QueryFactory     ffapi.QueryFactory                            // Must be set when name is set
+	DefaultSort      func() []interface{}                          // optionally override the default sort - array of *ffapi.SortField or string
 	IDValidator      func(ctx context.Context, idStr string) error // if IDs must conform to a pattern, such as a UUID (prebuilt UUIDValidator provided for that)
 
 	NilValue     func() T // nil value typed to T
@@ -147,6 +149,10 @@ func (c *CrudBase[T]) Scoped(scope sq.Eq) CRUD[T] {
 	cScoped := *c
 	cScoped.ScopedFilter = func() sq.Eq { return scope }
 	return &cScoped
+}
+
+func (c *CrudBase[T]) GetQueryFactory() ffapi.QueryFactory {
+	return c.QueryFactory
 }
 
 func (c *CrudBase[T]) NewFilterBuilder(ctx context.Context) ffapi.FilterBuilder {
@@ -290,7 +296,23 @@ func (c *CrudBase[T]) updateFromInstance(ctx context.Context, tx *TXWrapper, ins
 
 func (c *CrudBase[T]) getFieldValue(inst T, col string) interface{} {
 	// Validate() will have checked this is safe for microservices (as long as they use that at build time in their UTs)
-	return reflect.ValueOf(c.GetFieldPtr(inst, col)).Elem().Interface()
+	val := reflect.ValueOf(c.GetFieldPtr(inst, col)).Elem().Interface()
+	// Primarily for debugging, we de-reference simple pointer type in fields
+	switch vt := val.(type) {
+	case *string:
+		if vt != nil {
+			val = *vt
+		}
+	case *int64:
+		if vt != nil {
+			val = *vt
+		}
+	case *bool:
+		if vt != nil {
+			val = *vt
+		}
+	}
+	return val
 }
 
 func (c *CrudBase[T]) setInsertTimestamps(inst T) {
@@ -667,10 +689,14 @@ func (c *CrudBase[T]) GetByUUIDOrName(ctx context.Context, uuidOrName string, ge
 }
 
 func (c *CrudBase[T]) getManyScoped(ctx context.Context, tableFrom string, fi *ffapi.FilterInfo, cols, readCols []string, preconditions []sq.Sqlizer) (instances []T, fr *ffapi.FilterResult, err error) {
+	defaultSort := []interface{}{
+		&ffapi.SortField{Field: c.DB.sequenceColumn, Descending: true},
+	}
+	if c.DefaultSort != nil {
+		defaultSort = c.DefaultSort()
+	}
 	query, fop, fi, err := c.DB.filterSelectFinalized(ctx, c.ReadTableAlias, sq.Select(readCols...).From(tableFrom), fi, c.FilterFieldMap,
-		[]interface{}{
-			&ffapi.SortField{Field: c.DB.sequenceColumn, Descending: true},
-		}, preconditions...)
+		defaultSort, preconditions...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -692,6 +718,7 @@ func (c *CrudBase[T]) getManyScoped(ctx context.Context, tableFrom string, fi *f
 		}
 		instances = append(instances, inst)
 	}
+	log.L(ctx).Debugf("SQL<- GetMany(%s): %d", c.Table, len(instances))
 	return instances, c.DB.QueryRes(ctx, c.Table, tx, fop, c.ReadQueryModifier, fi), err
 }
 

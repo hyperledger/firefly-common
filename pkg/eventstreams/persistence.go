@@ -17,6 +17,8 @@
 package eventstreams
 
 import (
+	"context"
+
 	sq "github.com/Masterminds/squirrel"
 	"github.com/hyperledger/firefly-common/pkg/dbsql"
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
@@ -29,7 +31,7 @@ type Persistence[CT any] interface {
 }
 
 var EventStreamFilters = &ffapi.QueryFields{
-	"id":          &ffapi.UUIDField{},
+	"id":          &ffapi.StringField{},
 	"created":     &ffapi.TimeField{},
 	"updated":     &ffapi.TimeField{},
 	"name":        &ffapi.StringField{},
@@ -39,18 +41,24 @@ var EventStreamFilters = &ffapi.QueryFields{
 }
 
 var CheckpointFilters = &ffapi.QueryFields{
-	"id":         &ffapi.UUIDField{},
+	"id":         &ffapi.StringField{},
 	"created":    &ffapi.TimeField{},
 	"updated":    &ffapi.TimeField{},
 	"sequenceid": &ffapi.StringField{},
 }
 
-func NewEventStreamPersistence[CT any](db *dbsql.Database) Persistence[CT] {
-	return &esPersistence[CT]{db: db}
+type IDValidator func(ctx context.Context, idStr string) error
+
+func NewEventStreamPersistence[CT any](db *dbsql.Database, idValidator IDValidator) Persistence[CT] {
+	return &esPersistence[CT]{
+		db:          db,
+		idValidator: idValidator,
+	}
 }
 
 type esPersistence[CT any] struct {
-	db *dbsql.Database
+	db          *dbsql.Database
+	idValidator IDValidator
 }
 
 func (p *esPersistence[CT]) EventStreams() dbsql.CRUD[*EventStreamSpec[CT]] {
@@ -84,7 +92,7 @@ func (p *esPersistence[CT]) EventStreams() dbsql.CRUD[*EventStreamSpec[CT]] {
 		EventHandler: nil, // set below
 		NameField:    "name",
 		QueryFactory: EventStreamFilters,
-		IDValidator:  dbsql.UUIDValidator,
+		IDValidator:  p.idValidator,
 		GetFieldPtr: func(inst *EventStreamSpec[CT], col string) interface{} {
 			switch col {
 			case dbsql.ColumnID:
@@ -142,7 +150,8 @@ func (p *esPersistence[CT]) Checkpoints() dbsql.CRUD[*EventStreamCheckpoint] {
 		NewInstance:  func() *EventStreamCheckpoint { return &EventStreamCheckpoint{} },
 		ScopedFilter: func() sq.Eq { return sq.Eq{} },
 		EventHandler: nil, // set below
-		IDValidator:  dbsql.UUIDValidator,
+		QueryFactory: CheckpointFilters,
+		IDValidator:  p.idValidator, // checkpoints share the ID of the eventstream
 		GetFieldPtr: func(inst *EventStreamCheckpoint, col string) interface{} {
 			switch col {
 			case dbsql.ColumnID:

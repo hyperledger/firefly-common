@@ -70,6 +70,7 @@ type MultiConditionFilter interface {
 	Filter
 	// Add adds filters to the condition
 	Condition(...Filter) MultiConditionFilter
+	GetConditions() []Filter
 }
 
 type AndFilter interface{ MultiConditionFilter }
@@ -569,6 +570,10 @@ type andFilter struct {
 	baseFilter
 }
 
+func (fb *andFilter) GetConditions() []Filter {
+	return fb.children
+}
+
 func (fb *andFilter) Condition(children ...Filter) MultiConditionFilter {
 	fb.children = append(fb.children, children...)
 	return fb
@@ -586,6 +591,10 @@ func (fb *filterBuilder) And(and ...Filter) AndFilter {
 
 type orFilter struct {
 	baseFilter
+}
+
+func (fb *orFilter) GetConditions() []Filter {
+	return fb.children
 }
 
 func (fb *orFilter) Condition(children ...Filter) MultiConditionFilter {

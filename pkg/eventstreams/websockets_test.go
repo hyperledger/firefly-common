@@ -55,7 +55,7 @@ func TestWSAttemptIgnoreWrongAcks(t *testing.T) {
 	}, "ut_stream")
 
 	err := wsa.AttemptDispatch(context.Background(), 0, &EventBatch[testData]{
-		StreamID:    fftypes.NewUUID(),
+		StreamID:    fftypes.NewUUID().String(),
 		BatchNumber: 1,
 		Events: []*Event[testData]{
 			{Data: &testData{Field1: 12345}},
@@ -81,7 +81,7 @@ func TestWSattemptDispatchExitPushingEvent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	err := wsa.AttemptDispatch(ctx, 0, &EventBatch[testData]{
-		StreamID:    fftypes.NewUUID(),
+		StreamID:    fftypes.NewUUID().String(),
 		BatchNumber: 1,
 		Events: []*Event[testData]{
 			{Data: &testData{Field1: 12345}},
