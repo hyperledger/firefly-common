@@ -288,8 +288,8 @@ func newLinkableCollection(db *Database, ns string) *CrudBase[*TestLinkable] {
 			"description": "desc",
 			"crud":        "crud_id",
 		},
-		ReadQueryModifier: func(query sq.SelectBuilder) sq.SelectBuilder {
-			return query.LeftJoin("crudables AS c ON c.id = l.crud_id")
+		ReadQueryModifier: func(query sq.SelectBuilder) (sq.SelectBuilder, error) {
+			return query.LeftJoin("crudables AS c ON c.id = l.crud_id"), nil
 		},
 		DefaultSort: func() []interface{} {
 			// Return an empty list
@@ -399,11 +399,11 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	checkEqualExceptTimes(t, *c1, *c1copy)
 
 	// Check we get it back with custom modifiers
-	collection.ReadQueryModifier = func(sb sq.SelectBuilder) sq.SelectBuilder {
-		return sb.Where(sq.Eq{"ns": "ns1"})
+	collection.ReadQueryModifier = func(sb sq.SelectBuilder) (sq.SelectBuilder, error) {
+		return sb.Where(sq.Eq{"ns": "ns1"}), nil
 	}
-	c1copy, err = iCrud.ModifyQuery(func(sb sq.SelectBuilder) sq.SelectBuilder {
-		return sb.Where(sq.Eq{"field1": "hello1"})
+	c1copy, err = iCrud.ModifyQuery(func(sb sq.SelectBuilder) (sq.SelectBuilder, error) {
+		return sb.Where(sq.Eq{"field1": "hello1"}), nil
 	}).GetByName(ctx, *c1.Name)
 	assert.NoError(t, err)
 	checkEqualExceptTimes(t, *c1, *c1copy)
@@ -895,6 +895,17 @@ func TestGetByIDScanFail(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestGetByIDReqQueryModifierFail(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	tc.ReadQueryModifier = func(sb sq.SelectBuilder) (sq.SelectBuilder, error) {
+		return sb, fmt.Errorf("pop")
+	}
+	_, err := tc.GetByID(context.Background(), fftypes.NewUUID().String())
+	assert.Regexp(t, "pop", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestGetByNameNoNameSemantics(t *testing.T) {
 	db, _ := NewMockProvider().UTInit()
 	tc := newLinkableCollection(&db.Database, "ns1")
@@ -955,6 +966,17 @@ func TestGetManySelectFail(t *testing.T) {
 	mock.ExpectQuery("SELECT.*").WillReturnError(fmt.Errorf("pop"))
 	_, _, err := tc.GetMany(context.Background(), CRUDableQueryFactory.NewFilter(context.Background()).And())
 	assert.Regexp(t, "FF00176", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetManyReadModifierFail(t *testing.T) {
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	tc.ReadQueryModifier = func(sb sq.SelectBuilder) (sq.SelectBuilder, error) {
+		return sb, fmt.Errorf("pop")
+	}
+	_, _, err := tc.GetMany(context.Background(), CRUDableQueryFactory.NewFilter(context.Background()).And())
+	assert.Regexp(t, "pop", err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
