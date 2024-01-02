@@ -172,14 +172,14 @@ func (c *CrudBase[T]) NewUpdateBuilder(ctx context.Context) ffapi.UpdateBuilder 
 func (c *CrudBase[T]) ModifyQuery(newModifier QueryModifier) CRUDQuery[T] {
 	cModified := *c
 	originalModifier := cModified.ReadQueryModifier
-	cModified.ReadQueryModifier = func(sb sq.SelectBuilder) sq.SelectBuilder {
+	cModified.ReadQueryModifier = func(sb sq.SelectBuilder) (_ sq.SelectBuilder, err error) {
 		if originalModifier != nil {
-			sb = originalModifier(sb)
+			sb, err = originalModifier(sb)
 		}
-		if newModifier != nil {
-			sb = newModifier(sb)
+		if err == nil && newModifier != nil {
+			sb, err = newModifier(sb)
 		}
-		return sb
+		return sb, err
 	}
 	return &cModified
 }
@@ -595,7 +595,9 @@ func (c *CrudBase[T]) GetByID(ctx context.Context, id string, getOpts ...GetOpti
 		From(tableFrom).
 		Where(c.idFilter(id))
 	if c.ReadQueryModifier != nil {
-		query = c.ReadQueryModifier(query)
+		if query, err = c.ReadQueryModifier(query); err != nil {
+			return c.NilValue(), err
+		}
 	}
 
 	rows, _, err := c.DB.Query(ctx, c.Table, query)
@@ -701,7 +703,9 @@ func (c *CrudBase[T]) getManyScoped(ctx context.Context, tableFrom string, fi *f
 		return nil, nil, err
 	}
 	if c.ReadQueryModifier != nil {
-		query = c.ReadQueryModifier(query)
+		if query, err = c.ReadQueryModifier(query); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	rows, tx, err := c.DB.Query(ctx, c.Table, query)

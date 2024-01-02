@@ -545,12 +545,22 @@ func TestCountQueryWithExpr(t *testing.T) {
 func TestCountQueryWithModifier(t *testing.T) {
 	s, mdb := NewMockProvider().UTInit()
 	mdb.ExpectQuery("^SELECT COUNT\\(\\*\\)").WillReturnRows(sqlmock.NewRows([]string{"col1"}).AddRow(10))
-	qm := func(sb sq.SelectBuilder) sq.SelectBuilder {
-		return sb.Where(sq.Eq{"col1": "val1"})
+	qm := func(sb sq.SelectBuilder) (sq.SelectBuilder, error) {
+		return sb.Where(sq.Eq{"col1": "val1"}), nil
 	}
 	_, err := s.CountQuery(context.Background(), "table1", nil, sq.Eq{"col1": "val1"}, qm, "")
 	assert.NoError(t, err)
 	assert.NoError(t, mdb.ExpectationsWereMet())
+}
+
+func TestCountQueryWithModifierErr(t *testing.T) {
+	s, mdb := NewMockProvider().UTInit()
+	mdb.ExpectQuery("^SELECT COUNT\\(\\*\\)").WillReturnRows(sqlmock.NewRows([]string{"col1"}).AddRow(10))
+	qm := func(sb sq.SelectBuilder) (sq.SelectBuilder, error) {
+		return sb, fmt.Errorf("pop")
+	}
+	_, err := s.CountQuery(context.Background(), "table1", nil, sq.Eq{"col1": "val1"}, qm, "")
+	assert.Regexp(t, "pop", err)
 }
 
 func TestQueryResSwallowError(t *testing.T) {

@@ -42,7 +42,7 @@ type Database struct {
 	sequenceColumn string
 }
 
-type QueryModifier = func(sq.SelectBuilder) sq.SelectBuilder
+type QueryModifier = func(sq.SelectBuilder) (sq.SelectBuilder, error)
 
 // PreCommitAccumulator is a structure that can accumulate state during
 // the transaction, then has a function that is called just before commit.
@@ -241,7 +241,9 @@ func (s *Database) CountQuery(ctx context.Context, table string, tx *TXWrapper, 
 	}
 	q := sq.Select(fmt.Sprintf("COUNT(%s)", countExpr)).From(table).Where(fop)
 	if qm != nil {
-		q = qm(q)
+		if q, err = qm(q); err != nil {
+			return -1, err
+		}
 	}
 	sqlQuery, args, err := q.PlaceholderFormat(s.features.PlaceholderFormat).ToSql()
 	if err != nil {

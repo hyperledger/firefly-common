@@ -374,7 +374,7 @@ func (_m *CRUD[T]) InsertMany(ctx context.Context, instances []T, allowPartialSu
 }
 
 // ModifyQuery provides a mock function with given fields: modifier
-func (_m *CRUD[T]) ModifyQuery(modifier func(squirrel.SelectBuilder) squirrel.SelectBuilder) dbsql.CRUDQuery[T] {
+func (_m *CRUD[T]) ModifyQuery(modifier func(squirrel.SelectBuilder) (squirrel.SelectBuilder, error)) dbsql.CRUDQuery[T] {
 	ret := _m.Called(modifier)
 
 	if len(ret) == 0 {
@@ -382,7 +382,7 @@ func (_m *CRUD[T]) ModifyQuery(modifier func(squirrel.SelectBuilder) squirrel.Se
 	}
 
 	var r0 dbsql.CRUDQuery[T]
-	if rf, ok := ret.Get(0).(func(func(squirrel.SelectBuilder) squirrel.SelectBuilder) dbsql.CRUDQuery[T]); ok {
+	if rf, ok := ret.Get(0).(func(func(squirrel.SelectBuilder) (squirrel.SelectBuilder, error)) dbsql.CRUDQuery[T]); ok {
 		r0 = rf(modifier)
 	} else {
 		if ret.Get(0) != nil {
