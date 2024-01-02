@@ -113,7 +113,7 @@ func TestE2E_DeliveryWebSockets(t *testing.T) {
 	ts := &testSource{started: make(chan struct{})}
 	close(ts.started) // start delivery immediately - will block as no WS connected
 
-	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig(ctx), p, wss, ts)
+	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig[testESConfig, testData](ctx), p, wss, ts)
 	assert.NoError(t, err)
 
 	// Create a stream to sub-select one topic
@@ -162,7 +162,7 @@ func TestE2E_DeliveryWebSocketsNack(t *testing.T) {
 	ts := &testSource{started: make(chan struct{})}
 	close(ts.started) // start delivery immediately - will block as no WS connected
 
-	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig(ctx), p, wss, ts)
+	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig[testESConfig, testData](ctx), p, wss, ts)
 	assert.NoError(t, err)
 
 	// Create a stream to sub-select one topic
@@ -208,7 +208,7 @@ func TestE2E_WebsocketDeliveryRestartReset(t *testing.T) {
 	ts := &testSource{started: make(chan struct{})}
 	close(ts.started) // start delivery immediately - will block as no WS connected
 
-	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig(ctx), p, wss, ts)
+	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig[testESConfig, testData](ctx), p, wss, ts)
 	assert.NoError(t, err)
 
 	// Create a stream to sub-select one topic
@@ -269,7 +269,7 @@ func TestE2E_DeliveryWebHooks200(t *testing.T) {
 	ts := &testSource{started: make(chan struct{})}
 	close(ts.started) // start delivery immediately - will block as no WS connected
 
-	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig(ctx), p, wss, ts)
+	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig[testESConfig, testData](ctx), p, wss, ts)
 	assert.NoError(t, err)
 
 	got100 := make(chan struct{})
@@ -340,7 +340,7 @@ func TestE2E_DeliveryWebHooks500Retry(t *testing.T) {
 	ts := &testSource{started: make(chan struct{})}
 	close(ts.started) // start delivery immediately - will block as no WS connected
 
-	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig(ctx), p, wss, ts)
+	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig[testESConfig, testData](ctx), p, wss, ts)
 	assert.NoError(t, err)
 
 	gotFiveTimes := make(chan struct{})
@@ -410,7 +410,7 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 		started: make(chan struct{}), // we never start it
 	}
 
-	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig(ctx), p, wss, ts)
+	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig[testESConfig, testData](ctx), p, wss, ts)
 	assert.NoError(t, err)
 
 	// Create first event stream started

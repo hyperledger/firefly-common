@@ -22,22 +22,36 @@ import (
 	"testing"
 
 	"github.com/hyperledger/firefly-common/mocks/wsservermocks"
+	"github.com/hyperledger/firefly-common/pkg/ffapi"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/wsserver"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func mockWSChannels(wsc *wsservermocks.WebSocketChannels) (chan interface{}, chan interface{}, chan *wsserver.WebSocketCommandMessageOrError) {
 	senderChannel := make(chan interface{}, 1)
 	broadcastChannel := make(chan interface{}, 1)
 	receiverChannel := make(chan *wsserver.WebSocketCommandMessageOrError, 1)
-	wsc.On("GetChannels", "ut_stream").Return((chan<- interface{})(senderChannel), (chan<- interface{})(broadcastChannel), (<-chan *wsserver.WebSocketCommandMessageOrError)(receiverChannel))
+	wsc.On("GetChannels", "ut_stream").Return((chan<- interface{})(senderChannel), (chan<- interface{})(broadcastChannel), (<-chan *wsserver.WebSocketCommandMessageOrError)(receiverChannel)).Maybe()
 	return senderChannel, broadcastChannel, receiverChannel
+}
+
+func newTestWebSocketsFactory(t *testing.T) (context.Context, *esManager[testESConfig, testData], *wsservermocks.WebSocketChannels, *webSocketDispatcherFactory[testESConfig, testData]) {
+	ctx, mgr, _, done := newMockESManager(t, func(mdb *mockPersistence) {
+		mdb.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil)
+	})
+	done()
+
+	mws := wsservermocks.NewWebSocketChannels(t)
+	mgr.wsChannels = mws
+
+	return ctx, mgr, mws, &webSocketDispatcherFactory[testESConfig, testData]{esm: mgr}
 }
 
 func TestWSAttemptIgnoreWrongAcks(t *testing.T) {
 
-	mws := &wsservermocks.WebSocketChannels{}
+	ctx, mgr, mws, whf := newTestWebSocketsFactory(t)
 	_, _, rc := mockWSChannels(mws)
 
 	go func() {
@@ -50,9 +64,13 @@ func TestWSAttemptIgnoreWrongAcks(t *testing.T) {
 	}()
 
 	dmw := DistributionModeBroadcast
-	wsa := newWebSocketAction[testData](mws, &WebSocketConfig{
-		DistributionMode: &dmw,
-	}, "ut_stream")
+	spec := &EventStreamSpec[testESConfig]{
+		Name: ptrTo("ut_stream"),
+		WebSocket: &WebSocketConfig{
+			DistributionMode: &dmw,
+		},
+	}
+	wsa := whf.NewDispatcher(ctx, &mgr.config, spec).(*webSocketAction[testData])
 
 	err := wsa.AttemptDispatch(context.Background(), 0, &EventBatch[testData]{
 		StreamID:    fftypes.NewUUID().String(),
@@ -69,14 +87,18 @@ func TestWSAttemptIgnoreWrongAcks(t *testing.T) {
 
 func TestWSattemptDispatchExitPushingEvent(t *testing.T) {
 
-	mws := &wsservermocks.WebSocketChannels{}
+	ctx, mgr, mws, whf := newTestWebSocketsFactory(t)
 	_, bc, _ := mockWSChannels(mws)
 	bc <- []*fftypes.JSONAny{} // block the broadcast channel
 
 	dmw := DistributionModeBroadcast
-	wsa := newWebSocketAction[testData](mws, &WebSocketConfig{
-		DistributionMode: &dmw,
-	}, "ut_stream")
+	spec := &EventStreamSpec[testESConfig]{
+		Name: ptrTo("ut_stream"),
+		WebSocket: &WebSocketConfig{
+			DistributionMode: &dmw,
+		},
+	}
+	wsa := whf.NewDispatcher(ctx, &mgr.config, spec).(*webSocketAction[testData])
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -93,13 +115,17 @@ func TestWSattemptDispatchExitPushingEvent(t *testing.T) {
 
 func TestWSattemptDispatchExitReceivingReply(t *testing.T) {
 
-	mws := &wsservermocks.WebSocketChannels{}
+	ctx, mgr, mws, whf := newTestWebSocketsFactory(t)
 	_, _, rc := mockWSChannels(mws)
 
 	dmw := DistributionModeBroadcast
-	wsa := newWebSocketAction[testData](mws, &WebSocketConfig{
-		DistributionMode: &dmw,
-	}, "ut_stream")
+	spec := &EventStreamSpec[testESConfig]{
+		Name: ptrTo("ut_stream"),
+		WebSocket: &WebSocketConfig{
+			DistributionMode: &dmw,
+		},
+	}
+	wsa := whf.NewDispatcher(ctx, &mgr.config, spec).(*webSocketAction[testData])
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -110,16 +136,20 @@ func TestWSattemptDispatchExitReceivingReply(t *testing.T) {
 
 func TestWSattemptDispatchNackFromClient(t *testing.T) {
 
-	mws := &wsservermocks.WebSocketChannels{}
+	ctx, mgr, mws, whf := newTestWebSocketsFactory(t)
 	_, _, rc := mockWSChannels(mws)
 	rc <- &wsserver.WebSocketCommandMessageOrError{
 		Err: fmt.Errorf("pop"),
 	}
 
 	dmw := DistributionModeBroadcast
-	wsa := newWebSocketAction[testData](mws, &WebSocketConfig{
-		DistributionMode: &dmw,
-	}, "ut_stream")
+	spec := &EventStreamSpec[testESConfig]{
+		Name: ptrTo("ut_stream"),
+		WebSocket: &WebSocketConfig{
+			DistributionMode: &dmw,
+		},
+	}
+	wsa := whf.NewDispatcher(ctx, &mgr.config, spec).(*webSocketAction[testData])
 
 	err := wsa.waitForAck(context.Background(), rc, -1)
 	assert.Regexp(t, "pop", err)

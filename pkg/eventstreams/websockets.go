@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -18,6 +18,7 @@ package eventstreams
 
 import (
 	"context"
+	"crypto/tls"
 	"database/sql/driver"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
@@ -37,6 +38,10 @@ type WebSocketConfig struct {
 	DistributionMode *DistributionMode `ffstruct:"wsconfig" json:"distributionMode,omitempty"`
 }
 
+type webSocketDispatcherFactory[CT any, DT any] struct {
+	esm *esManager[CT, DT]
+}
+
 // Store in DB as JSON
 func (wc *WebSocketConfig) Scan(src interface{}) error {
 	return fftypes.JSONScan(src, wc)
@@ -50,8 +55,11 @@ func (wc *WebSocketConfig) Value() (driver.Value, error) {
 	return fftypes.JSONValue(wc)
 }
 
-func (wc *WebSocketConfig) validate(ctx context.Context, defaults *ConfigWebsocketDefaults, setDefaults bool) error {
-	return checkSet(ctx, setDefaults, "distributionMode", &wc.DistributionMode, defaults.DefaultDistributionMode, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "distmode", v) })
+func (wsf *webSocketDispatcherFactory[CT, DT]) Validate(ctx context.Context, conf *Config[CT, DT], spec *EventStreamSpec[CT], _ map[string]*tls.Config, setDefaults bool) error {
+	if spec.WebSocket == nil {
+		spec.WebSocket = &WebSocketConfig{}
+	}
+	return checkSet(ctx, setDefaults, "distributionMode", &spec.WebSocket.DistributionMode, conf.Defaults.WebSocketDefaults.DefaultDistributionMode, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "distmode", v) })
 }
 
 type webSocketAction[DT any] struct {
@@ -60,11 +68,11 @@ type webSocketAction[DT any] struct {
 	wsChannels wsserver.WebSocketChannels
 }
 
-func newWebSocketAction[DT any](wsChannels wsserver.WebSocketChannels, spec *WebSocketConfig, topic string) *webSocketAction[DT] {
+func (wsf *webSocketDispatcherFactory[CT, DT]) NewDispatcher(_ context.Context, _ *Config[CT, DT], spec *EventStreamSpec[CT]) EventBatchDispatcher[DT] {
 	return &webSocketAction[DT]{
-		spec:       spec,
-		wsChannels: wsChannels,
-		topic:      topic,
+		spec:       spec.WebSocket,
+		wsChannels: wsf.esm.wsChannels,
+		topic:      *spec.Name,
 	}
 }
 

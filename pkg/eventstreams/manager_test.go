@@ -99,7 +99,7 @@ func newMockESManager(t *testing.T, extraSetup ...func(mp *mockPersistence)) (co
 			return nil
 		},
 	}
-	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig(ctx), mp, nil, mes)
+	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig[testESConfig, testData](ctx), mp, nil, mes)
 	assert.NoError(t, err)
 
 	return ctx, mgr.(*esManager[testESConfig, testData]), mes, func() {
@@ -109,7 +109,7 @@ func newMockESManager(t *testing.T, extraSetup ...func(mp *mockPersistence)) (co
 }
 
 func TestNewManagerFailBadTLS(t *testing.T) {
-	_, err := NewEventStreamManager[testESConfig, testData](context.Background(), &Config{
+	_, err := NewEventStreamManager[testESConfig, testData](context.Background(), &Config[testESConfig, testData]{
 		Retry: &retry.Retry{},
 		TLSConfigs: map[string]*fftls.Config{
 			"tls0": {
@@ -124,7 +124,7 @@ func TestNewManagerFailBadTLS(t *testing.T) {
 
 func TestNewManagerBadConfStruct(t *testing.T) {
 	assert.Panics(t, func() {
-		_, _ = NewEventStreamManager[string /* must be DBSerializable */, testData](context.Background(), &Config{
+		_, _ = NewEventStreamManager[string /* must be DBSerializable */, testData](context.Background(), &Config[string, testData]{
 			Retry: &retry.Retry{},
 			TLSConfigs: map[string]*fftls.Config{
 				"tls0": {
@@ -137,7 +137,7 @@ func TestNewManagerBadConfStruct(t *testing.T) {
 }
 
 func TestNewManagerBadConfState(t *testing.T) {
-	_, err := NewEventStreamManager[testESConfig, testData](context.Background(), &Config{}, nil, nil, &mockEventSource{})
+	_, err := NewEventStreamManager[testESConfig, testData](context.Background(), &Config[testESConfig, testData]{}, nil, nil, &mockEventSource{})
 	assert.Regexp(t, "FF00237", err)
 }
 
@@ -149,7 +149,7 @@ func TestInitFail(t *testing.T) {
 	mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, fmt.Errorf("pop"))
 	ctx := context.Background()
 	InitConfig(config.RootSection("ut"))
-	_, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig(ctx), mp, nil, nil)
+	_, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig[testESConfig, testData](ctx), mp, nil, nil)
 	assert.Regexp(t, "pop", err)
 }
 
@@ -182,7 +182,7 @@ func TestInitWithStreamsCleanupFail(t *testing.T) {
 	}
 	mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{es}, &ffapi.FilterResult{}, nil).Once()
 	mp.eventStreams.On("Delete", mock.Anything, es.GetID()).Return(fmt.Errorf("pop"))
-	_, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig(ctx), mp, nil, nil)
+	_, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig[testESConfig, testData](ctx), mp, nil, nil)
 	assert.Regexp(t, "pop", err)
 }
 
@@ -199,7 +199,7 @@ func TestInitWithStreamsInitFail(t *testing.T) {
 		Status: ptrTo(EventStreamStatusStarted),
 	}
 	mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{es}, &ffapi.FilterResult{}, nil).Once()
-	_, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig(ctx), mp, nil, &mockEventSource{
+	_, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig[testESConfig, testData](ctx), mp, nil, &mockEventSource{
 		validate: func(ctx context.Context, conf *testESConfig) error {
 			return fmt.Errorf("pop")
 		},

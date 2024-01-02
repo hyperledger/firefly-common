@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -70,16 +70,17 @@ type Runtime[ConfigType any, DataType any] interface {
 }
 
 type esManager[CT any, DT any] struct {
-	config      Config
+	config      Config[CT, DT]
 	mux         sync.Mutex
 	streams     map[string]*eventStream[CT, DT]
 	tlsConfigs  map[string]*tls.Config
 	wsChannels  wsserver.WebSocketChannels
 	persistence Persistence[CT]
 	runtime     Runtime[CT, DT]
+	dispatchers map[EventStreamType]DispatcherFactory[CT, DT]
 }
 
-func NewEventStreamManager[CT any, DT any](ctx context.Context, config *Config, p Persistence[CT], wsChannels wsserver.WebSocketChannels, source Runtime[CT, DT]) (es Manager[CT], err error) {
+func NewEventStreamManager[CT any, DT any](ctx context.Context, config *Config[CT, DT], p Persistence[CT], wsChannels wsserver.WebSocketChannels, source Runtime[CT, DT]) (es Manager[CT], err error) {
 
 	var confExample interface{} = new(CT)
 	if _, isDBSerializable := (confExample).(DBSerializable); !isDBSerializable {
@@ -104,7 +105,13 @@ func NewEventStreamManager[CT any, DT any](ctx context.Context, config *Config, 
 		persistence: p,
 		wsChannels:  wsChannels,
 		streams:     map[string]*eventStream[CT, DT]{},
+		dispatchers: config.AdditionalDispatchers,
 	}
+	if esm.dispatchers == nil {
+		esm.dispatchers = make(map[EventStreamType]DispatcherFactory[CT, DT])
+	}
+	esm.dispatchers[EventStreamTypeWebSocket] = &webSocketDispatcherFactory[CT, DT]{esm: esm}
+	esm.dispatchers[EventStreamTypeWebhook] = &webhookDispatcherFactory[CT, DT]{}
 	if err = esm.initialize(ctx); err != nil {
 		return nil, err
 	}
@@ -179,7 +186,7 @@ func (esm *esManager[CT, DT]) UpsertStream(ctx context.Context, esSpec *EventStr
 	// Do a validation that does NOT update the defaults into the structure, so that
 	// the defaults are not persisted into the DB. This means that if the defaults are
 	// changed then any streams with nil fields will pick up the new defaults.
-	if err := esm.validateStream(ctx, esSpec, false); err != nil {
+	if _, err := esm.validateStream(ctx, esSpec, false); err != nil {
 		return false, err
 	}
 
