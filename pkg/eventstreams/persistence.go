@@ -27,6 +27,7 @@ import (
 type Persistence[CT any] interface {
 	EventStreams() dbsql.CRUD[*EventStreamSpec[CT]]
 	Checkpoints() dbsql.CRUD[*EventStreamCheckpoint]
+	IDValidator() IDValidator
 	Close()
 }
 
@@ -61,6 +62,10 @@ func NewEventStreamPersistence[CT any](db *dbsql.Database, idValidator IDValidat
 type esPersistence[CT any] struct {
 	db          *dbsql.Database
 	idValidator IDValidator
+}
+
+func (p *esPersistence[CT]) IDValidator() IDValidator {
+	return p.idValidator
 }
 
 func (p *esPersistence[CT]) EventStreams() dbsql.CRUD[*EventStreamSpec[CT]] {

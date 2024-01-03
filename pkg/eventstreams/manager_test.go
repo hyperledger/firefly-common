@@ -69,6 +69,9 @@ func (mp *mockPersistence) EventStreams() dbsql.CRUD[*EventStreamSpec[testESConf
 func (mp *mockPersistence) Checkpoints() dbsql.CRUD[*EventStreamCheckpoint] {
 	return mp.checkpoints
 }
+func (mp *mockPersistence) IDValidator() IDValidator {
+	return dbsql.UUIDValidator
+}
 func (mp *mockPersistence) Close() {}
 
 func newMockESManager(t *testing.T, extraSetup ...func(mp *mockPersistence)) (context.Context, *esManager[testESConfig, testData], *mockEventSource, func()) {
@@ -207,10 +210,48 @@ func TestInitWithStreamsInitFail(t *testing.T) {
 	assert.Regexp(t, "pop", err)
 }
 
-func TestUpsertStreamDeleted(t *testing.T) {
+func TestUpsertStreamByNameDeleted(t *testing.T) {
 	es := &EventStreamSpec[testESConfig]{
-		ID:     ptrTo(fftypes.NewUUID().String()),
 		Name:   ptrTo("stream1"),
+		ID:     ptrTo(fftypes.NewUUID().String()),
+		Status: ptrTo(EventStreamStatusStopped),
+	}
+	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
+		mp.eventStreams.On("GetByName", mock.Anything, "stream1").Return(es, nil)
+		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{es}, &ffapi.FilterResult{}, nil).Once()
+		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil).Once()
+	})
+	defer done()
+
+	esm.getStream(es.GetID()).spec.Status = ptrTo(EventStreamStatusDeleted)
+	_, err := esm.UpsertStream(ctx, "stream1", es)
+	assert.Regexp(t, "FF00236", err)
+
+}
+
+func TestUpsertStreamByNameFailLookup(t *testing.T) {
+	es := &EventStreamSpec[testESConfig]{
+		Name:   ptrTo("stream1"),
+		ID:     ptrTo(fftypes.NewUUID().String()),
+		Status: ptrTo(EventStreamStatusStopped),
+	}
+	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
+		mp.eventStreams.On("GetByName", mock.Anything, "stream1").Return((*EventStreamSpec[testESConfig])(nil), fmt.Errorf("pop"))
+		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{es}, &ffapi.FilterResult{}, nil).Once()
+		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil).Once()
+	})
+	defer done()
+
+	esm.getStream(es.GetID()).spec.Status = ptrTo(EventStreamStatusDeleted)
+	_, err := esm.UpsertStream(ctx, "stream1", es)
+	assert.Regexp(t, "pop", err)
+
+}
+
+func TestUpsertStreamByIDDeleted(t *testing.T) {
+	es := &EventStreamSpec[testESConfig]{
+		Name:   ptrTo("stream1"),
+		ID:     ptrTo(fftypes.NewUUID().String()),
 		Status: ptrTo(EventStreamStatusStopped),
 	}
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
@@ -220,15 +261,15 @@ func TestUpsertStreamDeleted(t *testing.T) {
 	defer done()
 
 	esm.getStream(es.GetID()).spec.Status = ptrTo(EventStreamStatusDeleted)
-	_, err := esm.UpsertStream(ctx, es)
+	_, err := esm.UpsertStream(ctx, *es.ID, es)
 	assert.Regexp(t, "FF00236", err)
 
 }
 
 func TestUpsertStreamBadUpdate(t *testing.T) {
 	es := &EventStreamSpec[testESConfig]{
-		ID:     ptrTo(fftypes.NewUUID().String()),
 		Name:   ptrTo("stream1"),
+		ID:     ptrTo(fftypes.NewUUID().String()),
 		Status: ptrTo(EventStreamStatusStopped),
 	}
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
@@ -239,15 +280,15 @@ func TestUpsertStreamBadUpdate(t *testing.T) {
 
 	newES := *es
 	newES.Name = nil
-	_, err := esm.UpsertStream(ctx, &newES)
+	_, err := esm.UpsertStream(ctx, "", &newES)
 	assert.Regexp(t, "FF00112", err)
 
 }
 
 func TestUpsertStreamUpsertFail(t *testing.T) {
 	es := &EventStreamSpec[testESConfig]{
-		ID:     ptrTo(fftypes.NewUUID().String()),
 		Name:   ptrTo("stream1"),
+		ID:     ptrTo(fftypes.NewUUID().String()),
 		Status: ptrTo(EventStreamStatusStopped),
 	}
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
@@ -257,7 +298,7 @@ func TestUpsertStreamUpsertFail(t *testing.T) {
 	})
 	defer done()
 
-	_, err := esm.UpsertStream(ctx, es)
+	_, err := esm.UpsertStream(ctx, "", es)
 	assert.Regexp(t, "pop", err)
 
 }
@@ -301,6 +342,9 @@ func TestUpsertReInitExistingFailInit(t *testing.T) {
 func TestDeleteStreamNotKnown(t *testing.T) {
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil).Once()
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(&EventStreamSpec[testESConfig]{
+			ID: ptrTo("does not exist"),
+		}, nil).Once()
 	})
 	defer done()
 
@@ -309,9 +353,24 @@ func TestDeleteStreamNotKnown(t *testing.T) {
 
 }
 
+func TestDeleteStreamNotFound(t *testing.T) {
+	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
+		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil).Once()
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return((*EventStreamSpec[testESConfig])(nil), fmt.Errorf("not found")).Once()
+	})
+	defer done()
+
+	err := esm.DeleteStream(ctx, fftypes.NewUUID().String())
+	assert.Regexp(t, "not found", err)
+
+}
+
 func TestResetStreamNotKnown(t *testing.T) {
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil).Once()
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(&EventStreamSpec[testESConfig]{
+			ID: ptrTo("does not exist"),
+		}, nil).Once()
 	})
 	defer done()
 
@@ -323,6 +382,9 @@ func TestResetStreamNotKnown(t *testing.T) {
 func TestStopStreamNotKnown(t *testing.T) {
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil).Once()
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(&EventStreamSpec[testESConfig]{
+			ID: ptrTo("does not exist"),
+		}, nil).Once()
 	})
 	defer done()
 
@@ -334,6 +396,9 @@ func TestStopStreamNotKnown(t *testing.T) {
 func TestStartStreamNotKnown(t *testing.T) {
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil).Once()
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(&EventStreamSpec[testESConfig]{
+			ID: ptrTo("does not exist"),
+		}, nil).Once()
 	})
 	defer done()
 
@@ -363,6 +428,7 @@ func TestDeleteStreamFail(t *testing.T) {
 		Status: ptrTo(EventStreamStatusStopped),
 	}
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(es, nil).Once()
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{es}, &ffapi.FilterResult{}, nil).Once()
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil).Once()
 		mp.eventStreams.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("pop")).Once()
@@ -381,6 +447,7 @@ func TestDeleteStreamFailDelete(t *testing.T) {
 		Status: ptrTo(EventStreamStatusStopped),
 	}
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(es, nil).Once()
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{es}, &ffapi.FilterResult{}, nil).Once()
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil).Once()
 		mp.eventStreams.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
@@ -394,11 +461,6 @@ func TestDeleteStreamFailDelete(t *testing.T) {
 }
 
 func TestResetStreamStopFailTimeout(t *testing.T) {
-	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
-		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil).Once()
-	})
-	done()
-
 	existing := &eventStream[testESConfig, testData]{
 		activeState: &activeStream[testESConfig, testData]{},
 		stopping:    make(chan struct{}),
@@ -408,6 +470,13 @@ func TestResetStreamStopFailTimeout(t *testing.T) {
 			Status: ptrTo(EventStreamStatusStopped),
 		},
 	}
+
+	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(existing.spec, nil).Once()
+		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil).Once()
+	})
+	done()
+
 	esm.addStream(ctx, existing)
 	err := esm.ResetStream(ctx, existing.spec.GetID(), "")
 	assert.Regexp(t, "FF00229", err)
@@ -415,12 +484,6 @@ func TestResetStreamStopFailTimeout(t *testing.T) {
 }
 
 func TestResetStreamStopFailDeleteCheckpoint(t *testing.T) {
-	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
-		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil).Once()
-		mp.checkpoints.On("DeleteMany", mock.Anything, mock.Anything).Return(fmt.Errorf("pop")).Once()
-	})
-	done()
-
 	existing := &eventStream[testESConfig, testData]{
 		spec: &EventStreamSpec[testESConfig]{
 			ID:     ptrTo(fftypes.NewUUID().String()),
@@ -428,6 +491,13 @@ func TestResetStreamStopFailDeleteCheckpoint(t *testing.T) {
 			Status: ptrTo(EventStreamStatusStopped),
 		},
 	}
+	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(existing.spec, nil).Once()
+		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil).Once()
+		mp.checkpoints.On("DeleteMany", mock.Anything, mock.Anything).Return(fmt.Errorf("pop")).Once()
+	})
+	done()
+
 	esm.addStream(ctx, existing)
 	err := esm.ResetStream(ctx, existing.spec.GetID(), "")
 	assert.Regexp(t, "pop", err)
@@ -435,13 +505,6 @@ func TestResetStreamStopFailDeleteCheckpoint(t *testing.T) {
 }
 
 func TestResetStreamStopFailUpdateSequence(t *testing.T) {
-	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
-		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil).Once()
-		mp.checkpoints.On("DeleteMany", mock.Anything, mock.Anything).Return(nil).Once()
-		mp.eventStreams.On("UpdateSparse", mock.Anything, mock.Anything).Return(fmt.Errorf("pop")).Once()
-	})
-	done()
-
 	existing := &eventStream[testESConfig, testData]{
 		spec: &EventStreamSpec[testESConfig]{
 			ID:     ptrTo(fftypes.NewUUID().String()),
@@ -449,6 +512,14 @@ func TestResetStreamStopFailUpdateSequence(t *testing.T) {
 			Status: ptrTo(EventStreamStatusStopped),
 		},
 	}
+	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(existing.spec, nil).Once()
+		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil).Once()
+		mp.checkpoints.On("DeleteMany", mock.Anything, mock.Anything).Return(nil).Once()
+		mp.eventStreams.On("UpdateSparse", mock.Anything, mock.Anything).Return(fmt.Errorf("pop")).Once()
+	})
+	done()
+
 	esm.addStream(ctx, existing)
 	err := esm.ResetStream(ctx, existing.spec.GetID(), "12345")
 	assert.Regexp(t, "pop", err)
@@ -456,13 +527,6 @@ func TestResetStreamStopFailUpdateSequence(t *testing.T) {
 }
 
 func TestResetStreamNoOp(t *testing.T) {
-	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
-		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil).Once()
-		mp.checkpoints.On("DeleteMany", mock.Anything, mock.Anything).Return(nil).Once()
-		mp.eventStreams.On("UpdateSparse", mock.Anything, mock.Anything).Return(nil).Once()
-	})
-	done()
-
 	existing := &eventStream[testESConfig, testData]{
 		spec: &EventStreamSpec[testESConfig]{
 			ID:     ptrTo(fftypes.NewUUID().String()),
@@ -470,6 +534,14 @@ func TestResetStreamNoOp(t *testing.T) {
 			Status: ptrTo(EventStreamStatusStopped),
 		},
 	}
+	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(existing.spec, nil).Once()
+		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil).Once()
+		mp.checkpoints.On("DeleteMany", mock.Anything, mock.Anything).Return(nil).Once()
+		mp.eventStreams.On("UpdateSparse", mock.Anything, mock.Anything).Return(nil).Once()
+	})
+	done()
+
 	esm.addStream(ctx, existing)
 	err := esm.ResetStream(ctx, existing.spec.GetID(), "12345")
 	assert.NoError(t, err)
@@ -497,6 +569,18 @@ func TestGetStreamByIDFail(t *testing.T) {
 
 	_, err := esm.GetStreamByID(ctx, fftypes.NewUUID().String())
 	assert.Regexp(t, "pop", err)
+
+}
+
+func TestGetStreamByNameOrID(t *testing.T) {
+	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
+		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil).Once()
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(&EventStreamSpec[testESConfig]{}, nil).Once()
+	})
+	defer done()
+
+	_, err := esm.GetStreamByNameOrID(ctx, "stream1")
+	assert.NoError(t, err)
 
 }
 

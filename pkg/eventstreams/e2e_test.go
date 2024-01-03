@@ -118,13 +118,12 @@ func TestE2E_DeliveryWebSockets(t *testing.T) {
 
 	// Create a stream to sub-select one topic
 	es1 := &EventStreamSpec[testESConfig]{
-		Name:        ptrTo("stream1"),
 		TopicFilter: ptrTo("topic_1"), // only one of the topics
 		Type:        &EventStreamTypeWebSocket,
 		BatchSize:   ptrTo(10),
 		Config:      &testESConfig{Config1: "1111"},
 	}
-	created, err := mgr.UpsertStream(ctx, es1)
+	created, err := mgr.UpsertStream(ctx, "stream1", es1)
 	assert.NoError(t, err)
 	assert.True(t, created)
 
@@ -167,13 +166,12 @@ func TestE2E_DeliveryWebSocketsNack(t *testing.T) {
 
 	// Create a stream to sub-select one topic
 	es1 := &EventStreamSpec[testESConfig]{
-		Name:        ptrTo("stream1"),
 		TopicFilter: ptrTo("topic_1"), // only one of the topics
 		Type:        &EventStreamTypeWebSocket,
 		BatchSize:   ptrTo(10),
 		Config:      &testESConfig{Config1: "1111"},
 	}
-	created, err := mgr.UpsertStream(ctx, es1)
+	created, err := mgr.UpsertStream(ctx, "stream1", es1)
 	assert.NoError(t, err)
 	assert.True(t, created)
 
@@ -213,13 +211,12 @@ func TestE2E_WebsocketDeliveryRestartReset(t *testing.T) {
 
 	// Create a stream to sub-select one topic
 	es1 := &EventStreamSpec[testESConfig]{
-		Name:        ptrTo("stream1"),
 		TopicFilter: ptrTo("topic_1"), // only one of the topics
 		Type:        &EventStreamTypeWebSocket,
 		BatchSize:   ptrTo(10),
 		Config:      &testESConfig{Config1: "1111"},
 	}
-	created, err := mgr.UpsertStream(ctx, es1)
+	created, err := mgr.UpsertStream(ctx, "stream1", es1)
 	assert.NoError(t, err)
 	assert.True(t, created)
 
@@ -302,7 +299,6 @@ func TestE2E_DeliveryWebHooks200(t *testing.T) {
 
 	// Create a stream to sub-select one topic
 	es1 := &EventStreamSpec[testESConfig]{
-		Name:        ptrTo("stream1"),
 		TopicFilter: ptrTo("topic_1"), // only one of the topics
 		Type:        &EventStreamTypeWebhook,
 		BatchSize:   ptrTo(10),
@@ -315,7 +311,7 @@ func TestE2E_DeliveryWebHooks200(t *testing.T) {
 			},
 		},
 	}
-	created, err := mgr.UpsertStream(ctx, es1)
+	created, err := mgr.UpsertStream(ctx, "stream1", es1)
 	assert.NoError(t, err)
 	assert.True(t, created)
 
@@ -372,7 +368,6 @@ func TestE2E_DeliveryWebHooks500Retry(t *testing.T) {
 
 	// Create a stream to sub-select one topic
 	es1 := &EventStreamSpec[testESConfig]{
-		Name:        ptrTo("stream1"),
 		TopicFilter: ptrTo("topic_1"), // only one of the topics
 		Type:        &EventStreamTypeWebhook,
 		BatchSize:   ptrTo(10),
@@ -385,7 +380,7 @@ func TestE2E_DeliveryWebHooks500Retry(t *testing.T) {
 			},
 		},
 	}
-	created, err := mgr.UpsertStream(ctx, es1)
+	created, err := mgr.UpsertStream(ctx, "stream1", es1)
 	assert.NoError(t, err)
 	assert.True(t, created)
 
@@ -415,20 +410,18 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 
 	// Create first event stream started
 	es1 := &EventStreamSpec[testESConfig]{
-		Name:        ptrTo("stream1"),
 		TopicFilter: ptrTo("topic1"), // only one of the topics
 		Type:        &EventStreamTypeWebSocket,
 		Config: &testESConfig{
 			Config1: "confValue1",
 		},
 	}
-	created, err := mgr.UpsertStream(ctx, es1)
+	created, err := mgr.UpsertStream(ctx, "stream1", es1)
 	assert.NoError(t, err)
 	assert.True(t, created)
 
 	// Create second event stream stopped
 	es2 := &EventStreamSpec[testESConfig]{
-		Name:        ptrTo("stream2"),
 		TopicFilter: ptrTo("topic2"), // only one of the topics
 		Type:        &EventStreamTypeWebSocket,
 		Status:      &EventStreamStatusStopped,
@@ -436,7 +429,7 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 			Config1: "confValue2",
 		},
 	}
-	created, err = mgr.UpsertStream(ctx, es2)
+	created, err = mgr.UpsertStream(ctx, "stream2", es2)
 	assert.NoError(t, err)
 	assert.True(t, created)
 
@@ -458,7 +451,7 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 
 	// Rename second event stream
 	es2.Name = ptrTo("stream2a")
-	created, err = mgr.UpsertStream(ctx, es2)
+	created, err = mgr.UpsertStream(ctx, "" /* ID is in es2 object */, es2)
 	assert.NoError(t, err)
 	assert.False(t, created)
 
