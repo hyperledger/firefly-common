@@ -64,6 +64,13 @@ var (
 	EventStreamStatusUnknown         = fftypes.FFEnumValue("esstatus", "unknown")          // not persisted
 )
 
+type LifecyclePhase int
+
+const (
+	LifecyclePhasePreInsertValidation LifecyclePhase = iota // on user-supplied context, prior to inserting to DB
+	LifecyclePhaseStarting                                  // while initializing for startup (so all defaults should be resolved)
+)
+
 // Let's us check that the config serializes
 type DBSerializable interface {
 	sql.Scanner
@@ -174,7 +181,7 @@ func checkSet[T any](ctx context.Context, storeDefaults bool, fieldName string, 
 // Optionally it stores the defaults back on the structure, to ensure no nil fields.
 // - When using at runtime: true, so later code doesn't need to worry about nil checks / defaults
 // - When storing to the DB: false, so defaults can be applied dynamically
-func (esm *esManager[CT, DT]) validateStream(ctx context.Context, esc *EventStreamSpec[CT], setDefaults bool) (factory DispatcherFactory[CT, DT], err error) {
+func (esm *esManager[CT, DT]) validateStream(ctx context.Context, esc *EventStreamSpec[CT], phase LifecyclePhase) (factory DispatcherFactory[CT, DT], err error) {
 	if esc.Name == nil {
 		return nil, i18n.NewError(ctx, i18n.MsgMissingRequiredField, "name")
 	}
@@ -189,6 +196,7 @@ func (esm *esManager[CT, DT]) validateStream(ctx context.Context, esc *EventStre
 		return nil, err
 	}
 	err = fftypes.ValidateFFNameField(ctx, *esc.Name, "name")
+	setDefaults := phase == LifecyclePhaseStarting
 	if err == nil {
 		err = checkSet(ctx, setDefaults, "status", &esc.Status, EventStreamStatusStarted, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "esstatus", v) })
 	}
@@ -217,7 +225,7 @@ func (esm *esManager[CT, DT]) validateStream(ctx context.Context, esc *EventStre
 	if factory == nil {
 		return nil, i18n.NewError(ctx, i18n.MsgESInvalidType, *esc.Type)
 	}
-	err = factory.Validate(ctx, &esm.config, esc, esm.tlsConfigs, setDefaults)
+	err = factory.Validate(ctx, &esm.config, esc, esm.tlsConfigs, phase)
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +255,7 @@ func (esm *esManager[CT, DT]) initEventStream(
 	spec *EventStreamSpec[CT],
 ) (es *eventStream[CT, DT], err error) {
 	// Validate
-	factory, err := esm.validateStream(bgCtx, spec, true)
+	factory, err := esm.validateStream(bgCtx, spec, LifecyclePhaseStarting)
 	if err != nil {
 		return nil, err
 	}

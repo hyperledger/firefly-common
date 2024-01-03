@@ -55,10 +55,11 @@ func (wc *WebSocketConfig) Value() (driver.Value, error) {
 	return fftypes.JSONValue(wc)
 }
 
-func (wsf *webSocketDispatcherFactory[CT, DT]) Validate(ctx context.Context, conf *Config[CT, DT], spec *EventStreamSpec[CT], _ map[string]*tls.Config, setDefaults bool) error {
+func (wsf *webSocketDispatcherFactory[CT, DT]) Validate(ctx context.Context, conf *Config[CT, DT], spec *EventStreamSpec[CT], _ map[string]*tls.Config, phase LifecyclePhase) error {
 	if spec.WebSocket == nil {
 		spec.WebSocket = &WebSocketConfig{}
 	}
+	setDefaults := phase == LifecyclePhaseStarting
 	return checkSet(ctx, setDefaults, "distributionMode", &spec.WebSocket.DistributionMode, conf.Defaults.WebSocketDefaults.DefaultDistributionMode, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "distmode", v) })
 }
 

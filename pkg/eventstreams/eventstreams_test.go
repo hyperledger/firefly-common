@@ -124,38 +124,38 @@ func TestValidate(t *testing.T) {
 	done()
 
 	es.spec = &EventStreamSpec[testESConfig]{}
-	_, err := es.esm.validateStream(ctx, es.spec, false)
+	_, err := es.esm.validateStream(ctx, es.spec, LifecyclePhasePreInsertValidation)
 	assert.Regexp(t, "FF00112", err)
 
 	es.spec.Name = ptrTo("name1")
-	_, err = es.esm.validateStream(ctx, es.spec, false)
+	_, err = es.esm.validateStream(ctx, es.spec, LifecyclePhasePreInsertValidation)
 	assert.NoError(t, err)
 
 	es.esm.runtime.(*mockEventSource).validate = func(ctx context.Context, conf *testESConfig) error {
 		return fmt.Errorf("pop")
 	}
-	_, err = es.esm.validateStream(ctx, es.spec, false)
+	_, err = es.esm.validateStream(ctx, es.spec, LifecyclePhasePreInsertValidation)
 	assert.Regexp(t, "pop", err)
 	es.esm.runtime.(*mockEventSource).validate = func(ctx context.Context, conf *testESConfig) error { return nil }
 
 	es.spec.TopicFilter = ptrTo("((((!Bad Regexp[")
-	_, err = es.esm.validateStream(ctx, es.spec, false)
+	_, err = es.esm.validateStream(ctx, es.spec, LifecyclePhasePreInsertValidation)
 	assert.Regexp(t, "FF00235", err)
 
 	es.spec.TopicFilter = nil
 	es.spec.Type = ptrTo(fftypes.FFEnum("wrong"))
-	_, err = es.esm.validateStream(ctx, es.spec, false)
+	_, err = es.esm.validateStream(ctx, es.spec, LifecyclePhasePreInsertValidation)
 	assert.Regexp(t, "FF00234", err)
 
 	es.spec.Type = ptrTo(EventStreamTypeWebSocket)
 	es.spec.WebSocket = &WebSocketConfig{
 		DistributionMode: ptrTo(fftypes.FFEnum("wrong")),
 	}
-	_, err = es.esm.validateStream(ctx, es.spec, false)
+	_, err = es.esm.validateStream(ctx, es.spec, LifecyclePhasePreInsertValidation)
 	assert.Regexp(t, "FF00234", err)
 
 	es.spec.Type = ptrTo(EventStreamTypeWebhook)
-	_, err = es.esm.validateStream(ctx, es.spec, false)
+	_, err = es.esm.validateStream(ctx, es.spec, LifecyclePhasePreInsertValidation)
 	assert.Regexp(t, "FF00216", err)
 
 	_, err = es.esm.initEventStream(ctx, es.spec)
@@ -163,7 +163,7 @@ func TestValidate(t *testing.T) {
 
 	customType := fftypes.FFEnumValue("estype", "custom1")
 	es.spec.Type = &customType
-	_, err = es.esm.validateStream(ctx, es.spec, false)
+	_, err = es.esm.validateStream(ctx, es.spec, LifecyclePhasePreInsertValidation)
 	assert.Regexp(t, "FF00217", err)
 
 	_, err = es.esm.initEventStream(ctx, es.spec)

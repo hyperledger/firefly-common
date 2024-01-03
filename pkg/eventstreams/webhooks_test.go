@@ -50,7 +50,7 @@ func newTestWebhooks(t *testing.T, whc *WebhookConfig, tweaks ...func()) *webhoo
 		Name:    ptrTo("stream1"),
 		Webhook: whc,
 	}
-	assert.NoError(t, whf.Validate(ctx, &mgr.config, spec, mgr.tlsConfigs, true))
+	assert.NoError(t, whf.Validate(ctx, &mgr.config, spec, mgr.tlsConfigs, LifecyclePhaseStarting))
 
 	return whf.NewDispatcher(context.Background(), &mgr.config, spec).(*webhookAction[testESConfig, testData])
 }
@@ -62,15 +62,15 @@ func TestWebhooksConfigValidate(t *testing.T) {
 	spec := &EventStreamSpec[testESConfig]{
 		Webhook: whc,
 	}
-	assert.Regexp(t, "FF00216", whf.Validate(context.Background(), nil, spec, nil, true))
+	assert.Regexp(t, "FF00216", whf.Validate(context.Background(), nil, spec, nil, LifecyclePhaseStarting))
 
 	u := "http://test.example"
 	whc.URL = &u
-	assert.NoError(t, whf.Validate(context.Background(), nil, spec, nil, true))
+	assert.NoError(t, whf.Validate(context.Background(), nil, spec, nil, LifecyclePhaseStarting))
 
 	tlsConfName := "wrong"
 	whc.TLSConfigName = &tlsConfName
-	assert.Regexp(t, "FF00223", whf.Validate(context.Background(), nil, spec, make(map[string]*tls.Config), true))
+	assert.Regexp(t, "FF00223", whf.Validate(context.Background(), nil, spec, make(map[string]*tls.Config), LifecyclePhaseStarting))
 
 }
 

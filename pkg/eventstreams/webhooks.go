@@ -54,7 +54,7 @@ func (wc *WebhookConfig) Value() (driver.Value, error) {
 type webhookDispatcherFactory[CT any, DT any] struct{}
 
 // validate initializes the config ready for use
-func (wdf *webhookDispatcherFactory[CT, DT]) Validate(ctx context.Context, _ *Config[CT, DT], spec *EventStreamSpec[CT], tlsConfigs map[string]*tls.Config, _ bool) error {
+func (wdf *webhookDispatcherFactory[CT, DT]) Validate(ctx context.Context, _ *Config[CT, DT], spec *EventStreamSpec[CT], tlsConfigs map[string]*tls.Config, _ LifecyclePhase) error {
 	if spec.Webhook == nil {
 		spec.Webhook = &WebhookConfig{}
 	}
