@@ -69,7 +69,7 @@ type webSocketAction[DT any] struct {
 	wsChannels wsserver.WebSocketChannels
 }
 
-func (wsf *webSocketDispatcherFactory[CT, DT]) NewDispatcher(_ context.Context, _ *Config[CT, DT], spec *EventStreamSpec[CT]) EventBatchDispatcher[DT] {
+func (wsf *webSocketDispatcherFactory[CT, DT]) NewDispatcher(_ context.Context, _ *Config[CT, DT], spec *EventStreamSpec[CT]) Dispatcher[DT] {
 	return &webSocketAction[DT]{
 		spec:       spec.WebSocket,
 		wsChannels: wsf.esm.wsChannels,

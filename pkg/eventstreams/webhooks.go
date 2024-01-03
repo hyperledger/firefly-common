@@ -79,7 +79,7 @@ type webhookAction[CT any, DT any] struct {
 	client            *resty.Client
 }
 
-func (wdf *webhookDispatcherFactory[CT, DT]) NewDispatcher(ctx context.Context, conf *Config[CT, DT], spec *EventStreamSpec[CT]) EventBatchDispatcher[DT] {
+func (wdf *webhookDispatcherFactory[CT, DT]) NewDispatcher(ctx context.Context, conf *Config[CT, DT], spec *EventStreamSpec[CT]) Dispatcher[DT] {
 	httpConf := spec.Webhook.HTTP
 	if httpConf == nil {
 		httpConf = &conf.Defaults.WebhookDefaults.HTTPConfig

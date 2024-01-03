@@ -29,7 +29,7 @@ import (
 
 type DispatcherFactory[CT any, DT any] interface {
 	Validate(ctx context.Context, conf *Config[CT, DT], spec *EventStreamSpec[CT], tlsConfigs map[string]*tls.Config, phase LifecyclePhase) error
-	NewDispatcher(ctx context.Context, conf *Config[CT, DT], spec *EventStreamSpec[CT]) EventBatchDispatcher[DT]
+	NewDispatcher(ctx context.Context, conf *Config[CT, DT], spec *EventStreamSpec[CT]) Dispatcher[DT]
 }
 
 type Config[CT any, DT any] struct {

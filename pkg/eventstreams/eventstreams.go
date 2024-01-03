@@ -156,7 +156,7 @@ func (esc *EventStreamCheckpoint) SetUpdated(t *fftypes.FFTime) {
 	esc.Updated = t
 }
 
-type EventBatchDispatcher[DT any] interface {
+type Dispatcher[DT any] interface {
 	AttemptDispatch(ctx context.Context, attempt int, events *EventBatch[DT]) error
 }
 
@@ -237,7 +237,7 @@ type eventStream[CT any, DT any] struct {
 	esm         *esManager[CT, DT]
 	spec        *EventStreamSpec[CT]
 	mux         sync.Mutex
-	action      EventBatchDispatcher[DT]
+	action      Dispatcher[DT]
 	activeState *activeStream[CT, DT]
 	retry       *retry.Retry
 	persistence Persistence[CT]
