@@ -60,6 +60,8 @@ var (
 	EventStreamType              = ffm("eventstream.type", "Delivery type for the event stream")
 	EventStreamWebHook           = ffm("eventstream.webhook", "Webhook configuration options")
 	EventStreamWebSocket         = ffm("eventstream.websocket", "WebSocket configuration options")
+	EventStreamStatistics        = ffm("EventStream.statistics", "Information about the status and operation of the event stream")
+	EventStreamStatusExt         = ffm("EventStream.status", "Status of the event stream")
 
 	EventStreamWHConfigHeaders = ffm("whconfig.headers", "Headers to add to the HTTP call")
 	EventStreamWHConfigHTTP    = ffm("whconfig.http", "Base client config for the Webhook HTTP requests")
@@ -68,6 +70,16 @@ var (
 	EventStreamWHURL           = ffm("whconfig.url", "URL to invoke")
 
 	EventStreamWSDistributionMode = ffm("wsconfig.distributionMode", "Whether to 'broadcast' messages (at most once), or 'load_balance' requests between connections with acknowledgement (at least once)")
+
+	EventStreamStatisticsStartTime            = ffm("EventStreamStatistics.startTime", "Time the stream started")
+	EventStreamStatisticsLastDispatchTime     = ffm("EventStreamStatistics.lastDispatchTime", "Time the stream last dispatched a message")
+	EventStreamStatisticsLastDispatchBatch    = ffm("EventStreamStatistics.lastDispatchBatch", "Batch number of the last dispatched batch")
+	EventStreamStatisticsLastDispatchAttempts = ffm("EventStreamStatistics.lastDispatchAttempts", "Number of attempts to dispatch the current batch")
+	EventStreamStatisticsLastDispatchFailure  = ffm("EventStreamStatistics.lastDispatchFailure", "Error message for the last failure that occurred")
+	EventStreamStatisticsLastDispatchComplete = ffm("EventStreamStatistics.lastDispatchComplete", "Completion status of the last batch")
+	EventStreamStatisticsHighestDetected      = ffm("EventStreamStatistics.highestDetected", "Highest sequence ID detected")
+	EventStreamStatisticsHighestDispatched    = ffm("EventStreamStatistics.highestDispatched", "Highest sequence ID dispatched")
+	EventStreamStatisticsCheckpoint           = ffm("EventStreamStatistics.checkpoint", "Current checkpoint sequence ID")
 
 	RESTConfigAuthPassword                  = ffm("RESTConfig.authPassword", "Password for the HTTP/HTTPS Basic Auth header")
 	RESTConfigAuthUsername                  = ffm("RESTConfig.authUsername", "Username for the HTTP/HTTPS Basic Auth header")

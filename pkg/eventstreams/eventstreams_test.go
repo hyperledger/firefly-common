@@ -304,5 +304,5 @@ func TestGetIDNil(t *testing.T) {
 }
 
 func TestCheckDocs(t *testing.T) {
-	ffapi.CheckObjectDocumented(&EventStreamSpec[struct{}]{})
+	ffapi.CheckObjectDocumented(&EventStreamWithStatus[struct{}]{})
 }
