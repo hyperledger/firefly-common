@@ -302,3 +302,7 @@ func TestGetIDNil(t *testing.T) {
 	assert.Empty(t, (&EventStreamSpec[testESConfig]{}).GetID())
 	assert.Empty(t, (&EventStreamCheckpoint{}).GetID())
 }
+
+func TestCheckDocs(t *testing.T) {
+	ffapi.CheckObjectDocumented(&EventStreamSpec[struct{}]{})
+}

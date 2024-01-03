@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -71,7 +71,7 @@ type HTTPConfig struct {
 	HTTPPassthroughHeadersEnabled bool                                      `ffstruct:"RESTConfig" json:"httpPassthroughHeadersEnabled,omitempty"`
 	HTTPHeaders                   fftypes.JSONObject                        `ffstruct:"RESTConfig" json:"headers,omitempty"`
 	HTTPTLSHandshakeTimeout       fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"tlsHandshakeTimeout,omitempty"`
-	HTTPCustomClient              interface{}                               `ffstruct:"RESTConfig" json:"httpCustomClient,omitempty"`
+	HTTPCustomClient              interface{}                               `json:"-"`
 	TLSClientConfig               *tls.Config                               `json:"-"` // should be built from separate TLSConfig using fftls utils
 	OnCheckRetry                  func(res *resty.Response, err error) bool `json:"-"` // response could be nil on err
 	OnBeforeRequest               func(req *resty.Request) error            `json:"-"` // called before each request, even retry
