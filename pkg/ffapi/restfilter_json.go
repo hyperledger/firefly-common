@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -30,10 +30,17 @@ import (
 var allMods = []string{"not", "caseInsensitive"}
 var justCaseInsensitive = []string{"caseInsensitive"}
 
+// Note if ItemsResultTyped below might be preferred for new APIs (if you are able to adopt always-return {items:[]} style)
 type FilterResultsWithCount struct {
 	Count int64       `json:"count"`
 	Total *int64      `json:"total,omitempty"` // omitted if a count was not calculated (AlwaysPaginate enabled, and count not specified)
 	Items interface{} `json:"items"`
+}
+
+type ItemsResultTyped[T any] struct {
+	Count int    `fftypes:"CollectionResults" json:"count"`
+	Total *int64 `fftypes:"CollectionResults" json:"total,omitempty"` // omitted if a count was not calculated (AlwaysPaginate enabled, and count not specified)
+	Items []T    `fftypes:"CollectionResults" json:"items"`
 }
 
 type filterModifiers struct {
