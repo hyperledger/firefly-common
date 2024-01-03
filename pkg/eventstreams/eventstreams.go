@@ -77,8 +77,9 @@ type EventStreamSpec[CT any] struct {
 	Name              *string            `ffstruct:"eventstream" json:"name,omitempty"`
 	Status            *EventStreamStatus `ffstruct:"eventstream" json:"status,omitempty"`
 	Type              *EventStreamType   `ffstruct:"eventstream" json:"type,omitempty" ffenum:"estype"`
-	InitialSequenceID *string            `ffstruct:"eventstream" json:"initialSequenceID,omitempty" ffenum:"estype"`
-	TopicFilter       *string            `ffstruct:"eventstream" json:"topicFilter,omitempty" ffenum:"estype"`
+	InitialSequenceID *string            `ffstruct:"eventstream" json:"initialSequenceID,omitempty"`
+	TopicFilter       *string            `ffstruct:"eventstream" json:"topicFilter,omitempty"`
+	Identity          *string            `ffstruct:"eventstream" json:"identity,omitempty"`
 	Config            *CT                `ffstruct:"eventstream" json:"config,omitempty"`
 
 	ErrorHandling     *ErrorHandlingType  `ffstruct:"eventstream" json:"errorHandling"`

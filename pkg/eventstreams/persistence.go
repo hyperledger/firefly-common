@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -38,6 +38,8 @@ var EventStreamFilters = &ffapi.QueryFields{
 	"status":      &ffapi.StringField{},
 	"type":        &ffapi.StringField{},
 	"topicfilter": &ffapi.StringField{},
+	"identity":    &ffapi.StringField{},
+	"config":      &ffapi.JSONField{},
 }
 
 var CheckpointFilters = &ffapi.QueryFields{
@@ -74,6 +76,7 @@ func (p *esPersistence[CT]) EventStreams() dbsql.CRUD[*EventStreamSpec[CT]] {
 			"type",
 			"initial_sequence_id",
 			"topic_filter",
+			"identity",
 			"config",
 			"error_handling",
 			"batch_size",
@@ -111,6 +114,8 @@ func (p *esPersistence[CT]) EventStreams() dbsql.CRUD[*EventStreamSpec[CT]] {
 				return &inst.InitialSequenceID
 			case "topic_filter":
 				return &inst.TopicFilter
+			case "identity":
+				return &inst.Identity
 			case "config":
 				return &inst.Config
 			case "error_handling":
