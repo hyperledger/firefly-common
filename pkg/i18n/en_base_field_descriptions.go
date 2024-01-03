@@ -99,4 +99,8 @@ var (
 	RESTConfigRetryInitialDelay             = ffm("RESTConfig.retryInitialDelay", "Time to wait before the first retry")
 	RESTConfigRetryMaximumDelay             = ffm("RESTConfig.retryMaximumDelay", "Maximum time to wait between retries")
 	RESTConfigTLSHandshakeTimeout           = ffm("RESTConfig.tlsHandshakeTimeout", "Maximum time to wait for the TLS handshake to complete")
+
+	CollectionResultsCount = ffm("CollectionResults.count", "Number of items returned from this call")
+	CollectionResultsTotal = ffm("CollectionResults.total", "Number of items total that could be returned, if a count was requested")
+	CollectionResultsItems = ffm("CollectionResults.items", "The array of items")
 )

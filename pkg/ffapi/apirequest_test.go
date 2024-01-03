@@ -92,3 +92,7 @@ func TestItemsResult(t *testing.T) {
 	assert.Equal(t, 1, f.Count)
 	assert.Equal(t, int64(10), *f.Total)
 }
+
+func TestCheckItemsResultDocs(t *testing.T) {
+	CheckObjectDocumented(&ItemsResultTyped[string]{})
+}
