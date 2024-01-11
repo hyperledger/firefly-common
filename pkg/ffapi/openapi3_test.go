@@ -263,7 +263,7 @@ func TestWildcards(t *testing.T) {
 		Version: "1.0",
 		BaseURL: "http://localhost:12345/api/v1",
 	}).Generate(context.Background(), routes)
-	assert.NotNil(t, swagger.Paths["/namespaces/{ns}/example1/{id}"])
+	assert.NotNil(t, swagger.Paths.Find("/namespaces/{ns}/example1/{id}"))
 }
 
 func TestFFExcludeTag(t *testing.T) {
@@ -282,19 +282,19 @@ func TestFFExcludeTag(t *testing.T) {
 		Version: "1.0",
 		BaseURL: "http://localhost:12345/api/v1",
 	}).Generate(context.Background(), routes)
-	assert.NotNil(t, swagger.Paths["/namespaces/{ns}/example1/test"].Post.RequestBody.Value)
-	length, err := swagger.Paths["/namespaces/{ns}/example1/test"].Post.RequestBody.Value.Content.Get("application/json").Schema.Value.Properties.JSONLookup("length")
+	assert.NotNil(t, swagger.Paths.Find("/namespaces/{ns}/example1/test").Post.RequestBody.Value)
+	length, err := swagger.Paths.Find("/namespaces/{ns}/example1/test").Post.RequestBody.Value.Content.Get("application/json").Schema.Value.Properties.JSONLookup("length")
 	assert.NoError(t, err)
 	assert.NotNil(t, length)
-	width, err := swagger.Paths["/namespaces/{ns}/example1/test"].Post.RequestBody.Value.Content.Get("application/json").Schema.Value.Properties.JSONLookup("width")
+	width, err := swagger.Paths.Find("/namespaces/{ns}/example1/test").Post.RequestBody.Value.Content.Get("application/json").Schema.Value.Properties.JSONLookup("width")
 	assert.NoError(t, err)
 	assert.NotNil(t, width)
-	_, err = swagger.Paths["/namespaces/{ns}/example1/test"].Post.RequestBody.Value.Content.Get("application/json").Schema.Value.Properties.JSONLookup("secret")
-	assert.Regexp(t, "object has no field", err)
-	_, err = swagger.Paths["/namespaces/{ns}/example1/test"].Post.RequestBody.Value.Content.Get("application/json").Schema.Value.Properties.JSONLookup("conditional")
-	assert.Regexp(t, "object has no field", err)
-	_, err = swagger.Paths["/namespaces/{ns}/example1/test"].Post.RequestBody.Value.Content.Get("application/json").Schema.Value.Properties.JSONLookup("conditionalInput")
-	assert.Regexp(t, "object has no field", err)
+	_, err = swagger.Paths.Find("/namespaces/{ns}/example1/test").Post.RequestBody.Value.Content.Get("application/json").Schema.Value.Properties.JSONLookup("secret")
+	assert.Regexp(t, `no schema "secret"`, err)
+	_, err = swagger.Paths.Find("/namespaces/{ns}/example1/test").Post.RequestBody.Value.Content.Get("application/json").Schema.Value.Properties.JSONLookup("conditional")
+	assert.Regexp(t, `no schema "conditional"`, err)
+	_, err = swagger.Paths.Find("/namespaces/{ns}/example1/test").Post.RequestBody.Value.Content.Get("application/json").Schema.Value.Properties.JSONLookup("conditionalInput")
+	assert.Regexp(t, `no schema "conditionalInput"`, err)
 }
 
 func TestPanicOnMissingDescription(t *testing.T) {
@@ -377,8 +377,8 @@ func TestPreTranslatedRouteDescription(t *testing.T) {
 		Version: "1.0",
 		BaseURL: "http://localhost:12345/api/v1",
 	}).Generate(context.Background(), routes)
-	assert.NotNil(t, swagger.Paths["/namespaces/{ns}/example1/test"].Post.RequestBody.Value)
-	description := swagger.Paths["/namespaces/{ns}/example1/test"].Post.Description
+	assert.NotNil(t, swagger.Paths.Find("/namespaces/{ns}/example1/test").Post.RequestBody.Value)
+	description := swagger.Paths.Find("/namespaces/{ns}/example1/test").Post.Description
 	assert.Equal(t, "this is a description", description)
 }
 

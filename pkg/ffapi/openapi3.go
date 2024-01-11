@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -114,14 +114,14 @@ func (sg *SwaggerGen) getPathItem(doc *openapi3.T, path string) *openapi3.PathIt
 	}
 	path = customRegexRemoval.ReplaceAllString(path, `{$1}`)
 	if doc.Paths == nil {
-		doc.Paths = openapi3.Paths{}
+		doc.Paths = &openapi3.Paths{}
 	}
-	pi, ok := doc.Paths[path]
-	if ok {
+	pi := doc.Paths.Find(path)
+	if pi != nil {
 		return pi
 	}
 	pi = &openapi3.PathItem{}
-	doc.Paths[path] = pi
+	doc.Paths.Set(path, pi)
 	return pi
 }
 
@@ -302,7 +302,7 @@ func (sg *SwaggerGen) addOutput(ctx context.Context, doc *openapi3.T, route *Rou
 		}
 	}
 	for _, code := range route.JSONOutputCodes {
-		op.Responses[strconv.FormatInt(int64(code), 10)] = &openapi3.ResponseRef{
+		op.Responses.Map()[strconv.FormatInt(int64(code), 10)] = &openapi3.ResponseRef{
 			Value: &openapi3.Response{
 				Description: &s,
 				Content: openapi3.Content{
