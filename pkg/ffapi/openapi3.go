@@ -116,7 +116,7 @@ func (sg *SwaggerGen) getPathItem(doc *openapi3.T, path string) *openapi3.PathIt
 	if doc.Paths == nil {
 		doc.Paths = &openapi3.Paths{}
 	}
-	pi := doc.Paths.Find(path)
+	pi := doc.Paths.Value(path)
 	if pi != nil {
 		return pi
 	}
