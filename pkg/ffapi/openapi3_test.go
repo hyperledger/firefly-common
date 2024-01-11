@@ -264,6 +264,7 @@ func TestWildcards(t *testing.T) {
 		BaseURL: "http://localhost:12345/api/v1",
 	}).Generate(context.Background(), routes)
 	assert.NotNil(t, swagger.Paths.Find("/namespaces/{ns}/example1/{id}"))
+	assert.NotNil(t, swagger.Paths.Value("/namespaces/{ns}/example1/{id}"))
 }
 
 func TestFFExcludeTag(t *testing.T) {
@@ -379,6 +380,8 @@ func TestPreTranslatedRouteDescription(t *testing.T) {
 	}).Generate(context.Background(), routes)
 	assert.NotNil(t, swagger.Paths.Find("/namespaces/{ns}/example1/test").Post.RequestBody.Value)
 	description := swagger.Paths.Find("/namespaces/{ns}/example1/test").Post.Description
+	assert.NotNil(t, swagger.Paths.Value("/namespaces/{ns}/example1/test").Post.RequestBody.Value)
+	description = swagger.Paths.Value("/namespaces/{ns}/example1/test").Post.Description
 	assert.Equal(t, "this is a description", description)
 }
 
