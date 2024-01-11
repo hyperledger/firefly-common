@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -22,7 +22,7 @@ import (
 	"net/http"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"github.com/ghodss/yaml"
 )
 
 type OpenAPIFormat int
