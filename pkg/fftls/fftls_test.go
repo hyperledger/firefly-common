@@ -236,7 +236,7 @@ func TestMTLSMissingClientCert(t *testing.T) {
 	assert.NoError(t, err)
 	_, _ = conn.Write([]byte{1})
 	_, err = conn.Read([]byte{1})
-	assert.Regexp(t, "bad certificate", err)
+	assert.Regexp(t, "certificate required", err)
 	_ = conn.Close()
 
 }
