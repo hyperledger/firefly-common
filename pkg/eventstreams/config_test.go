@@ -34,7 +34,7 @@ func TestGenerateConfigTLS(t *testing.T) {
 	tls0.Set(ConfigTLSConfigName, "tls0")
 	tls0.SubSection("tls").Set(fftls.HTTPConfTLSCAFile, t.TempDir())
 
-	c := GenerateConfig(context.Background())
+	c := GenerateConfig[testESConfig, testData](context.Background())
 	assert.True(t, c.TLSConfigs["tls0"].Enabled)
 
 }

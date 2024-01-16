@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -162,7 +162,7 @@ func setup(ctx context.Context) (pubSubESManager, *inMemoryStream, func()) {
 	log.L(ctx).Infof("Running on: %s", u)
 
 	p := eventstreams.NewEventStreamPersistence[pubSubConfig](sql, dbsql.UUIDValidator)
-	c := eventstreams.GenerateConfig(ctx)
+	c := eventstreams.GenerateConfig[pubSubConfig, pubSubMessage](ctx)
 	ims := &inMemoryStream{
 		messages:    []string{},
 		newMessages: *sync.NewCond(new(sync.Mutex)),

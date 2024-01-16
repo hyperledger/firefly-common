@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -51,43 +51,47 @@ func (wc *WebhookConfig) Value() (driver.Value, error) {
 	return fftypes.JSONValue(wc)
 }
 
+type webhookDispatcherFactory[CT any, DT any] struct{}
+
 // validate initializes the config ready for use
-func (wc *WebhookConfig) validate(ctx context.Context, tlsConfigs map[string]*tls.Config) error {
-	if wc.URL == nil || *wc.URL == "" {
+func (wdf *webhookDispatcherFactory[CT, DT]) Validate(ctx context.Context, _ *Config[CT, DT], spec *EventStreamSpec[CT], tlsConfigs map[string]*tls.Config, _ LifecyclePhase) error {
+	if spec.Webhook == nil {
+		spec.Webhook = &WebhookConfig{}
+	}
+	whc := spec.Webhook
+	if whc.URL == nil || *whc.URL == "" {
 		return i18n.NewError(ctx, i18n.MsgMissingWebhookURL)
 	}
-	if wc.TLSConfigName != nil && *wc.TLSConfigName != "" {
-		tlsConfig, ok := tlsConfigs[*wc.TLSConfigName]
+	if whc.TLSConfigName != nil && *whc.TLSConfigName != "" {
+		tlsConfig, ok := tlsConfigs[*whc.TLSConfigName]
 		if !ok {
-			return i18n.NewError(ctx, i18n.MsgUnknownTLSConfiguration, *wc.TLSConfigName)
+			return i18n.NewError(ctx, i18n.MsgUnknownTLSConfiguration, *whc.TLSConfigName)
 		}
-		wc.tlsConfig = tlsConfig
+		whc.tlsConfig = tlsConfig
 	}
-	wc.validated = true
+	whc.validated = true
 	return nil
 }
 
 type webhookAction[CT any, DT any] struct {
-	esm               *esManager[CT, DT]
 	disablePrivateIPs bool
 	spec              *WebhookConfig
 	client            *resty.Client
 }
 
-func (esm *esManager[CT, DT]) newWebhookAction(ctx context.Context, spec *WebhookConfig) *webhookAction[CT, DT] {
-	conf := spec.HTTP
-	if conf == nil {
-		conf = &esm.config.Defaults.WebhookDefaults.HTTPConfig
+func (wdf *webhookDispatcherFactory[CT, DT]) NewDispatcher(ctx context.Context, conf *Config[CT, DT], spec *EventStreamSpec[CT]) Dispatcher[DT] {
+	httpConf := spec.Webhook.HTTP
+	if httpConf == nil {
+		httpConf = &conf.Defaults.WebhookDefaults.HTTPConfig
 	}
-	conf.TLSClientConfig = spec.tlsConfig
+	httpConf.TLSClientConfig = spec.Webhook.tlsConfig
 	client := ffresty.NewWithConfig(ctx, ffresty.Config{
-		URL:        *spec.URL,
-		HTTPConfig: *conf,
+		URL:        *spec.Webhook.URL,
+		HTTPConfig: *httpConf,
 	})
 	return &webhookAction[CT, DT]{
-		esm:               esm,
-		spec:              spec,
-		disablePrivateIPs: esm.config.DisablePrivateIPs,
+		spec:              spec.Webhook,
+		disablePrivateIPs: conf.DisablePrivateIPs,
 		client:            client,
 	}
 }

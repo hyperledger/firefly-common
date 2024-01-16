@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -18,7 +18,6 @@ package eventstreams
 
 import (
 	"context"
-	"crypto/tls"
 	"database/sql"
 	"database/sql/driver"
 	"regexp"
@@ -65,6 +64,13 @@ var (
 	EventStreamStatusUnknown         = fftypes.FFEnumValue("esstatus", "unknown")          // not persisted
 )
 
+type LifecyclePhase int
+
+const (
+	LifecyclePhasePreInsertValidation LifecyclePhase = iota // on user-supplied context, prior to inserting to DB
+	LifecyclePhaseStarting                                  // while initializing for startup (so all defaults should be resolved)
+)
+
 // Let's us check that the config serializes
 type DBSerializable interface {
 	sql.Scanner
@@ -78,8 +84,9 @@ type EventStreamSpec[CT any] struct {
 	Name              *string            `ffstruct:"eventstream" json:"name,omitempty"`
 	Status            *EventStreamStatus `ffstruct:"eventstream" json:"status,omitempty"`
 	Type              *EventStreamType   `ffstruct:"eventstream" json:"type,omitempty" ffenum:"estype"`
-	InitialSequenceID *string            `ffstruct:"eventstream" json:"initialSequenceID,omitempty" ffenum:"estype"`
-	TopicFilter       *string            `ffstruct:"eventstream" json:"topicFilter,omitempty" ffenum:"estype"`
+	InitialSequenceID *string            `ffstruct:"eventstream" json:"initialSequenceID,omitempty"`
+	TopicFilter       *string            `ffstruct:"eventstream" json:"topicFilter,omitempty"`
+	Identity          *string            `ffstruct:"eventstream" json:"identity,omitempty"`
 	Config            *CT                `ffstruct:"eventstream" json:"config,omitempty"`
 
 	ErrorHandling     *ErrorHandlingType  `ffstruct:"eventstream" json:"errorHandling"`
@@ -149,7 +156,7 @@ func (esc *EventStreamCheckpoint) SetUpdated(t *fftypes.FFTime) {
 	esc.Updated = t
 }
 
-type EventBatchDispatcher[DT any] interface {
+type Dispatcher[DT any] interface {
 	AttemptDispatch(ctx context.Context, attempt int, events *EventBatch[DT]) error
 }
 
@@ -174,20 +181,22 @@ func checkSet[T any](ctx context.Context, storeDefaults bool, fieldName string, 
 // Optionally it stores the defaults back on the structure, to ensure no nil fields.
 // - When using at runtime: true, so later code doesn't need to worry about nil checks / defaults
 // - When storing to the DB: false, so defaults can be applied dynamically
-func (esc *EventStreamSpec[CT]) validate(ctx context.Context, tlsConfigs map[string]*tls.Config, defaults *EventStreamDefaults, validateConf func(context.Context, *CT) error, setDefaults bool) (err error) {
+func (esm *esManager[CT, DT]) validateStream(ctx context.Context, esc *EventStreamSpec[CT], phase LifecyclePhase) (factory DispatcherFactory[CT, DT], err error) {
 	if esc.Name == nil {
-		return i18n.NewError(ctx, i18n.MsgMissingRequiredField, "name")
+		return nil, i18n.NewError(ctx, i18n.MsgMissingRequiredField, "name")
 	}
 	if esc.TopicFilter != nil {
 		fullMatchFilter := `^` + *esc.TopicFilter + `$`
 		if esc.topicFilterRegexp, err = regexp.Compile(fullMatchFilter); err != nil {
-			return i18n.NewError(ctx, i18n.MsgESInvalidTopicFilterRegexp, fullMatchFilter, err)
+			return nil, i18n.NewError(ctx, i18n.MsgESInvalidTopicFilterRegexp, fullMatchFilter, err)
 		}
 	}
-	if err := validateConf(ctx, esc.Config); err != nil {
-		return err
+	defaults := esm.config.Defaults
+	if err := esm.runtime.Validate(ctx, esc.Config); err != nil {
+		return nil, err
 	}
 	err = fftypes.ValidateFFNameField(ctx, *esc.Name, "name")
+	setDefaults := phase == LifecyclePhaseStarting
 	if err == nil {
 		err = checkSet(ctx, setDefaults, "status", &esc.Status, EventStreamStatusStarted, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "esstatus", v) })
 	}
@@ -210,25 +219,17 @@ func (esc *EventStreamSpec[CT]) validate(ctx context.Context, tlsConfigs map[str
 		err = checkSet(ctx, true /* type always applied */, "type", &esc.Type, EventStreamTypeWebSocket, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "estype", v) })
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
-	switch *esc.Type {
-	case EventStreamTypeWebSocket:
-		if esc.WebSocket == nil {
-			esc.WebSocket = &WebSocketConfig{}
-		}
-		if err := esc.WebSocket.validate(ctx, &defaults.WebSocketDefaults, setDefaults); err != nil {
-			return err
-		}
-	case EventStreamTypeWebhook:
-		if esc.Webhook == nil {
-			esc.Webhook = &WebhookConfig{}
-		}
-		if err := esc.Webhook.validate(ctx, tlsConfigs); err != nil {
-			return err
-		}
+	factory = esm.dispatchers[*esc.Type]
+	if factory == nil {
+		return nil, i18n.NewError(ctx, i18n.MsgESInvalidType, *esc.Type)
 	}
-	return nil
+	err = factory.Validate(ctx, &esm.config, esc, esm.tlsConfigs, phase)
+	if err != nil {
+		return nil, err
+	}
+	return factory, nil
 }
 
 type eventStream[CT any, DT any] struct {
@@ -236,7 +237,7 @@ type eventStream[CT any, DT any] struct {
 	esm         *esManager[CT, DT]
 	spec        *EventStreamSpec[CT]
 	mux         sync.Mutex
-	action      EventBatchDispatcher[DT]
+	action      Dispatcher[DT]
 	activeState *activeStream[CT, DT]
 	retry       *retry.Retry
 	persistence Persistence[CT]
@@ -254,7 +255,8 @@ func (esm *esManager[CT, DT]) initEventStream(
 	spec *EventStreamSpec[CT],
 ) (es *eventStream[CT, DT], err error) {
 	// Validate
-	if err := esm.validateStream(bgCtx, spec, true); err != nil {
+	factory, err := esm.validateStream(bgCtx, spec, LifecyclePhaseStarting)
+	if err != nil {
 		return nil, err
 	}
 
@@ -266,12 +268,7 @@ func (esm *esManager[CT, DT]) initEventStream(
 		retry:       esm.config.Retry,
 	}
 
-	switch *es.spec.Type {
-	case EventStreamTypeWebhook:
-		es.action = esm.newWebhookAction(es.bgCtx, spec.Webhook)
-	case EventStreamTypeWebSocket:
-		es.action = newWebSocketAction[DT](esm.wsChannels, spec.WebSocket, *spec.Name)
-	}
+	es.action = factory.NewDispatcher(es.bgCtx, &esm.config, spec)
 
 	log.L(es.bgCtx).Infof("Initialized Event Stream")
 	if *spec.Status == EventStreamStatusStarted {
@@ -279,10 +276,6 @@ func (esm *esManager[CT, DT]) initEventStream(
 		es.ensureActive()
 	}
 	return es, nil
-}
-
-func (esm *esManager[CT, DT]) validateStream(ctx context.Context, esSpec *EventStreamSpec[CT], setDefaults bool) error {
-	return esSpec.validate(ctx, esm.tlsConfigs, &esm.config.Defaults, esm.runtime.Validate, setDefaults)
 }
 
 func (es *eventStream[CT, DT]) requestStop(ctx context.Context) chan struct{} {

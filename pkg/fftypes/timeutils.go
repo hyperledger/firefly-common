@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -134,8 +134,11 @@ func (ft *FFTime) Scan(src interface{}) error {
 }
 
 // Value implements sql.Valuer
-func (ft FFTime) Value() (driver.Value, error) {
-	if time.Time(ft).IsZero() {
+func (ft *FFTime) Value() (driver.Value, error) {
+	if ft == nil {
+		return nil, nil
+	}
+	if time.Time(*ft).IsZero() {
 		return int64(0), nil
 	}
 	return ft.UnixNano(), nil
@@ -242,6 +245,9 @@ func (fd *FFDuration) Scan(src interface{}) error {
 
 // Value implements sql.Valuer
 func (fd *FFDuration) Value() (driver.Value, error) {
+	if fd == nil {
+		return nil, nil
+	}
 	return fd.String(), nil
 }
 

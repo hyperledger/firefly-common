@@ -75,3 +75,24 @@ func TestFilterResultAlwaysPaginateNoFilterResult(t *testing.T) {
 		Items: []string{"test"},
 	}, f)
 }
+
+func TestItemsResult(t *testing.T) {
+	f, err := ItemsResult([]string{"item1"}, &FilterResult{}, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"item1"}, f.Items)
+	assert.Equal(t, 1, f.Count)
+	assert.Nil(t, f.Total)
+
+	ten := int64(10)
+	f, err = ItemsResult([]string{"item1"}, &FilterResult{
+		TotalCount: &ten,
+	}, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"item1"}, f.Items)
+	assert.Equal(t, 1, f.Count)
+	assert.Equal(t, int64(10), *f.Total)
+}
+
+func TestCheckItemsResultDocs(t *testing.T) {
+	CheckObjectDocumented(&ItemsResultTyped[string]{})
+}

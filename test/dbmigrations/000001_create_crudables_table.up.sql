@@ -9,6 +9,7 @@ CREATE TABLE crudables (
   field2      VARCHAR(65),
   field3      TEXT,
   field4      BIGINT,
-  field5      BOOLEAN
+  field5      BOOLEAN,
+  field6      BIGINT
 );
 CREATE UNIQUE INDEX crudables_id ON crudables(ns, id);

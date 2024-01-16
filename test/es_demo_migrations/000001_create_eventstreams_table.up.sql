@@ -8,6 +8,7 @@ CREATE TABLE eventstreams (
   type                 VARCHAR(64),
   initial_sequence_id  TEXT,
   topic_filter         TEXT,
+  identity             TEXT,
   config               TEXT,
   error_handling       TEXT,
   batch_size           INT,

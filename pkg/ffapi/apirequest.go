@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -35,6 +35,7 @@ type APIRequest struct {
 	AlwaysPaginate  bool
 }
 
+// Encourage consideration for new APIs of using ItemsResult() - generic and documented, and always returns the same output for all queries
 // FilterResult is a helper to transform a filter result into a REST API standard payload
 func (r *APIRequest) FilterResult(items interface{}, res *FilterResult, err error) (interface{}, error) {
 	itemsVal := reflect.ValueOf(items)
@@ -52,4 +53,16 @@ func (r *APIRequest) FilterResult(items interface{}, res *FilterResult, err erro
 	}
 	return items, err
 
+}
+
+// ItemsResult is a helper to transform a filter result into a REST API standard payload
+func ItemsResult[T any](items []T, res *FilterResult, err error) (*ItemsResultTyped[T], error) {
+	response := &ItemsResultTyped[T]{
+		Items: items,
+	}
+	if res != nil {
+		response.Total = res.TotalCount
+	}
+	response.Count = len(items)
+	return response, err
 }

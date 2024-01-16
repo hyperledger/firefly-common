@@ -1,4 +1,4 @@
-// Copyright © 2021 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -86,8 +86,13 @@ func TestFFTimeDatabaseSerialization(t *testing.T) {
 	now := Now()
 	zero := ZeroTime()
 
-	var ft = &zero
+	var ft *FFTime
 	v, err := ft.Value()
+	assert.NoError(t, err)
+	assert.Nil(t, v)
+
+	ft = &zero
+	v, err = ft.Value()
 	assert.NoError(t, err)
 	assert.Equal(t, int64(0), v)
 
@@ -262,7 +267,8 @@ func TestFFDurationParseValue(t *testing.T) {
 	var pfd *FFDuration
 	v, err := pfd.Value()
 	assert.NoError(t, err)
-	assert.Equal(t, "", v)
+	assert.Equal(t, "", pfd.String())
+	assert.Nil(t, v)
 
 	pfd = &fd
 	*pfd = FFDuration(12345) * FFDuration(time.Millisecond)

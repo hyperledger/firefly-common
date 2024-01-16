@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -36,7 +36,7 @@ var (
 	APIFilterCountDesc      = ffm("api.filterCount", "Return a total count as well as items (adds extra database processing)")
 	APIFilterFieldsDesc     = ffm("api.filterFields", "Comma separated list of fields to return")
 
-	ResourceBaseID      = ffm("ResourceBase.id", "The UUID of the service")
+	ResourceBaseID      = ffm("ResourceBase.id", "The UUID of the resource")
 	ResourceBaseCreated = ffm("ResourceBase.created", "The time the resource was created")
 	ResourceBaseUpdated = ffm("ResourceBase.updated", "The time the resource was last updated")
 )

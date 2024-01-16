@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -18,6 +18,7 @@ package eventstreams
 
 import (
 	"context"
+	"crypto/tls"
 
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/ffresty"
@@ -26,12 +27,25 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/retry"
 )
 
-type Config struct {
+// DispatcherFactory is the interface to plug in a custom dispatcher, for example to provide
+// local in-process processing of events (in addition to remote WebSocket/Webhook consumption).
+// Generics:
+// - CT is the Configuration Type - the custom extensions to the configuration schema
+// - DT is the Data Type - the payload type that will be delivered to the application
+type DispatcherFactory[CT any, DT any] interface {
+	Validate(ctx context.Context, conf *Config[CT, DT], spec *EventStreamSpec[CT], tlsConfigs map[string]*tls.Config, phase LifecyclePhase) error
+	NewDispatcher(ctx context.Context, conf *Config[CT, DT], spec *EventStreamSpec[CT]) Dispatcher[DT]
+}
+
+type Config[CT any, DT any] struct {
 	TLSConfigs        map[string]*fftls.Config `ffstruct:"EventStreamConfig" json:"tlsConfigs,omitempty"`
 	Retry             *retry.Retry             `ffstruct:"EventStreamConfig" json:"retry,omitempty"`
 	DisablePrivateIPs bool                     `ffstruct:"EventStreamConfig" json:"disabledPrivateIPs"`
 	Checkpoints       CheckpointsTuningConfig  `ffstruct:"EventStreamConfig" json:"checkpoints"`
 	Defaults          EventStreamDefaults      `ffstruct:"EventStreamConfig" json:"defaults,omitempty"`
+
+	// Allow plugging in additional types (important that the embedding code adds the FFEnum doc entry for the EventStreamType)
+	AdditionalDispatchers map[EventStreamType]DispatcherFactory[CT, DT] `json:"-"`
 }
 
 type CheckpointsTuningConfig struct {
@@ -121,7 +135,7 @@ func InitConfig(conf config.Section) {
 
 // Optional function to generate config directly from YAML configuration using the config package.
 // You can also generate the configuration programmatically
-func GenerateConfig(ctx context.Context) *Config {
+func GenerateConfig[CT any, DT any](ctx context.Context) *Config[CT, DT] {
 	httpDefaults, _ := ffresty.GenerateConfig(ctx, WebhookDefaultsConfig)
 	tlsConfigs := map[string]*fftls.Config{}
 	for i := 0; i < TLSConfigs.ArraySize(); i++ {
@@ -129,7 +143,7 @@ func GenerateConfig(ctx context.Context) *Config {
 		name := tlsConf.GetString(ConfigTLSConfigName)
 		tlsConfigs[name] = fftls.GenerateConfig(tlsConf.SubSection("tls"))
 	}
-	return &Config{
+	return &Config[CT, DT]{
 		TLSConfigs:        tlsConfigs,
 		DisablePrivateIPs: RootConfig.GetBool(ConfigDisablePrivateIPs),
 		Checkpoints: CheckpointsTuningConfig{

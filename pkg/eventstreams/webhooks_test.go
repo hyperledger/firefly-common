@@ -18,6 +18,7 @@ package eventstreams
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -44,26 +45,32 @@ func newTestWebhooks(t *testing.T, whc *WebhookConfig, tweaks ...func()) *webhoo
 	})
 	done()
 
-	assert.NoError(t, whc.validate(ctx, mgr.tlsConfigs))
+	whf := &webhookDispatcherFactory[testESConfig, testData]{}
+	spec := &EventStreamSpec[testESConfig]{
+		Name:    ptrTo("stream1"),
+		Webhook: whc,
+	}
+	assert.NoError(t, whf.Validate(ctx, &mgr.config, spec, mgr.tlsConfigs, LifecyclePhaseStarting))
 
-	return mgr.newWebhookAction(context.Background(), whc)
+	return whf.NewDispatcher(context.Background(), &mgr.config, spec).(*webhookAction[testESConfig, testData])
 }
 
 func TestWebhooksConfigValidate(t *testing.T) {
 
-	wc := &WebhookConfig{}
-	assert.Regexp(t, "FF00216", wc.validate(context.Background(), nil))
+	whc := &WebhookConfig{}
+	whf := &webhookDispatcherFactory[testESConfig, testData]{}
+	spec := &EventStreamSpec[testESConfig]{
+		Webhook: whc,
+	}
+	assert.Regexp(t, "FF00216", whf.Validate(context.Background(), nil, spec, nil, LifecyclePhaseStarting))
 
 	u := "http://test.example"
-	wc.URL = &u
-	assert.NoError(t, wc.validate(context.Background(), nil))
+	whc.URL = &u
+	assert.NoError(t, whf.Validate(context.Background(), nil, spec, nil, LifecyclePhaseStarting))
 
 	tlsConfName := "wrong"
-	wc = &WebhookConfig{
-		URL:           &u,
-		TLSConfigName: &tlsConfName,
-	}
-	assert.Regexp(t, "FF00223", wc.validate(context.Background(), nil))
+	whc.TLSConfigName = &tlsConfName
+	assert.Regexp(t, "FF00223", whf.Validate(context.Background(), nil, spec, make(map[string]*tls.Config), LifecyclePhaseStarting))
 
 }
 

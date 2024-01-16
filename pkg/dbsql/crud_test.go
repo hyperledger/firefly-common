@@ -36,13 +36,14 @@ import (
 
 type TestCRUDable struct {
 	ResourceBase
-	NS     *string           `json:"namespace"`
-	Name   *string           `json:"name"`
-	Field1 *string           `json:"f1"`
-	Field2 *fftypes.FFBigInt `json:"f2"`
-	Field3 *fftypes.JSONAny  `json:"f3"`
-	Field4 *int64            `json:"f4"`
-	Field5 *bool             `json:"f5"`
+	NS     *string             `json:"namespace"`
+	Name   *string             `json:"name"`
+	Field1 *string             `json:"f1"`
+	Field2 *fftypes.FFBigInt   `json:"f2"`
+	Field3 *fftypes.JSONAny    `json:"f3"`
+	Field4 *int64              `json:"f4"`
+	Field5 *bool               `json:"f5"`
+	Field6 *fftypes.FFDuration `json:"f6"`
 }
 
 var CRUDableQueryFactory = &ffapi.QueryFields{
@@ -55,8 +56,8 @@ var CRUDableQueryFactory = &ffapi.QueryFields{
 	"f2":      &ffapi.BigIntField{},
 	"f3":      &ffapi.JSONField{},
 	"f4":      &ffapi.Int64Field{},
-	"f5":      &ffapi.JSONField{},
-	"f6":      &ffapi.BoolField{},
+	"f5":      &ffapi.BoolField{},
+	"f6":      &ffapi.Int64Field{},
 }
 
 // TestHistory shows a simple object:
@@ -177,6 +178,7 @@ func newCRUDCollection(db *Database, ns string) *TestCRUD {
 				"field3",
 				"field4",
 				"field5",
+				"field6",
 			},
 			FilterFieldMap: map[string]string{
 				"f1": "field1",
@@ -212,6 +214,8 @@ func newCRUDCollection(db *Database, ns string) *TestCRUD {
 					return &inst.Field4
 				case "field5":
 					return &inst.Field5
+				case "field6":
+					return &inst.Field6
 				}
 				return nil
 			},
