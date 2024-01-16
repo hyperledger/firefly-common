@@ -52,6 +52,9 @@ const (
 type Deliver[DT any] func(events []*Event[DT]) SourceInstruction
 
 // Runtime is the required implementation extension for the EventStream common utility
+// Generics:
+// - ConfigType is the Configuration Type - the custom extensions to the configuration schema
+// - DataType is the Data Type - the payload type that will be delivered to the application
 type Runtime[ConfigType any, DataType any] interface {
 	// Generate a new unique resource ID (such as a UUID)
 	NewID() string

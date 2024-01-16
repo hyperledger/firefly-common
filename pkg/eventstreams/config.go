@@ -27,6 +27,11 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/retry"
 )
 
+// DispatcherFactory is the interface to plug in a custom dispatcher, for example to provide
+// local in-process processing of events (in addition to remote WebSocket/Webhook consumption).
+// Generics:
+// - CT is the Configuration Type - the custom extensions to the configuration schema
+// - DT is the Data Type - the payload type that will be delivered to the application
 type DispatcherFactory[CT any, DT any] interface {
 	Validate(ctx context.Context, conf *Config[CT, DT], spec *EventStreamSpec[CT], tlsConfigs map[string]*tls.Config, phase LifecyclePhase) error
 	NewDispatcher(ctx context.Context, conf *Config[CT, DT], spec *EventStreamSpec[CT]) Dispatcher[DT]
