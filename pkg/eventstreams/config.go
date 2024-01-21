@@ -32,12 +32,12 @@ import (
 // Generics:
 // - CT is the Configuration Type - the custom extensions to the configuration schema
 // - DT is the Data Type - the payload type that will be delivered to the application
-type DispatcherFactory[CT any, DT any] interface {
-	Validate(ctx context.Context, conf *Config[CT, DT], spec *EventStreamSpec[CT], tlsConfigs map[string]*tls.Config, phase LifecyclePhase) error
-	NewDispatcher(ctx context.Context, conf *Config[CT, DT], spec *EventStreamSpec[CT]) Dispatcher[DT]
+type DispatcherFactory[CT EventStreamSpec, DT any] interface {
+	Validate(ctx context.Context, conf *Config[CT, DT], spec CT, tlsConfigs map[string]*tls.Config, phase LifecyclePhase) error
+	NewDispatcher(ctx context.Context, conf *Config[CT, DT], spec CT) Dispatcher[DT]
 }
 
-type Config[CT any, DT any] struct {
+type Config[CT EventStreamSpec, DT any] struct {
 	TLSConfigs        map[string]*fftls.Config `ffstruct:"EventStreamConfig" json:"tlsConfigs,omitempty"`
 	Retry             *retry.Retry             `ffstruct:"EventStreamConfig" json:"retry,omitempty"`
 	DisablePrivateIPs bool                     `ffstruct:"EventStreamConfig" json:"disabledPrivateIPs"`
@@ -135,7 +135,7 @@ func InitConfig(conf config.Section) {
 
 // Optional function to generate config directly from YAML configuration using the config package.
 // You can also generate the configuration programmatically
-func GenerateConfig[CT any, DT any](ctx context.Context) *Config[CT, DT] {
+func GenerateConfig[CT EventStreamSpec, DT any](ctx context.Context) *Config[CT, DT] {
 	httpDefaults, _ := ffresty.GenerateConfig(ctx, WebhookDefaultsConfig)
 	tlsConfigs := map[string]*fftls.Config{}
 	for i := 0; i < TLSConfigs.ArraySize(); i++ {

@@ -38,7 +38,7 @@ type WebSocketConfig struct {
 	DistributionMode *DistributionMode `ffstruct:"wsconfig" json:"distributionMode,omitempty"`
 }
 
-type webSocketDispatcherFactory[CT any, DT any] struct {
+type webSocketDispatcherFactory[CT EventStreamSpec, DT any] struct {
 	esm *esManager[CT, DT]
 }
 
@@ -55,12 +55,10 @@ func (wc *WebSocketConfig) Value() (driver.Value, error) {
 	return fftypes.JSONValue(wc)
 }
 
-func (wsf *webSocketDispatcherFactory[CT, DT]) Validate(ctx context.Context, conf *Config[CT, DT], spec *EventStreamSpec[CT], _ map[string]*tls.Config, phase LifecyclePhase) error {
-	if spec.WebSocket == nil {
-		spec.WebSocket = &WebSocketConfig{}
-	}
+func (wsf *webSocketDispatcherFactory[CT, DT]) Validate(ctx context.Context, conf *Config[CT, DT], spec CT, _ map[string]*tls.Config, phase LifecyclePhase) error {
+	wsc := spec.WebSocketConf()
 	setDefaults := phase == LifecyclePhaseStarting
-	return checkSet(ctx, setDefaults, "distributionMode", &spec.WebSocket.DistributionMode, conf.Defaults.WebSocketDefaults.DefaultDistributionMode, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "distmode", v) })
+	return checkSet(ctx, setDefaults, "distributionMode", &wsc.DistributionMode, conf.Defaults.WebSocketDefaults.DefaultDistributionMode, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "distmode", v) })
 }
 
 type webSocketAction[DT any] struct {
@@ -69,11 +67,11 @@ type webSocketAction[DT any] struct {
 	wsChannels wsserver.WebSocketChannels
 }
 
-func (wsf *webSocketDispatcherFactory[CT, DT]) NewDispatcher(_ context.Context, _ *Config[CT, DT], spec *EventStreamSpec[CT]) Dispatcher[DT] {
+func (wsf *webSocketDispatcherFactory[CT, DT]) NewDispatcher(_ context.Context, _ *Config[CT, DT], spec CT) Dispatcher[DT] {
 	return &webSocketAction[DT]{
-		spec:       spec.WebSocket,
+		spec:       spec.WebSocketConf(),
 		wsChannels: wsf.esm.wsChannels,
-		topic:      *spec.Name,
+		topic:      *spec.ESFields().Name,
 	}
 }
 

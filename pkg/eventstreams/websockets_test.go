@@ -37,16 +37,16 @@ func mockWSChannels(wsc *wsservermocks.WebSocketChannels) (chan interface{}, cha
 	return senderChannel, broadcastChannel, receiverChannel
 }
 
-func newTestWebSocketsFactory(t *testing.T) (context.Context, *esManager[testESConfig, testData], *wsservermocks.WebSocketChannels, *webSocketDispatcherFactory[testESConfig, testData]) {
+func newTestWebSocketsFactory(t *testing.T) (context.Context, *esManager[*GenericEventStream, testData], *wsservermocks.WebSocketChannels, *webSocketDispatcherFactory[*GenericEventStream, testData]) {
 	ctx, mgr, _, done := newMockESManager(t, func(mdb *mockPersistence) {
-		mdb.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil)
+		mdb.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{}, &ffapi.FilterResult{}, nil)
 	})
 	done()
 
 	mws := wsservermocks.NewWebSocketChannels(t)
 	mgr.wsChannels = mws
 
-	return ctx, mgr, mws, &webSocketDispatcherFactory[testESConfig, testData]{esm: mgr}
+	return ctx, mgr, mws, &webSocketDispatcherFactory[*GenericEventStream, testData]{esm: mgr}
 }
 
 func TestWSAttemptIgnoreWrongAcks(t *testing.T) {
@@ -64,8 +64,10 @@ func TestWSAttemptIgnoreWrongAcks(t *testing.T) {
 	}()
 
 	dmw := DistributionModeBroadcast
-	spec := &EventStreamSpec[testESConfig]{
-		Name: ptrTo("ut_stream"),
+	spec := &GenericEventStream{
+		EventStreamSpecFields: EventStreamSpecFields{
+			Name: ptrTo("ut_stream"),
+		},
 		WebSocket: &WebSocketConfig{
 			DistributionMode: &dmw,
 		},
@@ -92,8 +94,10 @@ func TestWSattemptDispatchExitPushingEvent(t *testing.T) {
 	bc <- []*fftypes.JSONAny{} // block the broadcast channel
 
 	dmw := DistributionModeBroadcast
-	spec := &EventStreamSpec[testESConfig]{
-		Name: ptrTo("ut_stream"),
+	spec := &GenericEventStream{
+		EventStreamSpecFields: EventStreamSpecFields{
+			Name: ptrTo("ut_stream"),
+		},
 		WebSocket: &WebSocketConfig{
 			DistributionMode: &dmw,
 		},
@@ -119,8 +123,10 @@ func TestWSattemptDispatchExitReceivingReply(t *testing.T) {
 	_, _, rc := mockWSChannels(mws)
 
 	dmw := DistributionModeBroadcast
-	spec := &EventStreamSpec[testESConfig]{
-		Name: ptrTo("ut_stream"),
+	spec := &GenericEventStream{
+		EventStreamSpecFields: EventStreamSpecFields{
+			Name: ptrTo("ut_stream"),
+		},
 		WebSocket: &WebSocketConfig{
 			DistributionMode: &dmw,
 		},
@@ -143,8 +149,10 @@ func TestWSattemptDispatchNackFromClient(t *testing.T) {
 	}
 
 	dmw := DistributionModeBroadcast
-	spec := &EventStreamSpec[testESConfig]{
-		Name: ptrTo("ut_stream"),
+	spec := &GenericEventStream{
+		EventStreamSpecFields: EventStreamSpecFields{
+			Name: ptrTo("ut_stream"),
+		},
 		WebSocket: &WebSocketConfig{
 			DistributionMode: &dmw,
 		},

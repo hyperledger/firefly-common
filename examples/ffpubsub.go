@@ -19,7 +19,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"database/sql/driver"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -47,9 +46,7 @@ func main() {
 
 	// This demo:  Just create a single event stream
 	// Real world: You would create ffapi.Route objects for the CRUD actions on mgr
-	_, err := mgr.UpsertStream(ctx, &eventstreams.EventStreamSpec[pubSubConfig]{
-		Name: ptrTo("demo"),
-	})
+	_, err := mgr.UpsertStream(ctx, "demo", &eventstreams.GenericEventStream{})
 	assertNoError(err)
 
 	// Read lines from standard in, and pass them to all active routines
@@ -65,19 +62,7 @@ func main() {
 	}
 }
 
-type pubSubESManager = eventstreams.Manager[pubSubConfig]
-
-type pubSubConfig struct {
-	// no extra config
-}
-
-func (psc *pubSubConfig) Scan(src interface{}) error {
-	return fftypes.JSONScan(src, psc)
-}
-
-func (psc *pubSubConfig) Value() (driver.Value, error) {
-	return fftypes.JSONValue(psc)
-}
+type pubSubESManager = eventstreams.Manager[*eventstreams.GenericEventStream]
 
 type pubSubMessage struct {
 	Message string `json:"message"`
@@ -93,11 +78,15 @@ func (ims *inMemoryStream) NewID() string {
 	return fftypes.NewUUID().String()
 }
 
-func (ims *inMemoryStream) Validate(_ context.Context, _ *pubSubConfig) error {
+func (ims *inMemoryStream) Validate(_ context.Context, _ *eventstreams.GenericEventStream) error {
 	return nil // no config defined in pubSubConfig to validate
 }
 
-func (ims *inMemoryStream) Run(_ context.Context, _ *eventstreams.EventStreamSpec[pubSubConfig], checkpointSequenceID string, deliver eventstreams.Deliver[pubSubMessage]) (err error) {
+func (ims *inMemoryStream) WithRuntimeStatus(spec *eventstreams.GenericEventStream, status eventstreams.EventStreamStatus, stats *eventstreams.EventStreamStatistics) *eventstreams.GenericEventStream {
+	return spec.WithRuntimeStatus(status, stats)
+}
+
+func (ims *inMemoryStream) Run(_ context.Context, _ *eventstreams.GenericEventStream, checkpointSequenceID string, deliver eventstreams.Deliver[pubSubMessage]) (err error) {
 	var index int
 	if checkpointSequenceID != "" {
 		index, err = strconv.Atoi(checkpointSequenceID)
@@ -135,10 +124,6 @@ func (ims *inMemoryStream) Run(_ context.Context, _ *eventstreams.EventStreamSpe
 	}
 }
 
-func ptrTo[T any](v T) *T {
-	return &v
-}
-
 func setup(ctx context.Context) (pubSubESManager, *inMemoryStream, func()) {
 	// Use SQLite in-memory DB
 	conf := config.RootSection("ffpubsub")
@@ -161,13 +146,13 @@ func setup(ctx context.Context) (pubSubESManager, *inMemoryStream, func()) {
 	u.Scheme = "ws"
 	log.L(ctx).Infof("Running on: %s", u)
 
-	p := eventstreams.NewEventStreamPersistence[pubSubConfig](sql, dbsql.UUIDValidator)
-	c := eventstreams.GenerateConfig[pubSubConfig, pubSubMessage](ctx)
+	p := eventstreams.NewGenericEventStreamPersistence(sql, dbsql.UUIDValidator)
+	c := eventstreams.GenerateConfig[*eventstreams.GenericEventStream, pubSubMessage](ctx)
 	ims := &inMemoryStream{
 		messages:    []string{},
 		newMessages: *sync.NewCond(new(sync.Mutex)),
 	}
-	mgr, err := eventstreams.NewEventStreamManager[pubSubConfig, pubSubMessage](ctx, c, p, wsServer, ims)
+	mgr, err := eventstreams.NewEventStreamManager[*eventstreams.GenericEventStream, pubSubMessage](ctx, c, p, wsServer, ims)
 	assertNoError(err)
 	return mgr, ims, func() {
 		log.L(ctx).Infof("Shutting down")

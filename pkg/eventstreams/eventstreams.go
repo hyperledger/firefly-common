@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"sync"
 
+	"github.com/hyperledger/firefly-common/pkg/dbsql"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
@@ -77,17 +78,22 @@ type DBSerializable interface {
 	driver.Valuer
 }
 
-type EventStreamSpec[CT any] struct {
-	ID                *string            `ffstruct:"eventstream" json:"id"`
-	Created           *fftypes.FFTime    `ffstruct:"eventstream" json:"created"`
-	Updated           *fftypes.FFTime    `ffstruct:"eventstream" json:"updated"`
+type EventStreamSpec interface {
+	dbsql.Resource
+	SetID(s string)
+	ESFields() *EventStreamSpecFields
+	ESType() EventStreamType         // separated from fields to allow choice on restrictions
+	WebhookConf() *WebhookConfig     // can return nil if Webhooks not supported
+	WebSocketConf() *WebSocketConfig // can return nil if WebSockets not supported
+	IsNil() bool                     // needed as quirk of using interfaces with generics
+}
+
+type EventStreamSpecFields struct {
 	Name              *string            `ffstruct:"eventstream" json:"name,omitempty"`
 	Status            *EventStreamStatus `ffstruct:"eventstream" json:"status,omitempty"`
-	Type              *EventStreamType   `ffstruct:"eventstream" json:"type,omitempty" ffenum:"estype"`
 	InitialSequenceID *string            `ffstruct:"eventstream" json:"initialSequenceID,omitempty"`
 	TopicFilter       *string            `ffstruct:"eventstream" json:"topicFilter,omitempty"`
 	Identity          *string            `ffstruct:"eventstream" json:"identity,omitempty"`
-	Config            *CT                `ffstruct:"eventstream" json:"config,omitempty"`
 
 	ErrorHandling     *ErrorHandlingType  `ffstruct:"eventstream" json:"errorHandling"`
 	BatchSize         *int                `ffstruct:"eventstream" json:"batchSize"`
@@ -95,25 +101,7 @@ type EventStreamSpec[CT any] struct {
 	RetryTimeout      *fftypes.FFDuration `ffstruct:"eventstream" json:"retryTimeout"`
 	BlockedRetryDelay *fftypes.FFDuration `ffstruct:"eventstream" json:"blockedRetryDelay"`
 
-	Webhook   *WebhookConfig   `ffstruct:"eventstream" json:"webhook,omitempty"`
-	WebSocket *WebSocketConfig `ffstruct:"eventstream" json:"websocket,omitempty"`
-
 	topicFilterRegexp *regexp.Regexp
-}
-
-func (esc *EventStreamSpec[CT]) GetID() string {
-	if esc.ID == nil {
-		return ""
-	}
-	return *esc.ID
-}
-
-func (esc *EventStreamSpec[CT]) SetCreated(t *fftypes.FFTime) {
-	esc.Created = t
-}
-
-func (esc *EventStreamSpec[CT]) SetUpdated(t *fftypes.FFTime) {
-	esc.Updated = t
 }
 
 type EventStreamStatistics struct {
@@ -126,12 +114,6 @@ type EventStreamStatistics struct {
 	HighestDetected      string          `ffstruct:"EventStreamStatistics" json:"highestDetected"`
 	HighestDispatched    string          `ffstruct:"EventStreamStatistics" json:"highestDispatched"`
 	Checkpoint           string          `ffstruct:"EventStreamStatistics" json:"checkpoint"`
-}
-
-type EventStreamWithStatus[CT any] struct {
-	*EventStreamSpec[CT]
-	Status     EventStreamStatus      `ffstruct:"EventStream" json:"status"`
-	Statistics *EventStreamStatistics `ffstruct:"EventStream" json:"statistics,omitempty"`
 }
 
 type EventStreamCheckpoint struct {
@@ -181,7 +163,8 @@ func checkSet[T any](ctx context.Context, storeDefaults bool, fieldName string, 
 // Optionally it stores the defaults back on the structure, to ensure no nil fields.
 // - When using at runtime: true, so later code doesn't need to worry about nil checks / defaults
 // - When storing to the DB: false, so defaults can be applied dynamically
-func (esm *esManager[CT, DT]) validateStream(ctx context.Context, esc *EventStreamSpec[CT], phase LifecyclePhase) (factory DispatcherFactory[CT, DT], err error) {
+func (esm *esManager[CT, DT]) validateStream(ctx context.Context, spec CT, phase LifecyclePhase) (factory DispatcherFactory[CT, DT], err error) {
+	esc := spec.ESFields()
 	if esc.Name == nil {
 		return nil, i18n.NewError(ctx, i18n.MsgMissingRequiredField, "name")
 	}
@@ -192,7 +175,7 @@ func (esm *esManager[CT, DT]) validateStream(ctx context.Context, esc *EventStre
 		}
 	}
 	defaults := esm.config.Defaults
-	if err := esm.runtime.Validate(ctx, esc.Config); err != nil {
+	if err := esm.runtime.Validate(ctx, spec); err != nil {
 		return nil, err
 	}
 	err = fftypes.ValidateFFNameField(ctx, *esc.Name, "name")
@@ -215,27 +198,30 @@ func (esm *esManager[CT, DT]) validateStream(ctx context.Context, esc *EventStre
 	if err == nil {
 		err = checkSet(ctx, setDefaults, "errorHandling", &esc.ErrorHandling, defaults.ErrorHandling, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "ehtype", v) })
 	}
+	esType := spec.ESType()
 	if err == nil {
-		err = checkSet(ctx, true /* type always applied */, "type", &esc.Type, EventStreamTypeWebSocket, func(v fftypes.FFEnum) bool { return fftypes.FFEnumValid(ctx, "estype", v) })
+		if !fftypes.FFEnumValid(ctx, "estype", esType) {
+			err = i18n.NewError(ctx, i18n.MsgInvalidValue, esType, "type")
+		}
 	}
 	if err != nil {
 		return nil, err
 	}
-	factory = esm.dispatchers[*esc.Type]
+	factory = esm.dispatchers[esType]
 	if factory == nil {
-		return nil, i18n.NewError(ctx, i18n.MsgESInvalidType, *esc.Type)
+		return nil, i18n.NewError(ctx, i18n.MsgESInvalidType, esType)
 	}
-	err = factory.Validate(ctx, &esm.config, esc, esm.tlsConfigs, phase)
+	err = factory.Validate(ctx, &esm.config, spec, esm.tlsConfigs, phase)
 	if err != nil {
 		return nil, err
 	}
 	return factory, nil
 }
 
-type eventStream[CT any, DT any] struct {
+type eventStream[CT EventStreamSpec, DT any] struct {
 	bgCtx       context.Context
 	esm         *esManager[CT, DT]
-	spec        *EventStreamSpec[CT]
+	spec        CT
 	mux         sync.Mutex
 	action      Dispatcher[DT]
 	activeState *activeStream[CT, DT]
@@ -247,12 +233,12 @@ type eventStream[CT any, DT any] struct {
 type EventStreamActions[CT any] interface {
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
-	Status(ctx context.Context) *EventStreamWithStatus[CT]
+	Status(ctx context.Context) CT
 }
 
 func (esm *esManager[CT, DT]) initEventStream(
 	bgCtx context.Context,
-	spec *EventStreamSpec[CT],
+	spec CT,
 ) (es *eventStream[CT, DT], err error) {
 	// Validate
 	factory, err := esm.validateStream(bgCtx, spec, LifecyclePhaseStarting)
@@ -261,7 +247,7 @@ func (esm *esManager[CT, DT]) initEventStream(
 	}
 
 	es = &eventStream[CT, DT]{
-		bgCtx:       log.WithLogField(bgCtx, "eventstream", *spec.Name),
+		bgCtx:       log.WithLogField(bgCtx, "eventstream", *spec.ESFields().Name),
 		esm:         esm,
 		spec:        spec,
 		persistence: esm.persistence,
@@ -271,7 +257,7 @@ func (esm *esManager[CT, DT]) initEventStream(
 	es.action = factory.NewDispatcher(es.bgCtx, &esm.config, spec)
 
 	log.L(es.bgCtx).Infof("Initialized Event Stream")
-	if *spec.Status == EventStreamStatusStarted {
+	if *spec.ESFields().Status == EventStreamStatusStarted {
 		// Start up the stream
 		es.ensureActive()
 	}
@@ -290,7 +276,7 @@ func (es *eventStream[CT, DT]) requestStop(ctx context.Context) chan struct{} {
 	if es.stopping != nil {
 		return es.stopping
 	}
-	persistedStatus := *es.spec.Status
+	persistedStatus := *es.spec.ESFields().Status
 	// Cancel the active context, and create the stopping task
 	activeState.cancelCtx()
 	closedWhenStopped := make(chan struct{})
@@ -321,7 +307,7 @@ func (es *eventStream[CT, DT]) checkSetStatus(ctx context.Context, targetStatus 
 
 	transition := func(runtime, persited EventStreamStatus) {
 		newRuntimeStatus = runtime
-		es.spec.Status = &persited
+		es.spec.ESFields().Status = &persited
 		changeToPersist = &persited
 	}
 
@@ -331,7 +317,7 @@ func (es *eventStream[CT, DT]) checkSetStatus(ctx context.Context, targetStatus 
 	}
 
 	// Check valid state transitions based on the persisted status, and whether we are stopping
-	switch *es.spec.Status {
+	switch *es.spec.ESFields().Status {
 	case EventStreamStatusDeleted:
 		newRuntimeStatus = EventStreamStatusDeleted
 		if es.stopping != nil {
@@ -443,11 +429,7 @@ func (es *eventStream[CT, DT]) start(ctx context.Context) error {
 	return nil
 }
 
-func (es *eventStream[CT, DT]) Status(ctx context.Context) *EventStreamWithStatus[CT] {
+func (es *eventStream[CT, DT]) WithStatus(ctx context.Context) CT {
 	status, _, statistics, _ := es.checkSetStatus(ctx, nil)
-	return &EventStreamWithStatus[CT]{
-		EventStreamSpec: es.spec,
-		Status:          status,
-		Statistics:      statistics,
-	}
+	return es.esm.runtime.WithRuntimeStatus(es.spec, status, statistics)
 }

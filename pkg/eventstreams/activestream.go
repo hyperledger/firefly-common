@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -33,7 +33,7 @@ type eventStreamBatch[DataType any] struct {
 	batchTimer *time.Timer
 }
 
-type activeStream[CT any, DT any] struct {
+type activeStream[CT EventStreamSpec, DT any] struct {
 	*eventStream[CT, DT]
 	ctx           context.Context
 	cancelCtx     func()
@@ -60,7 +60,7 @@ func (es *eventStream[CT, DT]) newActiveStream() *activeStream[CT, DT] {
 		},
 		eventLoopDone: make(chan struct{}),
 		batchLoopDone: make(chan struct{}),
-		events:        make(chan *Event[DT], *es.spec.BatchSize),
+		events:        make(chan *Event[DT], *es.spec.ESFields().BatchSize),
 	}
 	go as.runEventLoop()
 	go as.runBatchLoop()
@@ -98,8 +98,8 @@ func (as *activeStream[CT, DT]) loadCheckpoint() (sequencedID string, err error)
 		}
 		if cp != nil && cp.SequenceID != nil {
 			sequencedID = *cp.SequenceID
-		} else if as.spec.InitialSequenceID != nil {
-			sequencedID = *as.spec.InitialSequenceID
+		} else if as.spec.ESFields().InitialSequenceID != nil {
+			sequencedID = *as.spec.ESFields().InitialSequenceID
 		}
 		return true, err
 	})
@@ -107,8 +107,9 @@ func (as *activeStream[CT, DT]) loadCheckpoint() (sequencedID string, err error)
 }
 
 func (as *activeStream[CT, DT]) checkFilter(event *Event[DT]) bool {
-	if as.spec.topicFilterRegexp != nil {
-		return as.spec.topicFilterRegexp.Match([]byte(event.Topic))
+	esSpec := as.spec.ESFields()
+	if esSpec.topicFilterRegexp != nil {
+		return esSpec.topicFilterRegexp.Match([]byte(event.Topic))
 	}
 	return true
 }
@@ -149,8 +150,9 @@ func (as *activeStream[CT, DT]) runSourceLoop(initialCheckpointSequenceID string
 func (as *activeStream[CT, DT]) runBatchLoop() {
 	defer close(as.batchLoopDone)
 
+	esSpec := as.spec.ESFields()
 	var batch *eventStreamBatch[DT]
-	batchTimeout := time.Duration(*as.spec.BatchTimeout)
+	batchTimeout := time.Duration(*esSpec.BatchTimeout)
 	var noBatchActive <-chan time.Time = make(chan time.Time) // never pops
 	batchTimedOut := noBatchActive
 	for {
@@ -173,7 +175,7 @@ func (as *activeStream[CT, DT]) runBatchLoop() {
 					batch = &eventStreamBatch[DT]{
 						number:     as.batchNumber,
 						batchTimer: time.NewTimer(batchTimeout),
-						events:     make([]*Event[DT], 0, *as.spec.BatchSize),
+						events:     make([]*Event[DT], 0, *esSpec.BatchSize),
 					}
 					batchTimedOut = batch.batchTimer.C
 				}
@@ -181,7 +183,7 @@ func (as *activeStream[CT, DT]) runBatchLoop() {
 			}
 		}
 		batchDispatched := false
-		if batch != nil && (len(batch.events) >= *as.spec.BatchSize || timedOut) {
+		if batch != nil && (len(batch.events) >= *esSpec.BatchSize || timedOut) {
 			// attempt dispatch (only returns err on exit)
 			if err := as.dispatchBatch(batch); err != nil {
 				log.L(as.ctx).Debugf("batch loop done: %s", err)
@@ -266,6 +268,7 @@ func (as *activeStream[CT, DT]) dispatchBatch(batch *eventStreamBatch[DT]) (err 
 	as.LastDispatchAttempts = 0
 	as.LastDispatchStatus = DispatchStatusDispatching
 	as.HighestDispatched = batch.events[len(batch.events)-1].SequenceID
+	esSpec := as.spec.ESFields()
 	for {
 		// Short exponential back-off retry
 		err := as.retry.Do(as.ctx, "action", func(_ int) (retry bool, err error) {
@@ -281,7 +284,7 @@ func (as *activeStream[CT, DT]) dispatchBatch(batch *eventStreamBatch[DT]) (err 
 				as.LastDispatchAttempts++
 				as.LastDispatchFailure = err.Error()
 				as.LastDispatchStatus = DispatchStatusRetrying
-				return time.Since(*as.LastDispatchTime.Time()) < time.Duration(*as.spec.RetryTimeout), err
+				return time.Since(*as.LastDispatchTime.Time()) < time.Duration(*esSpec.RetryTimeout), err
 			}
 			as.LastDispatchStatus = DispatchStatusComplete
 			return false, nil
@@ -292,14 +295,14 @@ func (as *activeStream[CT, DT]) dispatchBatch(batch *eventStreamBatch[DT]) (err 
 		// We're in blocked retry delay
 		as.LastDispatchStatus = DispatchStatusBlocked
 		log.L(as.ctx).Errorf("Batch failed short retry after %.2fs secs. ErrorHandling=%s BlockedRetryDelay=%.2fs ",
-			time.Since(*as.LastDispatchTime.Time()).Seconds(), *as.spec.ErrorHandling, time.Duration(*as.spec.BlockedRetryDelay).Seconds())
-		if *as.spec.ErrorHandling == ErrorHandlingTypeSkip {
+			time.Since(*as.LastDispatchTime.Time()).Seconds(), *esSpec.ErrorHandling, time.Duration(*esSpec.BlockedRetryDelay).Seconds())
+		if *esSpec.ErrorHandling == ErrorHandlingTypeSkip {
 			// Swallow the error now we have logged it
 			as.LastDispatchStatus = DispatchStatusSkipped
 			return nil
 		}
 		select {
-		case <-time.After(time.Duration(*as.spec.BlockedRetryDelay)):
+		case <-time.After(time.Duration(*esSpec.BlockedRetryDelay)):
 		case <-as.ctx.Done():
 			// Only way we exit with error, is if the context is cancelled
 			return i18n.NewError(as.ctx, i18n.MsgContextCanceled)

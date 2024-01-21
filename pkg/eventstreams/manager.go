@@ -19,7 +19,6 @@ package eventstreams
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"sync"
 
 	"github.com/hyperledger/firefly-common/pkg/dbsql"
@@ -30,11 +29,11 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/wsserver"
 )
 
-type Manager[CT any] interface {
-	UpsertStream(ctx context.Context, nameOrID string, esSpec *EventStreamSpec[CT]) (bool, error)
-	GetStreamByID(ctx context.Context, id string, opts ...dbsql.GetOption) (*EventStreamWithStatus[CT], error)
-	GetStreamByNameOrID(ctx context.Context, nameOrID string, opts ...dbsql.GetOption) (*EventStreamWithStatus[CT], error)
-	ListStreams(ctx context.Context, filter ffapi.Filter) ([]*EventStreamWithStatus[CT], *ffapi.FilterResult, error)
+type Manager[CT EventStreamSpec] interface {
+	UpsertStream(ctx context.Context, nameOrID string, esSpec CT) (bool, error)
+	GetStreamByID(ctx context.Context, id string, opts ...dbsql.GetOption) (CT, error)
+	GetStreamByNameOrID(ctx context.Context, nameOrID string, opts ...dbsql.GetOption) (CT, error)
+	ListStreams(ctx context.Context, filter ffapi.Filter) ([]CT, *ffapi.FilterResult, error)
 	StopStream(ctx context.Context, nameOrID string) error
 	StartStream(ctx context.Context, nameOrID string) error
 	ResetStream(ctx context.Context, nameOrID string, sequenceID string) error
@@ -55,11 +54,13 @@ type Deliver[DT any] func(events []*Event[DT]) SourceInstruction
 // Generics:
 // - ConfigType is the Configuration Type - the custom extensions to the configuration schema
 // - DataType is the Data Type - the payload type that will be delivered to the application
-type Runtime[ConfigType any, DataType any] interface {
+type Runtime[ConfigType EventStreamSpec, DataType any] interface {
 	// Generate a new unique resource ID (such as a UUID)
 	NewID() string
+	// Return a COPY of the config object with runtime status and statistics (runtime enrichment)
+	WithRuntimeStatus(spec ConfigType, status EventStreamStatus, stats *EventStreamStatistics) ConfigType
 	// Type specific config validation goes here
-	Validate(ctx context.Context, config *ConfigType) error
+	Validate(ctx context.Context, config ConfigType) error
 	// The run function should execute in a loop detecting events until instructed to stop:
 	// - The Run function should block when no events are available
 	//   - Must detect if the context is closed (see below)
@@ -70,10 +71,10 @@ type Runtime[ConfigType any, DataType any] interface {
 	//   1. In any blocking i/o functions
 	//   2. To wake any sleeps early, such as batch polling scenarios
 	// - If the function returns without an Exit instruction, it will be restarted from the last checkpoint
-	Run(ctx context.Context, spec *EventStreamSpec[ConfigType], checkpointSequenceID string, deliver Deliver[DataType]) error
+	Run(ctx context.Context, spec ConfigType, checkpointSequenceID string, deliver Deliver[DataType]) error
 }
 
-type esManager[CT any, DT any] struct {
+type esManager[CT EventStreamSpec, DT any] struct {
 	config      Config[CT, DT]
 	mux         sync.Mutex
 	streams     map[string]*eventStream[CT, DT]
@@ -84,12 +85,8 @@ type esManager[CT any, DT any] struct {
 	dispatchers map[EventStreamType]DispatcherFactory[CT, DT]
 }
 
-func NewEventStreamManager[CT any, DT any](ctx context.Context, config *Config[CT, DT], p Persistence[CT], wsChannels wsserver.WebSocketChannels, source Runtime[CT, DT]) (es Manager[CT], err error) {
+func NewEventStreamManager[CT EventStreamSpec, DT any](ctx context.Context, config *Config[CT, DT], p Persistence[CT], wsChannels wsserver.WebSocketChannels, source Runtime[CT, DT]) (es Manager[CT], err error) {
 
-	var confExample interface{} = new(CT)
-	if _, isDBSerializable := (confExample).(DBSerializable); !isDBSerializable {
-		panic(fmt.Sprintf("Config type must be DB serializable: %T", confExample))
-	}
 	if config.Retry == nil {
 		return nil, i18n.NewError(ctx, i18n.MsgESConfigNotInitialized)
 	}
@@ -123,7 +120,7 @@ func NewEventStreamManager[CT any, DT any](ctx context.Context, config *Config[C
 }
 
 func (esm *esManager[CT, DT]) addStream(ctx context.Context, es *eventStream[CT, DT]) {
-	log.L(ctx).Infof("Adding stream '%s' [%s] (%s)", *es.spec.Name, es.spec.GetID(), es.Status(ctx).Status)
+	log.L(ctx).Infof("Adding stream '%s' [%s] (%s)", *es.spec.ESFields().Name, es.spec.GetID(), es.WithStatus(ctx).ESFields().Status)
 	esm.mux.Lock()
 	defer esm.mux.Unlock()
 	esm.streams[es.spec.GetID()] = es
@@ -140,7 +137,7 @@ func (esm *esManager[CT, DT]) getStreamByNameOrID(ctx context.Context, nameOrID 
 	if err != nil {
 		return nil, err
 	}
-	es := esm.getStream(*stream.ID)
+	es := esm.getStream(stream.GetID())
 	if es == nil {
 		return nil, i18n.NewError(ctx, i18n.Msg404NoResult)
 	}
@@ -166,7 +163,7 @@ func (esm *esManager[CT, DT]) initialize(ctx context.Context) error {
 			break
 		}
 		for _, esSpec := range streams {
-			if *esSpec.Status == EventStreamStatusDeleted {
+			if *esSpec.ESFields().Status == EventStreamStatusDeleted {
 				if err := esm.persistence.EventStreams().Delete(ctx, esSpec.GetID()); err != nil {
 					return err
 				}
@@ -183,13 +180,14 @@ func (esm *esManager[CT, DT]) initialize(ctx context.Context) error {
 	return nil
 }
 
-func (esm *esManager[CT, DT]) UpsertStream(ctx context.Context, nameOrID string, esSpec *EventStreamSpec[CT]) (bool, error) {
+func (esm *esManager[CT, DT]) UpsertStream(ctx context.Context, nameOrID string, spec CT) (bool, error) {
 
+	esSpec := spec.ESFields()
 	validID := nameOrID != "" && esm.persistence.IDValidator()(ctx, nameOrID) == nil
 	var existing *eventStream[CT, DT]
 	if validID {
 		// Updating by ID
-		esSpec.ID = &nameOrID
+		spec.SetID(nameOrID)
 	} else if nameOrID != "" {
 		// Upserting by name
 		existingNamed, err := esm.persistence.EventStreams().GetByName(ctx, nameOrID)
@@ -197,18 +195,18 @@ func (esm *esManager[CT, DT]) UpsertStream(ctx context.Context, nameOrID string,
 			return false, err
 		}
 		// If it exists, then we're updating by ID now
-		if existingNamed != nil {
-			esSpec.ID = existingNamed.ID
+		if !existingNamed.IsNil() {
+			spec.SetID(existingNamed.GetID())
 		}
 	}
 	if (esSpec.Name == nil || len(*esSpec.Name) == 0) && len(nameOrID) > 0 {
 		esSpec.Name = &nameOrID
 	}
 
-	if esSpec.ID == nil || len(*esSpec.ID) == 0 {
-		esSpec.ID = ptrTo(esm.runtime.NewID())
+	if spec.GetID() == "" {
+		spec.SetID(esm.runtime.NewID())
 	} else {
-		existing = esm.getStream(esSpec.GetID())
+		existing = esm.getStream(spec.GetID())
 	}
 
 	// Only statuses that can be asserted externally are started/stopped
@@ -222,30 +220,30 @@ func (esm *esManager[CT, DT]) UpsertStream(ctx context.Context, nameOrID string,
 	// Do a validation that does NOT update the defaults into the structure, so that
 	// the defaults are not persisted into the DB. This means that if the defaults are
 	// changed then any streams with nil fields will pick up the new defaults.
-	if _, err := esm.validateStream(ctx, esSpec, LifecyclePhasePreInsertValidation); err != nil {
+	if _, err := esm.validateStream(ctx, spec, LifecyclePhasePreInsertValidation); err != nil {
 		return false, err
 	}
 
-	isNew, err := esm.persistence.EventStreams().Upsert(ctx, esSpec, dbsql.UpsertOptimizationExisting)
+	isNew, err := esm.persistence.EventStreams().Upsert(ctx, spec, dbsql.UpsertOptimizationExisting)
 	if err != nil {
 		return false, err
 	}
-	return isNew, esm.reInit(ctx, esSpec, existing)
+	return isNew, esm.reInit(ctx, spec, existing)
 }
 
-func (esm *esManager[CT, DT]) reInit(ctx context.Context, esSpec *EventStreamSpec[CT], existing *eventStream[CT, DT]) error {
+func (esm *esManager[CT, DT]) reInit(ctx context.Context, spec CT, existing *eventStream[CT, DT]) error {
 	// Runtime handling now the DB is updated
 	if existing != nil {
 		if err := existing.suspend(ctx); err != nil {
 			return err
 		}
 	}
-	es, err := esm.initEventStream(ctx, esSpec)
+	es, err := esm.initEventStream(ctx, spec)
 	if err != nil {
 		return err
 	}
 	esm.addStream(ctx, es)
-	if *es.spec.Status == EventStreamStatusStarted {
+	if *es.spec.ESFields().Status == EventStreamStatusStarted {
 		es.ensureActive()
 	}
 	return nil
@@ -263,7 +261,7 @@ func (esm *esManager[CT, DT]) DeleteStream(ctx context.Context, nameOrID string)
 	if err := esm.persistence.EventStreams().Delete(ctx, nameOrID); err != nil {
 		return err
 	}
-	esm.removeStream(*es.spec.ID)
+	esm.removeStream(es.spec.GetID())
 	return nil
 }
 
@@ -284,20 +282,21 @@ func (esm *esManager[CT, DT]) ResetStream(ctx context.Context, nameOrID string, 
 	if err := es.suspend(ctx); err != nil {
 		return err
 	}
+	esSpec := es.spec.ESFields()
 	// delete any existing checkpoint
-	if err := esm.persistence.Checkpoints().DeleteMany(ctx, CheckpointFilters.NewFilter(ctx).Eq("id", *es.spec.ID)); err != nil {
+	if err := esm.persistence.Checkpoints().DeleteMany(ctx, CheckpointFilters.NewFilter(ctx).Eq("id", es.spec.GetID())); err != nil {
 		return err
 	}
 	// store the initial_sequence_id back to the object, and update our in-memory record
-	es.spec.InitialSequenceID = &sequenceID
-	if err := esm.persistence.EventStreams().UpdateSparse(ctx, &EventStreamSpec[CT]{
-		ID:                es.spec.ID,
-		InitialSequenceID: &sequenceID,
-	}); err != nil {
+	esSpec.InitialSequenceID = &sequenceID
+
+	if err := esm.persistence.EventStreams().Update(ctx, es.spec.GetID(),
+		esm.persistence.EventStreams().GetQueryFactory().NewUpdate(ctx).Set("initialsequenceid", sequenceID),
+	); err != nil {
 		return err
 	}
 	// if the spec status is running, restart it
-	if *es.spec.Status == EventStreamStatusStarted {
+	if *esSpec.Status == EventStreamStatusStarted {
 		return es.start(ctx)
 	}
 	return nil
@@ -311,33 +310,30 @@ func (esm *esManager[CT, DT]) StartStream(ctx context.Context, nameOrID string) 
 	return es.start(ctx)
 }
 
-func (esm *esManager[CT, DT]) enrichGetStream(ctx context.Context, esSpec *EventStreamSpec[CT]) *EventStreamWithStatus[CT] {
+func (esm *esManager[CT, DT]) enrichGetStream(ctx context.Context, esSpec CT) CT {
 	// Grab the live status
 	if es := esm.getStream(esSpec.GetID()); es != nil {
-		return es.Status(ctx)
+		return es.WithStatus(ctx)
 	}
 	// Fallback to unknown status rather than failing
 	log.L(ctx).Errorf("No in-memory state for stream '%s'", esSpec.GetID())
-	return &EventStreamWithStatus[CT]{
-		EventStreamSpec: esSpec,
-		Status:          EventStreamStatusUnknown,
-	}
+	return esm.runtime.WithRuntimeStatus(esSpec, EventStreamStatusUnknown, nil)
 }
 
-func (esm *esManager[CT, DT]) ListStreams(ctx context.Context, filter ffapi.Filter) ([]*EventStreamWithStatus[CT], *ffapi.FilterResult, error) {
+func (esm *esManager[CT, DT]) ListStreams(ctx context.Context, filter ffapi.Filter) ([]CT, *ffapi.FilterResult, error) {
 	results, fr, err := esm.persistence.EventStreams().GetMany(ctx, filter)
 	if err != nil {
 		return nil, nil, err
 	}
 	// Fill in live status and defaults
-	enriched := make([]*EventStreamWithStatus[CT], len(results))
+	enriched := make([]CT, len(results))
 	for i, esSpec := range results {
 		enriched[i] = esm.enrichGetStream(ctx, esSpec)
 	}
 	return enriched, fr, err
 }
 
-func (esm *esManager[CT, DT]) GetStreamByID(ctx context.Context, id string, opts ...dbsql.GetOption) (es *EventStreamWithStatus[CT], err error) {
+func (esm *esManager[CT, DT]) GetStreamByID(ctx context.Context, id string, opts ...dbsql.GetOption) (es CT, err error) {
 	esSpec, err := esm.persistence.EventStreams().GetByID(ctx, id, opts...)
 	if err == nil {
 		es = esm.enrichGetStream(ctx, esSpec)
@@ -345,7 +341,7 @@ func (esm *esManager[CT, DT]) GetStreamByID(ctx context.Context, id string, opts
 	return
 }
 
-func (esm *esManager[CT, DT]) GetStreamByNameOrID(ctx context.Context, nameOrID string, opts ...dbsql.GetOption) (es *EventStreamWithStatus[CT], err error) {
+func (esm *esManager[CT, DT]) GetStreamByNameOrID(ctx context.Context, nameOrID string, opts ...dbsql.GetOption) (es CT, err error) {
 	esSpec, err := esm.persistence.EventStreams().GetByUUIDOrName(ctx, nameOrID, opts...)
 	if err == nil {
 		es = esm.enrichGetStream(ctx, esSpec)

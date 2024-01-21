@@ -51,14 +51,11 @@ func (wc *WebhookConfig) Value() (driver.Value, error) {
 	return fftypes.JSONValue(wc)
 }
 
-type webhookDispatcherFactory[CT any, DT any] struct{}
+type webhookDispatcherFactory[CT EventStreamSpec, DT any] struct{}
 
 // validate initializes the config ready for use
-func (wdf *webhookDispatcherFactory[CT, DT]) Validate(ctx context.Context, _ *Config[CT, DT], spec *EventStreamSpec[CT], tlsConfigs map[string]*tls.Config, _ LifecyclePhase) error {
-	if spec.Webhook == nil {
-		spec.Webhook = &WebhookConfig{}
-	}
-	whc := spec.Webhook
+func (wdf *webhookDispatcherFactory[CT, DT]) Validate(ctx context.Context, _ *Config[CT, DT], spec CT, tlsConfigs map[string]*tls.Config, _ LifecyclePhase) error {
+	whc := spec.WebhookConf()
 	if whc.URL == nil || *whc.URL == "" {
 		return i18n.NewError(ctx, i18n.MsgMissingWebhookURL)
 	}
@@ -79,18 +76,19 @@ type webhookAction[CT any, DT any] struct {
 	client            *resty.Client
 }
 
-func (wdf *webhookDispatcherFactory[CT, DT]) NewDispatcher(ctx context.Context, conf *Config[CT, DT], spec *EventStreamSpec[CT]) Dispatcher[DT] {
-	httpConf := spec.Webhook.HTTP
+func (wdf *webhookDispatcherFactory[CT, DT]) NewDispatcher(ctx context.Context, conf *Config[CT, DT], spec CT) Dispatcher[DT] {
+	whc := spec.WebhookConf()
+	httpConf := whc.HTTP
 	if httpConf == nil {
 		httpConf = &conf.Defaults.WebhookDefaults.HTTPConfig
 	}
-	httpConf.TLSClientConfig = spec.Webhook.tlsConfig
+	httpConf.TLSClientConfig = whc.tlsConfig
 	client := ffresty.NewWithConfig(ctx, ffresty.Config{
-		URL:        *spec.Webhook.URL,
+		URL:        *whc.URL,
 		HTTPConfig: *httpConf,
 	})
 	return &webhookAction[CT, DT]{
-		spec:              spec.Webhook,
+		spec:              whc,
 		disablePrivateIPs: conf.DisablePrivateIPs,
 		client:            client,
 	}
