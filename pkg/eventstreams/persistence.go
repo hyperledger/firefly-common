@@ -100,6 +100,8 @@ func (ges *GenericEventStream) WithRuntimeStatus(status EventStreamStatus, stats
 		ResourceBase:          ges.ResourceBase,
 		Type:                  ges.Type,
 		EventStreamSpecFields: ges.EventStreamSpecFields,
+		Webhook:               ges.Webhook,
+		WebSocket:             ges.WebSocket,
 		Statistics:            stats,
 	}
 	newGES.Status = &status
