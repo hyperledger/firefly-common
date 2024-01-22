@@ -140,7 +140,6 @@ func (p *esPersistence[CT]) EventStreams() dbsql.CRUD[*GenericEventStream] {
 			"type",
 			"initial_sequence_id",
 			"topic_filter",
-			"identity",
 			"error_handling",
 			"batch_size",
 			"batch_timeout",
@@ -178,8 +177,6 @@ func (p *esPersistence[CT]) EventStreams() dbsql.CRUD[*GenericEventStream] {
 				return &inst.InitialSequenceID
 			case "topic_filter":
 				return &inst.TopicFilter
-			case "identity":
-				return &inst.Identity
 			case "error_handling":
 				return &inst.ErrorHandling
 			case "batch_size":

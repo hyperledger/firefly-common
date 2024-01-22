@@ -93,7 +93,6 @@ type EventStreamSpecFields struct {
 	Status            *EventStreamStatus `ffstruct:"eventstream" json:"status,omitempty"`
 	InitialSequenceID *string            `ffstruct:"eventstream" json:"initialSequenceID,omitempty"`
 	TopicFilter       *string            `ffstruct:"eventstream" json:"topicFilter,omitempty"`
-	Identity          *string            `ffstruct:"eventstream" json:"identity,omitempty"`
 
 	ErrorHandling     *ErrorHandlingType  `ffstruct:"eventstream" json:"errorHandling"`
 	BatchSize         *int                `ffstruct:"eventstream" json:"batchSize"`
