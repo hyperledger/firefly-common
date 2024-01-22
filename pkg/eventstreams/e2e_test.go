@@ -245,7 +245,7 @@ func TestE2E_WebsocketDeliveryRestartReset(t *testing.T) {
 	assert.Equal(t, 2, ts.startCount)
 
 	// Reset it and check we get the reset
-	err = mgr.ResetStream(ctx, es1.GetID(), "first")
+	err = mgr.ResetStream(ctx, es1.GetID(), ptrTo("first"))
 	assert.NoError(t, err)
 	wsReceiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {})
 	assert.Equal(t, "first", ts.sequenceStartedWith)

@@ -385,7 +385,7 @@ func TestResetStreamNotKnown(t *testing.T) {
 	})
 	defer done()
 
-	err := esm.ResetStream(ctx, fftypes.NewUUID().String(), "")
+	err := esm.ResetStream(ctx, fftypes.NewUUID().String(), nil)
 	assert.Regexp(t, "FF00164", err)
 
 }
@@ -496,7 +496,7 @@ func TestResetStreamStopFailTimeout(t *testing.T) {
 	existing.esm = esm
 
 	esm.addStream(ctx, existing)
-	err := esm.ResetStream(ctx, existing.spec.GetID(), "")
+	err := esm.ResetStream(ctx, existing.spec.GetID(), nil)
 	assert.Regexp(t, "FF00229", err)
 
 }
@@ -520,7 +520,7 @@ func TestResetStreamStopFailDeleteCheckpoint(t *testing.T) {
 	existing.esm = esm
 
 	esm.addStream(ctx, existing)
-	err := esm.ResetStream(ctx, existing.spec.GetID(), "")
+	err := esm.ResetStream(ctx, existing.spec.GetID(), nil)
 	assert.Regexp(t, "pop", err)
 
 }
@@ -545,7 +545,7 @@ func TestResetStreamStopFailUpdateSequence(t *testing.T) {
 	existing.esm = esm
 
 	esm.addStream(ctx, existing)
-	err := esm.ResetStream(ctx, existing.spec.GetID(), "12345")
+	err := esm.ResetStream(ctx, existing.spec.GetID(), ptrTo("12345"))
 	assert.Regexp(t, "pop", err)
 
 }
@@ -571,7 +571,7 @@ func TestResetStreamNoOp(t *testing.T) {
 
 	esm.addStream(ctx, existing)
 	called := false
-	err := esm.ResetStream(ctx, existing.spec.GetID(), "12345", func(_ context.Context, spec *GenericEventStream) error {
+	err := esm.ResetStream(ctx, existing.spec.GetID(), ptrTo("12345"), func(_ context.Context, spec *GenericEventStream) error {
 		called = true
 		assert.Equal(t, existing.spec, spec)
 		return nil
@@ -601,7 +601,7 @@ func TestResetStreamCallbackErr(t *testing.T) {
 	existing.esm = esm
 
 	esm.addStream(ctx, existing)
-	err := esm.ResetStream(ctx, existing.spec.GetID(), "12345", func(_ context.Context, spec *GenericEventStream) error {
+	err := esm.ResetStream(ctx, existing.spec.GetID(), ptrTo("12345"), func(_ context.Context, spec *GenericEventStream) error {
 		return fmt.Errorf("pop")
 	})
 	assert.Regexp(t, "pop", err)
