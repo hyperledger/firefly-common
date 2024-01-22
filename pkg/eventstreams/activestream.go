@@ -243,6 +243,7 @@ func (as *activeStream[CT, DT]) checkpointRoutine() {
 			return // We're done
 		}
 		err := as.retry.Do(as.ctx, "checkpoint", func(attempt int) (retry bool, err error) {
+			log.L(as.bgCtx).Debugf("Writing checkpoint id=%s sequenceID=%s", as.spec.GetID(), checkpointSequenceID)
 			_, err = as.esm.persistence.Checkpoints().Upsert(as.ctx, &EventStreamCheckpoint{
 				ID:         ptrTo(as.spec.GetID()), // the ID of the stream is the ID of the checkpoint
 				SequenceID: &checkpointSequenceID,
@@ -272,6 +273,8 @@ func (as *activeStream[CT, DT]) dispatchBatch(batch *eventStreamBatch[DT]) (err 
 	for {
 		// Short exponential back-off retry
 		err := as.retry.Do(as.ctx, "action", func(_ int) (retry bool, err error) {
+			log.L(as.ctx).Debugf("Batch %d attempt %d dispatching. Len=%d",
+				batch.number, as.LastDispatchAttempts, len(batch.events))
 			err = as.action.AttemptDispatch(as.ctx, as.LastDispatchAttempts, &EventBatch[DT]{
 				Type:        MessageTypeEventBatch,
 				StreamID:    as.spec.GetID(),
