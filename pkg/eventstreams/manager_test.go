@@ -571,12 +571,40 @@ func TestResetStreamNoOp(t *testing.T) {
 
 	esm.addStream(ctx, existing)
 	called := false
-	err := esm.ResetStream(ctx, existing.spec.GetID(), "12345", func(_ context.Context, spec *GenericEventStream) {
+	err := esm.ResetStream(ctx, existing.spec.GetID(), "12345", func(_ context.Context, spec *GenericEventStream) error {
 		called = true
 		assert.Equal(t, existing.spec, spec)
+		return nil
 	})
 	assert.NoError(t, err)
 	assert.True(t, called)
+
+}
+
+func TestResetStreamCallbackErr(t *testing.T) {
+	existing := &eventStream[*GenericEventStream, testData]{
+		spec: &GenericEventStream{
+			ResourceBase: dbsql.ResourceBase{ID: fftypes.NewUUID()},
+			EventStreamSpecFields: EventStreamSpecFields{
+				Name:   ptrTo("stream1"),
+				Status: ptrTo(EventStreamStatusStopped),
+			},
+		},
+	}
+	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything, dbsql.FailIfNotFound).Return(existing.spec, nil).Once()
+		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{}, &ffapi.FilterResult{}, nil).Once()
+		mp.checkpoints.On("DeleteMany", mock.Anything, mock.Anything).Return(nil).Once()
+		mp.eventStreams.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+	})
+	done()
+	existing.esm = esm
+
+	esm.addStream(ctx, existing)
+	err := esm.ResetStream(ctx, existing.spec.GetID(), "12345", func(_ context.Context, spec *GenericEventStream) error {
+		return fmt.Errorf("pop")
+	})
+	assert.Regexp(t, "pop", err)
 
 }
 
