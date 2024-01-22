@@ -428,7 +428,7 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 	assert.True(t, created)
 
 	// Find the second one by topic filter
-	esList, _, err := mgr.ListStreams(ctx, EventStreamFilters.NewFilter(ctx).Eq("topicfilter", "topic2"))
+	esList, _, err := mgr.ListStreams(ctx, GenericEventStreamFilters.NewFilter(ctx).Eq("topicfilter", "topic2"))
 	assert.NoError(t, err)
 	assert.Len(t, esList, 1)
 	assert.Equal(t, "stream2", *esList[0].Name)
@@ -468,7 +468,7 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Check no streams left
-	esList, _, err = mgr.ListStreams(ctx, EventStreamFilters.NewFilter(ctx).And())
+	esList, _, err = mgr.ListStreams(ctx, GenericEventStreamFilters.NewFilter(ctx).And())
 	assert.NoError(t, err)
 	assert.Empty(t, esList)
 

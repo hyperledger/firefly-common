@@ -85,7 +85,7 @@ func newMockESManager(t *testing.T, extraSetup ...func(mp *mockPersistence)) (co
 		eventStreams: crudmocks.NewCRUD[*GenericEventStream](t),
 		checkpoints:  crudmocks.NewCRUD[*EventStreamCheckpoint](t),
 	}
-	mp.eventStreams.On("GetQueryFactory").Return(EventStreamFilters).Maybe()
+	mp.eventStreams.On("GetQueryFactory").Return(GenericEventStreamFilters).Maybe()
 
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	config.RootConfigReset()
@@ -615,7 +615,7 @@ func TestListStreamsFail(t *testing.T) {
 	})
 	defer done()
 
-	_, _, err := esm.ListStreams(ctx, EventStreamFilters.NewFilter(ctx).And())
+	_, _, err := esm.ListStreams(ctx, GenericEventStreamFilters.NewFilter(ctx).And())
 	assert.Regexp(t, "pop", err)
 
 }

@@ -32,18 +32,6 @@ type Persistence[CT EventStreamSpec] interface {
 	Close()
 }
 
-var EventStreamFilters = &ffapi.QueryFields{
-	"id":                &ffapi.StringField{},
-	"created":           &ffapi.TimeField{},
-	"updated":           &ffapi.TimeField{},
-	"name":              &ffapi.StringField{},
-	"status":            &ffapi.StringField{},
-	"type":              &ffapi.StringField{},
-	"topicfilter":       &ffapi.StringField{},
-	"identity":          &ffapi.StringField{},
-	"initialsequenceid": &ffapi.StringField{},
-}
-
 var CheckpointFilters = &ffapi.QueryFields{
 	"id":         &ffapi.StringField{},
 	"created":    &ffapi.TimeField{},
@@ -53,6 +41,22 @@ var CheckpointFilters = &ffapi.QueryFields{
 
 type IDValidator func(ctx context.Context, idStr string) error
 
+// This is a base object, and set of filters, that you can use if:
+// - You are happy exposing all the built-in types of consumer (webhooks/websockets)
+// - You do not need to extend the configuration in any way
+// - You are happy using UUIDs for your IDs per dbsql.ResourceBase semantics
+//
+// A pre-built persistence library is provided, and sample migrations, that work
+// with this structure.
+//
+// The design of the generic is such that you can start with the generic structure,
+// and then move to your own structure later if you want to add more fields.
+//
+// When you are ready to extend, you need to:
+//  1. Copy the GenericEventStream source into your own repo, and rename it appropriately.
+//     Then you can add your extra configuration fields to it.
+//  2. Copy the EventStreams() and Checkpoints() CRUD factories into your own repo,
+//     and extend them with additional columns etc. as you see fit.
 type GenericEventStream struct {
 	dbsql.ResourceBase
 	Type *EventStreamType `ffstruct:"eventstream" json:"type,omitempty" ffenum:"estype"`
@@ -60,6 +64,17 @@ type GenericEventStream struct {
 	Webhook    *WebhookConfig         `ffstruct:"eventstream" json:"webhook,omitempty"`
 	WebSocket  *WebSocketConfig       `ffstruct:"eventstream" json:"websocket,omitempty"`
 	Statistics *EventStreamStatistics `ffstruct:"EventStream" json:"statistics,omitempty"`
+}
+
+var GenericEventStreamFilters = &ffapi.QueryFields{
+	"id":                &ffapi.StringField{},
+	"created":           &ffapi.TimeField{},
+	"updated":           &ffapi.TimeField{},
+	"name":              &ffapi.StringField{},
+	"status":            &ffapi.StringField{},
+	"type":              &ffapi.StringField{},
+	"topicfilter":       &ffapi.StringField{},
+	"initialsequenceid": &ffapi.StringField{},
 }
 
 func (ges *GenericEventStream) SetID(s string) {
@@ -157,7 +172,7 @@ func (p *esPersistence[CT]) EventStreams() dbsql.CRUD[*GenericEventStream] {
 		ScopedFilter: func() sq.Eq { return sq.Eq{} },
 		EventHandler: nil, // set below
 		NameField:    "name",
-		QueryFactory: EventStreamFilters,
+		QueryFactory: GenericEventStreamFilters,
 		IDValidator:  p.idValidator,
 		GetFieldPtr: func(inst *GenericEventStream, col string) interface{} {
 			switch col {

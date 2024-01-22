@@ -365,7 +365,7 @@ func (es *eventStream[CT, DT]) checkSetStatus(ctx context.Context, targetStatus 
 }
 
 func (es *eventStream[CT, DT]) persistStatus(ctx context.Context, targetStatus EventStreamStatus) error {
-	fb := EventStreamFilters.NewUpdate(ctx)
+	fb := GenericEventStreamFilters.NewUpdate(ctx)
 	return es.esm.persistence.EventStreams().Update(ctx, es.spec.GetID(), fb.Set("status", targetStatus))
 }
 

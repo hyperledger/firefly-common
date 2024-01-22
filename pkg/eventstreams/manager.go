@@ -156,7 +156,7 @@ func (esm *esManager[CT, DT]) initialize(ctx context.Context) error {
 	const pageSize = 25
 	var skip uint64
 	for {
-		fb := EventStreamFilters.NewFilter(ctx)
+		fb := GenericEventStreamFilters.NewFilter(ctx)
 		streams, _, err := esm.persistence.EventStreams().GetMany(ctx, fb.And().Skip(skip).Limit(pageSize))
 		if err != nil {
 			return err
