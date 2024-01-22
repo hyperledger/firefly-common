@@ -570,8 +570,13 @@ func TestResetStreamNoOp(t *testing.T) {
 	existing.esm = esm
 
 	esm.addStream(ctx, existing)
-	err := esm.ResetStream(ctx, existing.spec.GetID(), "12345")
+	called := false
+	err := esm.ResetStream(ctx, existing.spec.GetID(), "12345", func(_ context.Context, spec *GenericEventStream) {
+		called = true
+		assert.Equal(t, existing.spec, spec)
+	})
 	assert.NoError(t, err)
+	assert.True(t, called)
 
 }
 

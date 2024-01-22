@@ -36,7 +36,7 @@ type Manager[CT EventStreamSpec] interface {
 	ListStreams(ctx context.Context, filter ffapi.Filter) ([]CT, *ffapi.FilterResult, error)
 	StopStream(ctx context.Context, nameOrID string) error
 	StartStream(ctx context.Context, nameOrID string) error
-	ResetStream(ctx context.Context, nameOrID string, sequenceID string) error
+	ResetStream(ctx context.Context, nameOrID string, sequenceID string, preStartCallbacks ...func(ctx context.Context, spec CT)) error
 	DeleteStream(ctx context.Context, nameOrID string) error
 	Close(ctx context.Context)
 }
@@ -276,7 +276,7 @@ func (esm *esManager[CT, DT]) StopStream(ctx context.Context, nameOrID string) e
 	return es.stop(ctx)
 }
 
-func (esm *esManager[CT, DT]) ResetStream(ctx context.Context, nameOrID string, sequenceID string) error {
+func (esm *esManager[CT, DT]) ResetStream(ctx context.Context, nameOrID string, sequenceID string, preStartCallbacks ...func(ctx context.Context, spec CT)) error {
 	es, err := esm.getStreamByNameOrID(ctx, nameOrID)
 	if err != nil {
 		return err
@@ -297,6 +297,10 @@ func (esm *esManager[CT, DT]) ResetStream(ctx context.Context, nameOrID string, 
 		esm.persistence.EventStreams().GetQueryFactory().NewUpdate(ctx).Set("initialsequenceid", sequenceID),
 	); err != nil {
 		return err
+	}
+	// Plug point for logic that might need to do other custom reset logic before restart
+	for _, cb := range preStartCallbacks {
+		cb(ctx, es.spec)
 	}
 	// if the spec status is running, restart it
 	if *esSpec.Status == EventStreamStatusStarted {
