@@ -343,7 +343,7 @@ func (esm *esManager[CT, DT]) GetStreamByID(ctx context.Context, id string, opts
 
 func (esm *esManager[CT, DT]) GetStreamByNameOrID(ctx context.Context, nameOrID string, opts ...dbsql.GetOption) (es CT, err error) {
 	esSpec, err := esm.persistence.EventStreams().GetByUUIDOrName(ctx, nameOrID, opts...)
-	if err == nil {
+	if err == nil && !esSpec.IsNil() {
 		es = esm.enrichGetStream(ctx, esSpec)
 	}
 	return
