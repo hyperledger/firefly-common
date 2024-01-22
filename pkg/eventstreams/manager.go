@@ -75,6 +75,7 @@ type Runtime[ConfigType EventStreamSpec, DataType any] interface {
 }
 
 type esManager[CT EventStreamSpec, DT any] struct {
+	bgCtx       context.Context
 	config      Config[CT, DT]
 	mux         sync.Mutex
 	streams     map[string]*eventStream[CT, DT]
@@ -100,6 +101,7 @@ func NewEventStreamManager[CT EventStreamSpec, DT any](ctx context.Context, conf
 		}
 	}
 	esm := &esManager[CT, DT]{
+		bgCtx:       ctx,
 		config:      *config,
 		tlsConfigs:  tlsConfigs,
 		runtime:     source,
@@ -168,7 +170,7 @@ func (esm *esManager[CT, DT]) initialize(ctx context.Context) error {
 					return err
 				}
 			} else {
-				es, err := esm.initEventStream(ctx, esSpec)
+				es, err := esm.initEventStream(esSpec)
 				if err != nil {
 					return err
 				}
@@ -238,7 +240,8 @@ func (esm *esManager[CT, DT]) reInit(ctx context.Context, spec CT, existing *eve
 			return err
 		}
 	}
-	es, err := esm.initEventStream(ctx, spec)
+	// initializing the event stream happens outside of this context (must be long lived)
+	es, err := esm.initEventStream(spec)
 	if err != nil {
 		return err
 	}

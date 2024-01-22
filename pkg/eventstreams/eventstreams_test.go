@@ -33,7 +33,7 @@ func newTestEventStream(t *testing.T, extraSetup ...func(mdb *mockPersistence)) 
 		mdb.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{}, &ffapi.FilterResult{}, nil)
 	})
 	ctx, mgr, mes, done := newMockESManager(t, extraSetup...)
-	es, err := mgr.initEventStream(ctx, &GenericEventStream{
+	es, err := mgr.initEventStream(&GenericEventStream{
 		ResourceBase: dbsql.ResourceBase{ID: fftypes.NewUUID()},
 		EventStreamSpecFields: EventStreamSpecFields{
 			Name:   ptrTo(t.Name()),
@@ -161,7 +161,7 @@ func TestValidate(t *testing.T) {
 	_, err = es.esm.validateStream(ctx, es.spec, LifecyclePhasePreInsertValidation)
 	assert.Regexp(t, "FF00216", err)
 
-	_, err = es.esm.initEventStream(ctx, es.spec)
+	_, err = es.esm.initEventStream(es.spec)
 	assert.Regexp(t, "FF00216", err)
 
 	customType := fftypes.FFEnumValue("estype", "custom1")
@@ -169,7 +169,7 @@ func TestValidate(t *testing.T) {
 	_, err = es.esm.validateStream(ctx, es.spec, LifecyclePhasePreInsertValidation)
 	assert.Regexp(t, "FF00217", err)
 
-	_, err = es.esm.initEventStream(ctx, es.spec)
+	_, err = es.esm.initEventStream(es.spec)
 	assert.Regexp(t, "FF00217", err)
 
 }

@@ -236,24 +236,24 @@ type EventStreamActions[CT any] interface {
 }
 
 func (esm *esManager[CT, DT]) initEventStream(
-	bgCtx context.Context,
 	spec CT,
 ) (es *eventStream[CT, DT], err error) {
 	// Validate
-	factory, err := esm.validateStream(bgCtx, spec, LifecyclePhaseStarting)
+	factory, err := esm.validateStream(esm.bgCtx, spec, LifecyclePhaseStarting)
 	if err != nil {
 		return nil, err
 	}
 
+	streamCtx := log.WithLogField(esm.bgCtx, "eventstream", *spec.ESFields().Name)
 	es = &eventStream[CT, DT]{
-		bgCtx:       log.WithLogField(bgCtx, "eventstream", *spec.ESFields().Name),
+		bgCtx:       streamCtx,
 		esm:         esm,
 		spec:        spec,
 		persistence: esm.persistence,
 		retry:       esm.config.Retry,
 	}
 
-	es.action = factory.NewDispatcher(es.bgCtx, &esm.config, spec)
+	es.action = factory.NewDispatcher(streamCtx, &esm.config, spec)
 
 	log.L(es.bgCtx).Infof("Initialized Event Stream")
 	if *spec.ESFields().Status == EventStreamStatusStarted {
