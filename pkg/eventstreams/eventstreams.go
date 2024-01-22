@@ -91,7 +91,7 @@ type EventStreamSpec interface {
 type EventStreamSpecFields struct {
 	Name              *string            `ffstruct:"eventstream" json:"name,omitempty"`
 	Status            *EventStreamStatus `ffstruct:"eventstream" json:"status,omitempty"`
-	InitialSequenceID *string            `ffstruct:"eventstream" json:"initialSequenceID,omitempty"`
+	InitialSequenceID *string            `ffstruct:"eventstream" json:"initialSequenceId,omitempty"`
 	TopicFilter       *string            `ffstruct:"eventstream" json:"topicFilter,omitempty"`
 
 	ErrorHandling     *ErrorHandlingType  `ffstruct:"eventstream" json:"errorHandling"`
