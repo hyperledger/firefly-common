@@ -18,7 +18,6 @@ package eventstreams
 
 import (
 	"context"
-	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -37,18 +36,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type testESConfig struct {
-	Config1 string `json:"config1"`
-}
-
-func (tc *testESConfig) Scan(src interface{}) error {
-	return fftypes.JSONScan(src, tc)
-}
-
-func (tc *testESConfig) Value() (driver.Value, error) {
-	return fftypes.JSONValue(tc)
-}
-
 type testData struct {
 	Field1 int `json:"field1"`
 }
@@ -59,14 +46,18 @@ type testSource struct {
 	sequenceStartedWith string
 }
 
-func (ts *testSource) Validate(ctx context.Context, config *testESConfig) error {
-	if config.Config1 == "" {
-		return fmt.Errorf("config1 missing")
+func (ts *testSource) Validate(ctx context.Context, conf *GenericEventStream) error {
+	if conf.Name != nil && *conf.Name == "validator_fail_instruction" {
+		return fmt.Errorf("validator_failed")
 	}
 	return nil
 }
 
-func (ts *testSource) Run(ctx context.Context, spec *EventStreamSpec[testESConfig], checkpointSequenceID string, deliver Deliver[testData]) error {
+func (ts *testSource) WithRuntimeStatus(spec *GenericEventStream, status EventStreamStatus, stats *EventStreamStatistics) *GenericEventStream {
+	return spec.WithRuntimeStatus(status, stats)
+}
+
+func (ts *testSource) Run(ctx context.Context, spec *GenericEventStream, checkpointSequenceID string, deliver Deliver[testData]) error {
 	msgNumber := 0
 	ts.startCount++
 	ts.sequenceStartedWith = checkpointSequenceID
@@ -113,15 +104,16 @@ func TestE2E_DeliveryWebSockets(t *testing.T) {
 	ts := &testSource{started: make(chan struct{})}
 	close(ts.started) // start delivery immediately - will block as no WS connected
 
-	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig[testESConfig, testData](ctx), p, wss, ts)
+	mgr, err := NewEventStreamManager[*GenericEventStream, testData](ctx, GenerateConfig[*GenericEventStream, testData](ctx), p, wss, ts)
 	assert.NoError(t, err)
 
 	// Create a stream to sub-select one topic
-	es1 := &EventStreamSpec[testESConfig]{
-		TopicFilter: ptrTo("topic_1"), // only one of the topics
-		Type:        &EventStreamTypeWebSocket,
-		BatchSize:   ptrTo(10),
-		Config:      &testESConfig{Config1: "1111"},
+	es1 := &GenericEventStream{
+		Type: &EventStreamTypeWebSocket,
+		EventStreamSpecFields: EventStreamSpecFields{
+			TopicFilter: ptrTo("topic_1"), // only one of the topics
+			BatchSize:   ptrTo(10),
+		},
 	}
 	created, err := mgr.UpsertStream(ctx, "stream1", es1)
 	assert.NoError(t, err)
@@ -161,15 +153,16 @@ func TestE2E_DeliveryWebSocketsNack(t *testing.T) {
 	ts := &testSource{started: make(chan struct{})}
 	close(ts.started) // start delivery immediately - will block as no WS connected
 
-	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig[testESConfig, testData](ctx), p, wss, ts)
+	mgr, err := NewEventStreamManager[*GenericEventStream, testData](ctx, GenerateConfig[*GenericEventStream, testData](ctx), p, wss, ts)
 	assert.NoError(t, err)
 
 	// Create a stream to sub-select one topic
-	es1 := &EventStreamSpec[testESConfig]{
-		TopicFilter: ptrTo("topic_1"), // only one of the topics
-		Type:        &EventStreamTypeWebSocket,
-		BatchSize:   ptrTo(10),
-		Config:      &testESConfig{Config1: "1111"},
+	es1 := &GenericEventStream{
+		Type: &EventStreamTypeWebSocket,
+		EventStreamSpecFields: EventStreamSpecFields{
+			TopicFilter: ptrTo("topic_1"), // only one of the topics
+			BatchSize:   ptrTo(10),
+		},
 	}
 	created, err := mgr.UpsertStream(ctx, "stream1", es1)
 	assert.NoError(t, err)
@@ -206,15 +199,16 @@ func TestE2E_WebsocketDeliveryRestartReset(t *testing.T) {
 	ts := &testSource{started: make(chan struct{})}
 	close(ts.started) // start delivery immediately - will block as no WS connected
 
-	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig[testESConfig, testData](ctx), p, wss, ts)
+	mgr, err := NewEventStreamManager[*GenericEventStream, testData](ctx, GenerateConfig[*GenericEventStream, testData](ctx), p, wss, ts)
 	assert.NoError(t, err)
 
 	// Create a stream to sub-select one topic
-	es1 := &EventStreamSpec[testESConfig]{
-		TopicFilter: ptrTo("topic_1"), // only one of the topics
-		Type:        &EventStreamTypeWebSocket,
-		BatchSize:   ptrTo(10),
-		Config:      &testESConfig{Config1: "1111"},
+	es1 := &GenericEventStream{
+		Type: &EventStreamTypeWebSocket,
+		EventStreamSpecFields: EventStreamSpecFields{
+			TopicFilter: ptrTo("topic_1"), // only one of the topics
+			BatchSize:   ptrTo(10),
+		},
 	}
 	created, err := mgr.UpsertStream(ctx, "stream1", es1)
 	assert.NoError(t, err)
@@ -232,7 +226,7 @@ func TestE2E_WebsocketDeliveryRestartReset(t *testing.T) {
 	assert.Equal(t, 1, ts.startCount)
 
 	// Wait for the checkpoint to be reflected in the status
-	var ess *EventStreamWithStatus[testESConfig]
+	var ess *GenericEventStream
 	for ess == nil || ess.Statistics == nil || ess.Statistics.Checkpoint == "" {
 		time.Sleep(1 * time.Millisecond)
 		ess, err = mgr.GetStreamByID(ctx, es1.GetID())
@@ -251,7 +245,7 @@ func TestE2E_WebsocketDeliveryRestartReset(t *testing.T) {
 	assert.Equal(t, 2, ts.startCount)
 
 	// Reset it and check we get the reset
-	err = mgr.ResetStream(ctx, es1.GetID(), "first")
+	err = mgr.ResetStream(ctx, es1.GetID(), ptrTo("first"))
 	assert.NoError(t, err)
 	wsReceiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {})
 	assert.Equal(t, "first", ts.sequenceStartedWith)
@@ -266,7 +260,7 @@ func TestE2E_DeliveryWebHooks200(t *testing.T) {
 	ts := &testSource{started: make(chan struct{})}
 	close(ts.started) // start delivery immediately - will block as no WS connected
 
-	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig[testESConfig, testData](ctx), p, wss, ts)
+	mgr, err := NewEventStreamManager[*GenericEventStream, testData](ctx, GenerateConfig[*GenericEventStream, testData](ctx), p, wss, ts)
 	assert.NoError(t, err)
 
 	got100 := make(chan struct{})
@@ -298,11 +292,12 @@ func TestE2E_DeliveryWebHooks200(t *testing.T) {
 	defer whServer.Close()
 
 	// Create a stream to sub-select one topic
-	es1 := &EventStreamSpec[testESConfig]{
-		TopicFilter: ptrTo("topic_1"), // only one of the topics
-		Type:        &EventStreamTypeWebhook,
-		BatchSize:   ptrTo(10),
-		Config:      &testESConfig{Config1: "1111"},
+	es1 := &GenericEventStream{
+		Type: &EventStreamTypeWebhook,
+		EventStreamSpecFields: EventStreamSpecFields{
+			TopicFilter: ptrTo("topic_1"), // only one of the topics
+			BatchSize:   ptrTo(10),
+		},
 		Webhook: &WebhookConfig{
 			URL:    ptrTo(whServer.URL + "/some/path"),
 			Method: ptrTo("PUT"),
@@ -336,7 +331,7 @@ func TestE2E_DeliveryWebHooks500Retry(t *testing.T) {
 	ts := &testSource{started: make(chan struct{})}
 	close(ts.started) // start delivery immediately - will block as no WS connected
 
-	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig[testESConfig, testData](ctx), p, wss, ts)
+	mgr, err := NewEventStreamManager[*GenericEventStream, testData](ctx, GenerateConfig[*GenericEventStream, testData](ctx), p, wss, ts)
 	assert.NoError(t, err)
 
 	gotFiveTimes := make(chan struct{})
@@ -367,11 +362,12 @@ func TestE2E_DeliveryWebHooks500Retry(t *testing.T) {
 	defer whServer.Close()
 
 	// Create a stream to sub-select one topic
-	es1 := &EventStreamSpec[testESConfig]{
-		TopicFilter: ptrTo("topic_1"), // only one of the topics
-		Type:        &EventStreamTypeWebhook,
-		BatchSize:   ptrTo(10),
-		Config:      &testESConfig{Config1: "1111"},
+	es1 := &GenericEventStream{
+		Type: &EventStreamTypeWebhook,
+		EventStreamSpecFields: EventStreamSpecFields{
+			TopicFilter: ptrTo("topic_1"), // only one of the topics
+			BatchSize:   ptrTo(10),
+		},
 		Webhook: &WebhookConfig{
 			URL:    ptrTo(whServer.URL + "/some/path"),
 			Method: ptrTo("PUT"),
@@ -405,15 +401,14 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 		started: make(chan struct{}), // we never start it
 	}
 
-	mgr, err := NewEventStreamManager[testESConfig, testData](ctx, GenerateConfig[testESConfig, testData](ctx), p, wss, ts)
+	mgr, err := NewEventStreamManager[*GenericEventStream, testData](ctx, GenerateConfig[*GenericEventStream, testData](ctx), p, wss, ts)
 	assert.NoError(t, err)
 
 	// Create first event stream started
-	es1 := &EventStreamSpec[testESConfig]{
-		TopicFilter: ptrTo("topic1"), // only one of the topics
-		Type:        &EventStreamTypeWebSocket,
-		Config: &testESConfig{
-			Config1: "confValue1",
+	es1 := &GenericEventStream{
+		Type: &EventStreamTypeWebSocket,
+		EventStreamSpecFields: EventStreamSpecFields{
+			TopicFilter: ptrTo("topic1"), // only one of the topics
 		},
 	}
 	created, err := mgr.UpsertStream(ctx, "stream1", es1)
@@ -421,12 +416,11 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 	assert.True(t, created)
 
 	// Create second event stream stopped
-	es2 := &EventStreamSpec[testESConfig]{
-		TopicFilter: ptrTo("topic2"), // only one of the topics
-		Type:        &EventStreamTypeWebSocket,
-		Status:      &EventStreamStatusStopped,
-		Config: &testESConfig{
-			Config1: "confValue2",
+	es2 := &GenericEventStream{
+		Type: &EventStreamTypeWebSocket,
+		EventStreamSpecFields: EventStreamSpecFields{
+			TopicFilter: ptrTo("topic2"), // only one of the topics
+			Status:      &EventStreamStatusStopped,
 		},
 	}
 	created, err = mgr.UpsertStream(ctx, "stream2", es2)
@@ -434,20 +428,19 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 	assert.True(t, created)
 
 	// Find the second one by topic filter
-	esList, _, err := mgr.ListStreams(ctx, EventStreamFilters.NewFilter(ctx).Eq("topicfilter", "topic2"))
+	esList, _, err := mgr.ListStreams(ctx, GenericEventStreamFilters.NewFilter(ctx).Eq("topicfilter", "topic2"))
 	assert.NoError(t, err)
 	assert.Len(t, esList, 1)
 	assert.Equal(t, "stream2", *esList[0].Name)
 	assert.Equal(t, "topic2", *esList[0].TopicFilter)
 	assert.Equal(t, 50, *esList[0].BatchSize) // picked up default when it was loaded
-	assert.Equal(t, "confValue2", esList[0].Config.Config1)
-	assert.Equal(t, EventStreamStatusStopped, esList[0].Status)
+	assert.Equal(t, EventStreamStatusStopped, *esList[0].Status)
 
 	// Get the first by ID
 	es1c, err := mgr.GetStreamByID(ctx, es1.GetID(), dbsql.FailIfNotFound)
 	assert.NoError(t, err)
 	assert.Equal(t, "stream1", *es1c.Name)
-	assert.Equal(t, EventStreamStatusStarted, es1c.Status)
+	assert.Equal(t, EventStreamStatusStarted, *es1c.Status)
 
 	// Rename second event stream
 	es2.Name = ptrTo("stream2a")
@@ -460,13 +453,13 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 	assert.NoError(t, err)
 	es2c, err := mgr.GetStreamByID(ctx, es2.GetID(), dbsql.FailIfNotFound)
 	assert.NoError(t, err)
-	assert.Equal(t, EventStreamStatusStarted, es2c.Status)
+	assert.Equal(t, EventStreamStatusStarted, *es2c.Status)
 	assert.Equal(t, "stream2a", *es2c.Name)
 	err = mgr.StopStream(ctx, es2.GetID())
 	assert.NoError(t, err)
 	es2c, err = mgr.GetStreamByID(ctx, es2.GetID(), dbsql.FailIfNotFound)
 	assert.NoError(t, err)
-	assert.Equal(t, EventStreamStatusStopped, es2c.Status)
+	assert.Equal(t, EventStreamStatusStopped, *es2c.Status)
 	err = mgr.DeleteStream(ctx, es2.GetID())
 	assert.NoError(t, err)
 
@@ -475,7 +468,7 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Check no streams left
-	esList, _, err = mgr.ListStreams(ctx, EventStreamFilters.NewFilter(ctx).And())
+	esList, _, err = mgr.ListStreams(ctx, GenericEventStreamFilters.NewFilter(ctx).And())
 	assert.NoError(t, err)
 	assert.Empty(t, esList)
 
@@ -501,7 +494,7 @@ func wsReceiveNack(ctx context.Context, t *testing.T, wsc wsclient.WSClient, cb 
 	assert.NoError(t, err)
 }
 
-func setupE2ETest(t *testing.T, extraSetup ...func()) (context.Context, Persistence[testESConfig], wsserver.WebSocketChannels, wsclient.WSClient, func()) {
+func setupE2ETest(t *testing.T, extraSetup ...func()) (context.Context, Persistence[*GenericEventStream], wsserver.WebSocketChannels, wsclient.WSClient, func()) {
 	logrus.SetLevel(logrus.TraceLevel)
 
 	ctx := context.Background()
@@ -527,7 +520,7 @@ func setupE2ETest(t *testing.T, extraSetup ...func()) (context.Context, Persiste
 	db, err := dbsql.NewSQLiteProvider(ctx, dbConf)
 	assert.NoError(t, err)
 
-	p := NewEventStreamPersistence[testESConfig](db, dbsql.UUIDValidator)
+	p := NewGenericEventStreamPersistence(db, dbsql.UUIDValidator)
 	p.EventStreams().Validate()
 	p.Checkpoints().Validate()
 

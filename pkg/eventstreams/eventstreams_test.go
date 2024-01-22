@@ -21,21 +21,24 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/hyperledger/firefly-common/pkg/dbsql"
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
-func newTestEventStream(t *testing.T, extraSetup ...func(mdb *mockPersistence)) (context.Context, *eventStream[testESConfig, testData], *mockEventSource, func()) {
+func newTestEventStream(t *testing.T, extraSetup ...func(mdb *mockPersistence)) (context.Context, *eventStream[*GenericEventStream, testData], *mockEventSource, func()) {
 	extraSetup = append(extraSetup, func(mdb *mockPersistence) {
-		mdb.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil)
+		mdb.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{}, &ffapi.FilterResult{}, nil)
 	})
 	ctx, mgr, mes, done := newMockESManager(t, extraSetup...)
-	es, err := mgr.initEventStream(ctx, &EventStreamSpec[testESConfig]{
-		ID:     ptrTo(fftypes.NewUUID().String()),
-		Name:   ptrTo(t.Name()),
-		Status: ptrTo(EventStreamStatusStopped),
+	es, err := mgr.initEventStream(&GenericEventStream{
+		ResourceBase: dbsql.ResourceBase{ID: fftypes.NewUUID()},
+		EventStreamSpecFields: EventStreamSpecFields{
+			Name:   ptrTo(t.Name()),
+			Status: ptrTo(EventStreamStatusStopped),
+		},
 	})
 	assert.NoError(t, err)
 
@@ -44,8 +47,8 @@ func newTestEventStream(t *testing.T, extraSetup ...func(mdb *mockPersistence)) 
 
 func TestEventStreamFields(t *testing.T) {
 
-	es := &EventStreamSpec[testESConfig]{
-		ID: ptrTo(fftypes.NewUUID().String()),
+	es := &GenericEventStream{
+		ResourceBase: dbsql.ResourceBase{ID: fftypes.NewUUID()},
 	}
 	assert.Equal(t, es.GetID(), es.GetID())
 	t1 := fftypes.Now()
@@ -123,7 +126,7 @@ func TestValidate(t *testing.T) {
 	ctx, es, _, done := newTestEventStream(t)
 	done()
 
-	es.spec = &EventStreamSpec[testESConfig]{}
+	es.spec = &GenericEventStream{}
 	_, err := es.esm.validateStream(ctx, es.spec, LifecyclePhasePreInsertValidation)
 	assert.Regexp(t, "FF00112", err)
 
@@ -131,12 +134,12 @@ func TestValidate(t *testing.T) {
 	_, err = es.esm.validateStream(ctx, es.spec, LifecyclePhasePreInsertValidation)
 	assert.NoError(t, err)
 
-	es.esm.runtime.(*mockEventSource).validate = func(ctx context.Context, conf *testESConfig) error {
+	es.esm.runtime.(*mockEventSource).validate = func(ctx context.Context, conf *GenericEventStream) error {
 		return fmt.Errorf("pop")
 	}
 	_, err = es.esm.validateStream(ctx, es.spec, LifecyclePhasePreInsertValidation)
 	assert.Regexp(t, "pop", err)
-	es.esm.runtime.(*mockEventSource).validate = func(ctx context.Context, conf *testESConfig) error { return nil }
+	es.esm.runtime.(*mockEventSource).validate = func(ctx context.Context, conf *GenericEventStream) error { return nil }
 
 	es.spec.TopicFilter = ptrTo("((((!Bad Regexp[")
 	_, err = es.esm.validateStream(ctx, es.spec, LifecyclePhasePreInsertValidation)
@@ -158,7 +161,7 @@ func TestValidate(t *testing.T) {
 	_, err = es.esm.validateStream(ctx, es.spec, LifecyclePhasePreInsertValidation)
 	assert.Regexp(t, "FF00216", err)
 
-	_, err = es.esm.initEventStream(ctx, es.spec)
+	_, err = es.esm.initEventStream(es.spec)
 	assert.Regexp(t, "FF00216", err)
 
 	customType := fftypes.FFEnumValue("estype", "custom1")
@@ -166,7 +169,7 @@ func TestValidate(t *testing.T) {
 	_, err = es.esm.validateStream(ctx, es.spec, LifecyclePhasePreInsertValidation)
 	assert.Regexp(t, "FF00217", err)
 
-	_, err = es.esm.initEventStream(ctx, es.spec)
+	_, err = es.esm.initEventStream(es.spec)
 	assert.Regexp(t, "FF00217", err)
 
 }
@@ -175,7 +178,7 @@ func TestRequestStopAlreadyStopping(t *testing.T) {
 	ctx, es, _, done := newTestEventStream(t)
 	defer done()
 
-	es.activeState = &activeStream[testESConfig, testData]{}
+	es.activeState = &activeStream[*GenericEventStream, testData]{}
 	es.stopping = make(chan struct{})
 	s := es.requestStop(ctx)
 	close(s)
@@ -190,7 +193,7 @@ func TestRequestStopPersistFail(t *testing.T) {
 	defer done()
 
 	es.spec.Status = ptrTo(EventStreamStatusDeleted)
-	as := &activeStream[testESConfig, testData]{
+	as := &activeStream[*GenericEventStream, testData]{
 		eventLoopDone: make(chan struct{}),
 		batchLoopDone: make(chan struct{}),
 	}
@@ -291,7 +294,7 @@ func TestSuspendTimeout(t *testing.T) {
 	ctx, es, _, done := newTestEventStream(t)
 	done()
 
-	es.activeState = &activeStream[testESConfig, testData]{}
+	es.activeState = &activeStream[*GenericEventStream, testData]{}
 	es.stopping = make(chan struct{})
 	err := es.suspend(ctx)
 	assert.Regexp(t, "FF00229", err)
@@ -299,10 +302,10 @@ func TestSuspendTimeout(t *testing.T) {
 }
 
 func TestGetIDNil(t *testing.T) {
-	assert.Empty(t, (&EventStreamSpec[testESConfig]{}).GetID())
+	assert.Empty(t, (&GenericEventStream{}).GetID())
 	assert.Empty(t, (&EventStreamCheckpoint{}).GetID())
 }
 
 func TestCheckDocs(t *testing.T) {
-	ffapi.CheckObjectDocumented(&EventStreamWithStatus[struct{}]{})
+	ffapi.CheckObjectDocumented(&GenericEventStream{})
 }

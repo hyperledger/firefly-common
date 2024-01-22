@@ -22,25 +22,14 @@ import (
 	sq "github.com/Masterminds/squirrel"
 	"github.com/hyperledger/firefly-common/pkg/dbsql"
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
 )
 
-type Persistence[CT any] interface {
-	EventStreams() dbsql.CRUD[*EventStreamSpec[CT]]
+type Persistence[CT EventStreamSpec] interface {
+	EventStreams() dbsql.CRUD[CT]
 	Checkpoints() dbsql.CRUD[*EventStreamCheckpoint]
 	IDValidator() IDValidator
 	Close()
-}
-
-var EventStreamFilters = &ffapi.QueryFields{
-	"id":          &ffapi.StringField{},
-	"created":     &ffapi.TimeField{},
-	"updated":     &ffapi.TimeField{},
-	"name":        &ffapi.StringField{},
-	"status":      &ffapi.StringField{},
-	"type":        &ffapi.StringField{},
-	"topicfilter": &ffapi.StringField{},
-	"identity":    &ffapi.StringField{},
-	"config":      &ffapi.JSONField{},
 }
 
 var CheckpointFilters = &ffapi.QueryFields{
@@ -52,8 +41,93 @@ var CheckpointFilters = &ffapi.QueryFields{
 
 type IDValidator func(ctx context.Context, idStr string) error
 
-func NewEventStreamPersistence[CT any](db *dbsql.Database, idValidator IDValidator) Persistence[CT] {
-	return &esPersistence[CT]{
+// This is a base object, and set of filters, that you can use if:
+// - You are happy exposing all the built-in types of consumer (webhooks/websockets)
+// - You do not need to extend the configuration in any way
+// - You are happy using UUIDs for your IDs per dbsql.ResourceBase semantics
+//
+// A pre-built persistence library is provided, and sample migrations, that work
+// with this structure.
+//
+// The design of the generic is such that you can start with the generic structure,
+// and then move to your own structure later if you want to add more fields.
+//
+// When you are ready to extend, you need to:
+//  1. Copy the GenericEventStream source into your own repo, and rename it appropriately.
+//     Then you can add your extra configuration fields to it.
+//  2. Copy the EventStreams() and Checkpoints() CRUD factories into your own repo,
+//     and extend them with additional columns etc. as you see fit.
+type GenericEventStream struct {
+	dbsql.ResourceBase
+	Type *EventStreamType `ffstruct:"eventstream" json:"type,omitempty" ffenum:"estype"`
+	EventStreamSpecFields
+	Webhook    *WebhookConfig         `ffstruct:"eventstream" json:"webhook,omitempty"`
+	WebSocket  *WebSocketConfig       `ffstruct:"eventstream" json:"websocket,omitempty"`
+	Statistics *EventStreamStatistics `ffstruct:"EventStream" json:"statistics,omitempty"`
+}
+
+var GenericEventStreamFilters = &ffapi.QueryFields{
+	"id":                &ffapi.StringField{},
+	"created":           &ffapi.TimeField{},
+	"updated":           &ffapi.TimeField{},
+	"name":              &ffapi.StringField{},
+	"status":            &ffapi.StringField{},
+	"type":              &ffapi.StringField{},
+	"topicfilter":       &ffapi.StringField{},
+	"initialsequenceid": &ffapi.StringField{},
+}
+
+func (ges *GenericEventStream) SetID(s string) {
+	ges.ID = fftypes.MustParseUUID(s)
+}
+
+func (ges *GenericEventStream) IsNil() bool {
+	return ges == nil
+}
+
+func (ges *GenericEventStream) ESFields() *EventStreamSpecFields {
+	return &ges.EventStreamSpecFields
+}
+
+func (ges *GenericEventStream) ESType() EventStreamType {
+	if ges.Type == nil {
+		ges.Type = &EventStreamTypeWebSocket
+	}
+	return *ges.Type
+}
+
+func (ges *GenericEventStream) WebhookConf() *WebhookConfig {
+	if ges.Webhook == nil {
+		ges.Webhook = &WebhookConfig{}
+	}
+	return ges.Webhook
+}
+
+func (ges *GenericEventStream) WebSocketConf() *WebSocketConfig {
+	if ges.WebSocket == nil {
+		ges.WebSocket = &WebSocketConfig{}
+	}
+	return ges.WebSocket
+}
+
+func (ges *GenericEventStream) WithRuntimeStatus(status EventStreamStatus, stats *EventStreamStatistics) *GenericEventStream {
+	newGES := &GenericEventStream{
+		ResourceBase:          ges.ResourceBase,
+		Type:                  ges.Type,
+		EventStreamSpecFields: ges.EventStreamSpecFields,
+		Webhook:               ges.Webhook,
+		WebSocket:             ges.WebSocket,
+		Statistics:            stats,
+	}
+	newGES.Status = &status
+	return newGES
+}
+
+// NewGenericEventStreamPersistence is a helper that builds persistence with no extra config
+// Users of this package can use this in cases where they do not have any additional configuration
+// that needs to be persisted, and are happy using dbsql.ResourceBase for IDs.
+func NewGenericEventStreamPersistence(db *dbsql.Database, idValidator IDValidator) Persistence[*GenericEventStream] {
+	return &esPersistence[*GenericEventStream]{
 		db:          db,
 		idValidator: idValidator,
 	}
@@ -68,8 +142,8 @@ func (p *esPersistence[CT]) IDValidator() IDValidator {
 	return p.idValidator
 }
 
-func (p *esPersistence[CT]) EventStreams() dbsql.CRUD[*EventStreamSpec[CT]] {
-	return &dbsql.CrudBase[*EventStreamSpec[CT]]{
+func (p *esPersistence[CT]) EventStreams() dbsql.CRUD[*GenericEventStream] {
+	return &dbsql.CrudBase[*GenericEventStream]{
 		DB:    p.db,
 		Table: "eventstreams",
 		Columns: []string{
@@ -81,8 +155,6 @@ func (p *esPersistence[CT]) EventStreams() dbsql.CRUD[*EventStreamSpec[CT]] {
 			"type",
 			"initial_sequence_id",
 			"topic_filter",
-			"identity",
-			"config",
 			"error_handling",
 			"batch_size",
 			"batch_timeout",
@@ -92,16 +164,17 @@ func (p *esPersistence[CT]) EventStreams() dbsql.CRUD[*EventStreamSpec[CT]] {
 			"websocket_config",
 		},
 		FilterFieldMap: map[string]string{
-			"topicfilter": "topic_filter",
+			"initialsequenceid": "initial_sequence_id",
+			"topicfilter":       "topic_filter",
 		},
-		NilValue:     func() *EventStreamSpec[CT] { return nil },
-		NewInstance:  func() *EventStreamSpec[CT] { return &EventStreamSpec[CT]{} },
+		NilValue:     func() *GenericEventStream { return nil },
+		NewInstance:  func() *GenericEventStream { return &GenericEventStream{} },
 		ScopedFilter: func() sq.Eq { return sq.Eq{} },
 		EventHandler: nil, // set below
 		NameField:    "name",
-		QueryFactory: EventStreamFilters,
+		QueryFactory: GenericEventStreamFilters,
 		IDValidator:  p.idValidator,
-		GetFieldPtr: func(inst *EventStreamSpec[CT], col string) interface{} {
+		GetFieldPtr: func(inst *GenericEventStream, col string) interface{} {
 			switch col {
 			case dbsql.ColumnID:
 				return &inst.ID
@@ -119,10 +192,6 @@ func (p *esPersistence[CT]) EventStreams() dbsql.CRUD[*EventStreamSpec[CT]] {
 				return &inst.InitialSequenceID
 			case "topic_filter":
 				return &inst.TopicFilter
-			case "identity":
-				return &inst.Identity
-			case "config":
-				return &inst.Config
 			case "error_handling":
 				return &inst.ErrorHandling
 			case "batch_size":

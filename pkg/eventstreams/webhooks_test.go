@@ -33,10 +33,10 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func newTestWebhooks(t *testing.T, whc *WebhookConfig, tweaks ...func()) *webhookAction[testESConfig, testData] {
+func newTestWebhooks(t *testing.T, whc *WebhookConfig, tweaks ...func()) *webhookAction[*GenericEventStream, testData] {
 
 	ctx, mgr, _, done := newMockESManager(t, func(mdb *mockPersistence) {
-		mdb.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil)
+		mdb.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{}, &ffapi.FilterResult{}, nil)
 		WebhookDefaultsConfig.Set(ffresty.HTTPConfigRequestTimeout, "1s")
 		WebhookDefaultsConfig.SubSection("tls").Set(fftls.HTTPConfTLSInsecureSkipHostVerify, true)
 		for _, tweak := range tweaks {
@@ -45,22 +45,25 @@ func newTestWebhooks(t *testing.T, whc *WebhookConfig, tweaks ...func()) *webhoo
 	})
 	done()
 
-	whf := &webhookDispatcherFactory[testESConfig, testData]{}
-	spec := &EventStreamSpec[testESConfig]{
-		Name:    ptrTo("stream1"),
+	whf := &webhookDispatcherFactory[*GenericEventStream, testData]{}
+	spec := &GenericEventStream{
+		EventStreamSpecFields: EventStreamSpecFields{
+			Name: ptrTo("stream1"),
+		},
 		Webhook: whc,
 	}
 	assert.NoError(t, whf.Validate(ctx, &mgr.config, spec, mgr.tlsConfigs, LifecyclePhaseStarting))
 
-	return whf.NewDispatcher(context.Background(), &mgr.config, spec).(*webhookAction[testESConfig, testData])
+	return whf.NewDispatcher(context.Background(), &mgr.config, spec).(*webhookAction[*GenericEventStream, testData])
 }
 
 func TestWebhooksConfigValidate(t *testing.T) {
 
 	whc := &WebhookConfig{}
-	whf := &webhookDispatcherFactory[testESConfig, testData]{}
-	spec := &EventStreamSpec[testESConfig]{
-		Webhook: whc,
+	whf := &webhookDispatcherFactory[*GenericEventStream, testData]{}
+	spec := &GenericEventStream{
+		EventStreamSpecFields: EventStreamSpecFields{},
+		Webhook:               whc,
 	}
 	assert.Regexp(t, "FF00216", whf.Validate(context.Background(), nil, spec, nil, LifecyclePhaseStarting))
 

@@ -33,7 +33,7 @@ func TestCheckpointContextClose(t *testing.T) {
 	})
 	defer done()
 
-	as := &activeStream[testESConfig, testData]{
+	as := &activeStream[*GenericEventStream, testData]{
 		eventStream: es,
 	}
 	as.ctx, as.cancelCtx = context.WithCancel(ctx)
@@ -47,12 +47,12 @@ func TestRunSourceLoopDone(t *testing.T) {
 	ctx, es, mes, done := newTestEventStream(t)
 	defer done()
 
-	as := &activeStream[testESConfig, testData]{
+	as := &activeStream[*GenericEventStream, testData]{
 		eventStream: es,
 	}
 	as.ctx, as.cancelCtx = context.WithCancel(ctx)
 
-	mes.run = func(ctx context.Context, es *EventStreamSpec[testESConfig], checkpointSequenceId string, deliver Deliver[testData]) error {
+	mes.run = func(ctx context.Context, es *GenericEventStream, checkpointSequenceId string, deliver Deliver[testData]) error {
 		deliver(nil)
 		return nil
 	}
@@ -66,13 +66,13 @@ func TestRunSourceEventsBlockedExit(t *testing.T) {
 	ctx, es, mes, done := newTestEventStream(t)
 	defer done()
 
-	as := &activeStream[testESConfig, testData]{
+	as := &activeStream[*GenericEventStream, testData]{
 		eventStream: es,
 	}
 	as.ctx, as.cancelCtx = context.WithCancel(ctx)
 
 	as.events = make(chan *Event[testData])
-	mes.run = func(ctx context.Context, es *EventStreamSpec[testESConfig], checkpointSequenceId string, deliver Deliver[testData]) error {
+	mes.run = func(ctx context.Context, es *GenericEventStream, checkpointSequenceId string, deliver Deliver[testData]) error {
 		deliver([]*Event[testData]{{ /* will block */ }})
 		return nil
 	}
@@ -92,7 +92,7 @@ func TestBatchTimeout(t *testing.T) {
 	es.spec.BatchTimeout = ptrTo(fftypes.FFDuration(1 * time.Millisecond))
 
 	delivered := false
-	mes.run = func(ctx context.Context, es *EventStreamSpec[testESConfig], checkpointSequenceId string, deliver Deliver[testData]) error {
+	mes.run = func(ctx context.Context, es *GenericEventStream, checkpointSequenceId string, deliver Deliver[testData]) error {
 		if delivered {
 			<-ctx.Done()
 		} else {
@@ -135,7 +135,7 @@ func TestQueuedCheckpointAsync(t *testing.T) {
 	})
 	defer done()
 
-	as := &activeStream[testESConfig, testData]{
+	as := &activeStream[*GenericEventStream, testData]{
 		eventStream: es,
 	}
 	as.ctx, as.cancelCtx = context.WithCancel(ctx)
@@ -156,7 +156,7 @@ func TestQueuedCheckpointCancel(t *testing.T) {
 	})
 	defer done()
 
-	as := &activeStream[testESConfig, testData]{
+	as := &activeStream[*GenericEventStream, testData]{
 		eventStream: es,
 	}
 	as.ctx, as.cancelCtx = context.WithCancel(ctx)
@@ -172,7 +172,7 @@ func TestDispatchSkipError(t *testing.T) {
 	ctx, es, _, done := newTestEventStream(t)
 	defer done()
 
-	as := &activeStream[testESConfig, testData]{
+	as := &activeStream[*GenericEventStream, testData]{
 		eventStream: es,
 	}
 	as.ctx, as.cancelCtx = context.WithCancel(ctx)
@@ -196,31 +196,40 @@ func TestDispatchBlockError(t *testing.T) {
 	ctx, es, _, done := newTestEventStream(t)
 	defer done()
 
-	as := &activeStream[testESConfig, testData]{
-		eventStream: es,
+	as := &activeStream[*GenericEventStream, testData]{
+		eventStream:   es,
+		events:        make(chan *Event[testData]),
+		batchLoopDone: make(chan struct{}),
 	}
 	as.ctx, as.cancelCtx = context.WithCancel(ctx)
 
+	as.spec.BatchSize = ptrTo(1)
 	as.spec.RetryTimeout = ptrTo(fftypes.FFDuration(1 * time.Microsecond))
-	as.spec.BlockedRetryDelay = ptrTo(fftypes.FFDuration(1 * time.Microsecond))
+	as.spec.BlockedRetryDelay = ptrTo(fftypes.FFDuration(10 * time.Millisecond))
 	as.spec.ErrorHandling = ptrTo(ErrorHandlingTypeBlock)
+	callCount := 0
 	calls := make(chan bool)
 	as.action = &mockAction{
 		attemptDispatch: func(ctx context.Context, attempt int, events *EventBatch[testData]) error {
 			calls <- true
+			callCount++
+			if callCount > 1 {
+				as.cancelCtx()
+			}
 			return fmt.Errorf("pop")
 		},
 	}
 
+	dispatchDone := make(chan struct{})
 	go func() {
-		err := as.dispatchBatch(&eventStreamBatch[testData]{
-			events: []*Event[testData]{{}},
-		})
-		assert.Error(t, err)
+		defer close(dispatchDone)
+		as.runBatchLoop()
 	}()
+
+	as.events <- &Event[testData]{}
 
 	<-calls
 	<-calls
-	as.cancelCtx()
+	<-dispatchDone
 
 }

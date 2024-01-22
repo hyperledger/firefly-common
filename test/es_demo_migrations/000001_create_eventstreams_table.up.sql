@@ -9,7 +9,6 @@ CREATE TABLE eventstreams (
   initial_sequence_id  TEXT,
   topic_filter         TEXT,
   identity             TEXT,
-  config               TEXT,
   error_handling       TEXT,
   batch_size           INT,
   batch_timeout        BIGINT,
