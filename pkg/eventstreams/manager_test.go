@@ -476,24 +476,25 @@ func TestDeleteStreamFailDelete(t *testing.T) {
 }
 
 func TestDeleteStreamByName(t *testing.T) {
-	es := &EventStreamSpec[testESConfig]{
-		ID:     ptrTo(fftypes.NewUUID().String()),
-		Name:   ptrTo("stream1"),
-		Status: ptrTo(EventStreamStatusStopped),
+	es := &GenericEventStream{
+		ResourceBase: dbsql.ResourceBase{ID: fftypes.NewUUID()},
+		EventStreamSpecFields: EventStreamSpecFields{
+			Name:   ptrTo("stream1"),
+			Status: ptrTo(EventStreamStatusStopped),
+		},
 	}
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
-		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(es, nil).Once()
-		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{es}, &ffapi.FilterResult{}, nil).Once()
-		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*EventStreamSpec[testESConfig]{}, &ffapi.FilterResult{}, nil).Once()
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything, dbsql.FailIfNotFound).Return(es, nil).Once()
+		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{es}, &ffapi.FilterResult{}, nil).Once()
+		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{}, &ffapi.FilterResult{}, nil).Once()
 		mp.eventStreams.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 		// Expect the ID to be passed to delete
-		mp.eventStreams.On("Delete", mock.Anything, *es.ID).Return(nil).Once()
+		mp.eventStreams.On("Delete", mock.Anything, es.GetID()).Return(nil).Once()
 	})
 	defer done()
 
 	err := esm.DeleteStream(ctx, *es.Name)
-	assert.Regexp(t, "pop", err)
-
+	assert.NoError(t, err)
 }
 
 func TestResetStreamStopFailTimeout(t *testing.T) {
