@@ -51,7 +51,6 @@ var (
 	EventStreamUpdated           = ffm("eventstream.updated", "Time the event stream was last updated")
 	EventStreamErrorHandling     = ffm("eventstream.errorHandling", "When an error is encountered, and short retries are exhausted, whether to skip the event or block the stream (default=block)")
 	EventStreamID                = ffm("eventstream.id", "ID of the event stream")
-	EventStreamIdentity          = ffm("eventstream.identity", "Identity context for the event stream")
 	EventStreamInitialSequenceID = ffm("eventstream.initialSequenceID", "Initial sequence ID to begin event delivery from")
 	EventStreamName              = ffm("eventstream.name", "Unique name for the event stream")
 	EventStreamRetryTimeout      = ffm("eventstream.retryTimeout", "Short retry timeout before error handling, in case of webhook based delivery")
