@@ -135,7 +135,7 @@ func (esm *esManager[CT, DT]) getStream(id string) *eventStream[CT, DT] {
 }
 
 func (esm *esManager[CT, DT]) getStreamByNameOrID(ctx context.Context, nameOrID string) (*eventStream[CT, DT], error) {
-	stream, err := esm.GetStreamByNameOrID(ctx, nameOrID)
+	stream, err := esm.GetStreamByNameOrID(ctx, nameOrID, dbsql.FailIfNotFound)
 	if err != nil {
 		return nil, err
 	}

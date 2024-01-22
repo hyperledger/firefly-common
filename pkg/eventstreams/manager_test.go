@@ -353,8 +353,8 @@ func TestUpsertReInitExistingFailInit(t *testing.T) {
 func TestDeleteStreamNotKnown(t *testing.T) {
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{}, &ffapi.FilterResult{}, nil).Once()
-		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(&GenericEventStream{
-			ResourceBase: dbsql.ResourceBase{ID: fftypes.NewUUID()}, // does not exist
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything, dbsql.FailIfNotFound).Return(&GenericEventStream{
+			ResourceBase: dbsql.ResourceBase{ID: fftypes.NewUUID()}, // exists in DB, but does not exist in runtime state
 		}, nil).Once()
 	})
 	defer done()
@@ -367,7 +367,7 @@ func TestDeleteStreamNotKnown(t *testing.T) {
 func TestDeleteStreamNotFound(t *testing.T) {
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{}, &ffapi.FilterResult{}, nil).Once()
-		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return((*GenericEventStream)(nil), fmt.Errorf("not found")).Once()
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything, dbsql.FailIfNotFound).Return((*GenericEventStream)(nil), fmt.Errorf("not found")).Once()
 	})
 	defer done()
 
@@ -379,8 +379,8 @@ func TestDeleteStreamNotFound(t *testing.T) {
 func TestResetStreamNotKnown(t *testing.T) {
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{}, &ffapi.FilterResult{}, nil).Once()
-		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(&GenericEventStream{
-			ResourceBase: dbsql.ResourceBase{ID: fftypes.NewUUID()}, // does not exist
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything, dbsql.FailIfNotFound).Return(&GenericEventStream{
+			ResourceBase: dbsql.ResourceBase{ID: fftypes.NewUUID()}, // exists in DB, but does not exist in runtime state
 		}, nil).Once()
 	})
 	defer done()
@@ -393,8 +393,8 @@ func TestResetStreamNotKnown(t *testing.T) {
 func TestStopStreamNotKnown(t *testing.T) {
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{}, &ffapi.FilterResult{}, nil).Once()
-		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(&GenericEventStream{
-			ResourceBase: dbsql.ResourceBase{ID: fftypes.NewUUID()}, // does not exist
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything, dbsql.FailIfNotFound).Return(&GenericEventStream{
+			ResourceBase: dbsql.ResourceBase{ID: fftypes.NewUUID()}, // exists in DB, but does not exist in runtime state
 		}, nil).Once()
 	})
 	defer done()
@@ -407,8 +407,8 @@ func TestStopStreamNotKnown(t *testing.T) {
 func TestStartStreamNotKnown(t *testing.T) {
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{}, &ffapi.FilterResult{}, nil).Once()
-		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(&GenericEventStream{
-			ResourceBase: dbsql.ResourceBase{ID: fftypes.NewUUID()}, // does not exist
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything, dbsql.FailIfNotFound).Return(&GenericEventStream{
+			ResourceBase: dbsql.ResourceBase{ID: fftypes.NewUUID()}, // exists in DB, but does not exist in runtime state
 		}, nil).Once()
 	})
 	defer done()
@@ -441,7 +441,7 @@ func TestDeleteStreamFail(t *testing.T) {
 		},
 	}
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
-		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(es, nil).Once()
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything, dbsql.FailIfNotFound).Return(es, nil).Once()
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{es}, &ffapi.FilterResult{}, nil).Once()
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{}, &ffapi.FilterResult{}, nil).Once()
 		mp.eventStreams.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("pop")).Once()
@@ -462,7 +462,7 @@ func TestDeleteStreamFailDelete(t *testing.T) {
 		},
 	}
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
-		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(es, nil).Once()
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything, dbsql.FailIfNotFound).Return(es, nil).Once()
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{es}, &ffapi.FilterResult{}, nil).Once()
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{}, &ffapi.FilterResult{}, nil).Once()
 		mp.eventStreams.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
@@ -489,7 +489,7 @@ func TestResetStreamStopFailTimeout(t *testing.T) {
 	}
 
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
-		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(existing.spec, nil).Once()
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything, dbsql.FailIfNotFound).Return(existing.spec, nil).Once()
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{}, &ffapi.FilterResult{}, nil).Once()
 	})
 	done()
@@ -512,7 +512,7 @@ func TestResetStreamStopFailDeleteCheckpoint(t *testing.T) {
 		},
 	}
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
-		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(existing.spec, nil).Once()
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything, dbsql.FailIfNotFound).Return(existing.spec, nil).Once()
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{}, &ffapi.FilterResult{}, nil).Once()
 		mp.checkpoints.On("DeleteMany", mock.Anything, mock.Anything).Return(fmt.Errorf("pop")).Once()
 	})
@@ -536,7 +536,7 @@ func TestResetStreamStopFailUpdateSequence(t *testing.T) {
 		},
 	}
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
-		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(existing.spec, nil).Once()
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything, dbsql.FailIfNotFound).Return(existing.spec, nil).Once()
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{}, &ffapi.FilterResult{}, nil).Once()
 		mp.checkpoints.On("DeleteMany", mock.Anything, mock.Anything).Return(nil).Once()
 		mp.eventStreams.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("pop")).Once()
@@ -561,7 +561,7 @@ func TestResetStreamNoOp(t *testing.T) {
 		},
 	}
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
-		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(existing.spec, nil).Once()
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything, dbsql.FailIfNotFound).Return(existing.spec, nil).Once()
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{}, &ffapi.FilterResult{}, nil).Once()
 		mp.checkpoints.On("DeleteMany", mock.Anything, mock.Anything).Return(nil).Once()
 		mp.eventStreams.On("Update", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
@@ -602,11 +602,11 @@ func TestGetStreamByIDFail(t *testing.T) {
 func TestGetStreamByNameOrID(t *testing.T) {
 	ctx, esm, _, done := newMockESManager(t, func(mp *mockPersistence) {
 		mp.eventStreams.On("GetMany", mock.Anything, mock.Anything).Return([]*GenericEventStream{}, &ffapi.FilterResult{}, nil).Once()
-		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything).Return(&GenericEventStream{}, nil).Once()
+		mp.eventStreams.On("GetByUUIDOrName", mock.Anything, mock.Anything, dbsql.FailIfNotFound).Return(&GenericEventStream{}, nil).Once()
 	})
 	defer done()
 
-	_, err := esm.GetStreamByNameOrID(ctx, "stream1")
+	_, err := esm.GetStreamByNameOrID(ctx, "stream1", dbsql.FailIfNotFound)
 	assert.NoError(t, err)
 
 }
