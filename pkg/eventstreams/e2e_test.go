@@ -464,7 +464,7 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Delete the first stream (which is running still)
-	err = mgr.DeleteStream(ctx, es1.GetID())
+	err = mgr.DeleteStream(ctx, *es1.Name)
 	assert.NoError(t, err)
 
 	// Check no streams left

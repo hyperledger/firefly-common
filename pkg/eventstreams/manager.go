@@ -261,7 +261,7 @@ func (esm *esManager[CT, DT]) DeleteStream(ctx context.Context, nameOrID string)
 		return err
 	}
 	// Now we can delete it fully from the DB
-	if err := esm.persistence.EventStreams().Delete(ctx, nameOrID); err != nil {
+	if err := esm.persistence.EventStreams().Delete(ctx, es.spec.GetID()); err != nil {
 		return err
 	}
 	esm.removeStream(es.spec.GetID())
