@@ -123,10 +123,11 @@ func TestWebhooksCustomHeaders403(t *testing.T) {
 
 	u := fmt.Sprintf("http://%s/test/path", s.Listener.Addr())
 	wh := newTestWebhooks(t, &WebhookConfig{URL: &u})
-	wh.spec.Headers = map[string]string{
-		"test-header": "test-value",
+	wh.spec.HTTP = &ffresty.HTTPConfig{
+		HTTPHeaders: map[string]interface{}{
+			"test-header": "test-value",
+		},
 	}
-
 	done := make(chan struct{})
 	go func() {
 		err := wh.AttemptDispatch(context.Background(), 0, &EventBatch[testData]{

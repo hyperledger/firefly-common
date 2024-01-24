@@ -28,6 +28,7 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/dbsql"
+	"github.com/hyperledger/firefly-common/pkg/ffresty"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/retry"
 	"github.com/hyperledger/firefly-common/pkg/wsclient"
@@ -301,8 +302,10 @@ func TestE2E_DeliveryWebHooks200(t *testing.T) {
 		Webhook: &WebhookConfig{
 			URL:    ptrTo(whServer.URL + "/some/path"),
 			Method: ptrTo("PUT"),
-			Headers: map[string]string{
-				"my-header": "my-value",
+			HTTP: &ffresty.HTTPConfig{
+				HTTPHeaders: map[string]interface{}{
+					"my-header": "my-value",
+				},
 			},
 		},
 	}
@@ -371,8 +374,10 @@ func TestE2E_DeliveryWebHooks500Retry(t *testing.T) {
 		Webhook: &WebhookConfig{
 			URL:    ptrTo(whServer.URL + "/some/path"),
 			Method: ptrTo("PUT"),
-			Headers: map[string]string{
-				"my-header": "my-value",
+			HTTP: &ffresty.HTTPConfig{
+				HTTPHeaders: map[string]interface{}{
+					"my-header": "my-value",
+				},
 			},
 		},
 	}
