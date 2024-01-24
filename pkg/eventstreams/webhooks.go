@@ -115,13 +115,6 @@ func (w *webhookAction[CT, DT]) AttemptDispatch(ctx context.Context, attempt int
 		SetError(&resBody)
 	req.Header.Set("Content-Type", "application/json")
 
-	if w.spec.HTTP != nil {
-		for h, v := range w.spec.HTTP.HTTPHeaders {
-			if vs, ok := v.(string); ok {
-				req.Header.Set(h, vs)
-			}
-		}
-	}
 	res, err := req.Execute(method, u.String())
 	if err != nil {
 		log.L(ctx).Errorf("Webhook %s (%s) batch=%d attempt=%d: %s", *w.spec.URL, u, batch.BatchNumber, attempt, err)
