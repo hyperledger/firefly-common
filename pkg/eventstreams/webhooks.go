@@ -34,7 +34,6 @@ import (
 type WebhookConfig struct {
 	URL           *string             `ffstruct:"whconfig" json:"url,omitempty"`
 	Method        *string             `ffstruct:"whconfig" json:"method,omitempty"`
-	Headers       map[string]string   `ffstruct:"whconfig" json:"headers,omitempty"`
 	TLSConfigName *string             `ffstruct:"whconfig" json:"tlsConfigName,omitempty"`
 	HTTP          *ffresty.HTTPConfig `ffstruct:"whconfig" json:"http,omitempty"`
 	validated     bool
@@ -115,9 +114,7 @@ func (w *webhookAction[CT, DT]) AttemptDispatch(ctx context.Context, attempt int
 		SetResult(&resBody).
 		SetError(&resBody)
 	req.Header.Set("Content-Type", "application/json")
-	for h, v := range w.spec.Headers {
-		req.Header.Set(h, v)
-	}
+
 	res, err := req.Execute(method, u.String())
 	if err != nil {
 		log.L(ctx).Errorf("Webhook %s (%s) batch=%d attempt=%d: %s", *w.spec.URL, u, batch.BatchNumber, attempt, err)
