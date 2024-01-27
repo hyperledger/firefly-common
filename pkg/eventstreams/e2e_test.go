@@ -146,6 +146,58 @@ func TestE2E_DeliveryWebSockets(t *testing.T) {
 	assert.Equal(t, 1, ts.startCount)
 }
 
+func TestE2E_DeliveryWebSocketsBroadcast(t *testing.T) {
+	ctx, p, wss, wsc, done := setupE2ETest(t)
+
+	ts := &testSource{started: make(chan struct{})}
+	close(ts.started) // start delivery immediately - will block as no WS connected
+
+	mgr, err := NewEventStreamManager[*GenericEventStream, testData](ctx, GenerateConfig[*GenericEventStream, testData](ctx), p, wss, ts)
+	assert.NoError(t, err)
+
+	// Create a stream to sub-select one topic
+	es1 := &GenericEventStream{
+		Type: &EventStreamTypeWebSocket,
+		EventStreamSpecFields: EventStreamSpecFields{
+			TopicFilter: ptrTo("topic_1"), // only one of the topics
+			BatchSize:   ptrTo(10),
+		},
+		WebSocket: &WebSocketConfig{
+			DistributionMode: &DistributionModeBroadcast,
+		},
+	}
+	created, err := mgr.UpsertStream(ctx, "stream1", es1)
+	assert.NoError(t, err)
+	assert.True(t, created)
+
+	// Connect our websocket and start it
+	err = wsc.Connect()
+	assert.NoError(t, err)
+	err = wsc.Send(ctx, []byte(`{"type":"start","stream":"stream1"}`))
+	assert.NoError(t, err)
+
+	expectedNumber := 1
+	for i := 0; i < 10; i++ {
+		data := <-wsc.Receive()
+		var batch EventBatch[testData]
+		err := json.Unmarshal(data, &batch)
+		assert.NoError(t, err)
+		// each batch should be 10
+		assert.Len(t, batch.Events, 10)
+		for _, e := range batch.Events {
+			assert.Equal(t, "topic_1", e.Topic)
+			assert.Equal(t, expectedNumber, e.Data.Field1)
+			// messages are published 0,1,2 over 10 topics, and we're only getting one of those topics
+			expectedNumber += 10
+		}
+	}
+
+	// Check we ran the loop just once, and from the empty string for the checkpoint (as there was no InitialSequenceID)
+	done()
+	assert.Equal(t, "", ts.sequenceStartedWith)
+	assert.Equal(t, 1, ts.startCount)
+}
+
 func TestE2E_DeliveryWebSocketsNack(t *testing.T) {
 	ctx, p, wss, wsc, done := setupE2ETest(t, func() {
 		RetrySection.Set(retry.ConfigMaximumDelay, "1ms" /* spin quickly */)
@@ -499,7 +551,7 @@ func wsReceiveNack(ctx context.Context, t *testing.T, wsc wsclient.WSClient, cb 
 	assert.NoError(t, err)
 }
 
-func setupE2ETest(t *testing.T, extraSetup ...func()) (context.Context, Persistence[*GenericEventStream], wsserver.WebSocketChannels, wsclient.WSClient, func()) {
+func setupE2ETest(t *testing.T, extraSetup ...func()) (context.Context, Persistence[*GenericEventStream], wsserver.Protocol, wsclient.WSClient, func()) {
 	logrus.SetLevel(logrus.TraceLevel)
 
 	ctx := context.Background()

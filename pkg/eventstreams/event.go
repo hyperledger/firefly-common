@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -27,6 +27,10 @@ type EventBatch[DataType any] struct {
 	StreamID    string             `json:"stream"`      // the ID of the event stream for this event
 	BatchNumber int64              `json:"batchNumber"` // should be provided back in the ack
 	Events      []*Event[DataType] `json:"events"`      // an array of events allows efficient batch acknowledgment
+}
+
+func (eb *EventBatch[DataType]) SetBatchNumber(batchNumber int64) {
+	eb.BatchNumber = batchNumber
 }
 
 type Event[DataType any] struct {

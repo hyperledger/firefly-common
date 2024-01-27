@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -18,7 +18,6 @@ package wsserver
 
 import (
 	"context"
-	"reflect"
 	"strings"
 	"sync"
 
@@ -29,21 +28,14 @@ import (
 )
 
 type webSocketConnection struct {
-	ctx       context.Context
-	id        string
-	server    *webSocketServer
-	conn      *ws.Conn
-	mux       sync.Mutex
-	closed    bool
-	streams   map[string]*webSocketStream
-	broadcast chan interface{}
-	newStream chan bool
-	closing   chan struct{}
-}
-
-type WebSocketCommandMessageOrError struct {
-	Msg *WebSocketCommandMessage
-	Err error
+	ctx      context.Context
+	id       string
+	server   *webSocketServer
+	conn     *ws.Conn
+	closeMux sync.Mutex
+	closed   bool
+	send     chan interface{}
+	closing  chan struct{}
 }
 
 type WebSocketCommandMessage struct {
@@ -56,14 +48,12 @@ type WebSocketCommandMessage struct {
 func newConnection(bgCtx context.Context, server *webSocketServer, conn *ws.Conn) *webSocketConnection {
 	id := fftypes.NewUUID().String()
 	wsc := &webSocketConnection{
-		ctx:       log.WithLogField(bgCtx, "wsc", id),
-		id:        id,
-		server:    server,
-		conn:      conn,
-		newStream: make(chan bool),
-		streams:   make(map[string]*webSocketStream),
-		broadcast: make(chan interface{}),
-		closing:   make(chan struct{}),
+		ctx:     log.WithLogField(bgCtx, "wsc", id),
+		id:      id,
+		server:  server,
+		conn:    conn,
+		send:    make(chan interface{}),
+		closing: make(chan struct{}),
 	}
 	go wsc.listen()
 	go wsc.sender()
@@ -71,66 +61,31 @@ func newConnection(bgCtx context.Context, server *webSocketServer, conn *ws.Conn
 }
 
 func (c *webSocketConnection) close() {
-	c.mux.Lock()
+	c.closeMux.Lock()
 	if !c.closed {
 		c.closed = true
 		c.conn.Close()
 		close(c.closing)
 	}
-	c.mux.Unlock()
+	c.closeMux.Unlock()
 
-	for _, t := range c.streams {
-		c.server.cycleStream(c.id, t)
-		log.L(c.ctx).Infof("Websocket closed while active on stream '%s'", t.streamName)
-	}
 	c.server.connectionClosed(c)
 	log.L(c.ctx).Infof("Disconnected")
 }
 
 func (c *webSocketConnection) sender() {
 	defer c.close()
-	buildCases := func() []reflect.SelectCase {
-		c.mux.Lock()
-		defer c.mux.Unlock()
-		cases := make([]reflect.SelectCase, len(c.streams)+3)
-		i := 0
-		for _, t := range c.streams {
-			cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(t.senderChannel)}
-			i++
-		}
-		cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(c.broadcast)}
-		i++
-		cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(c.closing)}
-		i++
-		cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(c.newStream)}
-		return cases
-	}
-	cases := buildCases()
 	for {
-		chosen, value, ok := reflect.Select(cases)
-		if !ok {
+		select {
+		case payload := <-c.send:
+			if err := c.conn.WriteJSON(payload); err != nil {
+				log.L(c.ctx).Errorf("Send failed - closing connection: %s", err)
+				return
+			}
+		case <-c.closing:
 			log.L(c.ctx).Infof("Closing")
 			return
 		}
-
-		if chosen == len(cases)-1 {
-			// Addition of a new stream
-			cases = buildCases()
-		} else {
-			// Message from one of the existing streams
-			_ = c.conn.WriteJSON(value.Interface())
-		}
-	}
-}
-
-func (c *webSocketConnection) startStream(t *webSocketStream) {
-	c.mux.Lock()
-	c.streams[t.streamName] = t
-	c.server.StreamStarted(c, t.streamName)
-	c.mux.Unlock()
-	select {
-	case c.newStream <- true:
-	case <-c.closing:
 	}
 }
 
@@ -146,38 +101,15 @@ func (c *webSocketConnection) listen() {
 		}
 		log.L(c.ctx).Tracef("Received: %+v", msg)
 
-		t := c.server.getStream(msg.Stream)
 		switch strings.ToLower(msg.Type) {
 		case "start":
-			c.startStream(t)
+			c.server.streamStarted(c, msg.Stream)
 		case "ack":
-			if !c.dispatchAckOrError(t, &msg, nil) {
-				return
-			}
+			c.server.completeRoundTrip(msg.Stream, &msg, nil)
 		case "error", "nack":
-			if !c.dispatchAckOrError(t, &msg, i18n.NewError(c.ctx, i18n.MsgWSErrorFromClient, msg.Message)) {
-				return
-			}
+			c.server.completeRoundTrip(msg.Stream, &msg, i18n.NewError(c.ctx, i18n.MsgWSErrorFromClient, msg.Message))
 		default:
 			log.L(c.ctx).Errorf("Unexpected message type: %+v", msg)
 		}
 	}
-}
-
-func (c *webSocketConnection) dispatchAckOrError(t *webSocketStream, msg *WebSocketCommandMessage, err error) bool {
-	if err != nil {
-		log.L(c.ctx).Debugf("Received WebSocket error on stream '%s': %s", t.streamName, err)
-	} else {
-		log.L(c.ctx).Debugf("Received WebSocket ack for batch %d on stream '%s'", msg.BatchNumber, t.streamName)
-	}
-	select {
-	case t.receiverChannel <- &WebSocketCommandMessageOrError{Msg: msg, Err: err}:
-	default:
-		log.L(c.ctx).Debugf("Received WebSocket ack for batch %d on stream '%s'. Too many spurious acks - closing connection", msg.BatchNumber, t.streamName)
-		// This shouldn't happen, as the channel has a buffer. So this means the client has sent us a number of
-		// acks that are not on the right stream (so no event stream is attached).
-		// We cannot discard this ack and continue, but we cannot afford to block here either, so we close the websocket
-		return false
-	}
-	return true
 }
