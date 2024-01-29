@@ -25,6 +25,7 @@ import (
 	"time"
 
 	ws "github.com/gorilla/websocket"
+	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/sirupsen/logrus"
 
 	"github.com/stretchr/testify/assert"
@@ -40,7 +41,10 @@ func (tp *testPayload) SetBatchNumber(batchNumber int64) {
 }
 
 func newTestWebSocketServer() (*webSocketServer, *httptest.Server) {
-	s := NewWebSocketServer(context.Background()).(*webSocketServer)
+	config.RootConfigReset()
+	utConf := config.RootSection("ut")
+	InitConfig(utConf)
+	s := NewWebSocketServer(context.Background(), GenerateConfig(utConf)).(*webSocketServer)
 	ts := httptest.NewServer(http.HandlerFunc(s.Handler))
 	return s, ts
 }
@@ -464,4 +468,77 @@ func TestActionsAfterClose(t *testing.T) {
 
 	// round trip not in fight
 	w.completeRoundTrip("stream1", &WebSocketCommandMessage{}, nil)
+}
+
+func TestRoundTripClientAckTimeout(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
+
+	assert := assert.New(t)
+
+	w, ts := newTestWebSocketServer()
+	defer ts.Close()
+	defer w.Close()
+	w.conf.AckTimeout = 1 * time.Microsecond
+
+	u, err := url.Parse(ts.URL)
+	u.Scheme = "ws"
+	u.Path = "/ws"
+	c, _, err := ws.DefaultDialer.Dial(u.String(), nil)
+	assert.NoError(err)
+
+	roundTripComplete := make(chan struct{})
+	go func() {
+		_, err := w.RoundTrip(w.ctx, "stream1", &testPayload{Message: "anybody there"})
+		assert.Regexp("FF00244", err)
+		defer close(roundTripComplete)
+	}()
+
+	c.WriteJSON(&WebSocketCommandMessage{
+		Type:   "start",
+		Stream: "stream1",
+	})
+
+	var received testPayload
+	err = c.ReadJSON(&received)
+	assert.NoError(err)
+	assert.Equal(int64(1), received.BatchNumber)
+	assert.Equal("anybody there", received.Message)
+
+	<-roundTripComplete
+}
+
+func TestRoundTripContextCancelled(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
+
+	assert := assert.New(t)
+
+	w, ts := newTestWebSocketServer()
+	defer ts.Close()
+	defer w.Close()
+	w.conf.AckTimeout = 1 * time.Microsecond
+
+	u, err := url.Parse(ts.URL)
+	u.Scheme = "ws"
+	u.Path = "/ws"
+	c, _, err := ws.DefaultDialer.Dial(u.String(), nil)
+	assert.NoError(err)
+	defer c.Close()
+
+	c.WriteJSON(&WebSocketCommandMessage{
+		Type:   "start",
+		Stream: "stream1",
+	})
+
+	err = w.waitStreamConnections(w.ctx, "stream1", func(ss *streamState) error { return nil })
+	assert.NoError(err)
+
+	// close the context before round trip
+	canceledCtx, cancelCtx := context.WithCancel(context.Background())
+	cancelCtx()
+
+	// Block the send
+	w.streamMap["stream1"].conns[0].send = make(chan interface{})
+
+	_, err = w.RoundTrip(canceledCtx, "stream1", &testPayload{Message: "anybody there"})
+	assert.Regexp("FF00154", err)
 }

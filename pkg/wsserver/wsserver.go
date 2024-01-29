@@ -20,7 +20,6 @@ import (
 	"context"
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
@@ -66,26 +65,26 @@ type streamState struct {
 }
 
 type webSocketServer struct {
-	ctx               context.Context
-	processingTimeout time.Duration
-	streamMap         map[string]*streamState
-	streamMapChange   chan struct{}
-	mux               sync.Mutex
-	upgrader          *websocket.Upgrader
-	connections       map[string]*webSocketConnection
+	ctx             context.Context
+	conf            WebSocketServerConfig
+	streamMap       map[string]*streamState
+	streamMapChange chan struct{}
+	mux             sync.Mutex
+	upgrader        *websocket.Upgrader
+	connections     map[string]*webSocketConnection
 }
 
 // NewWebSocketServer create a new server with a simplified interface
-func NewWebSocketServer(bgCtx context.Context) WebSocketServer {
+func NewWebSocketServer(bgCtx context.Context, config *WebSocketServerConfig) WebSocketServer {
 	s := &webSocketServer{
-		ctx:               bgCtx,
-		connections:       make(map[string]*webSocketConnection),
-		streamMap:         make(map[string]*streamState),
-		streamMapChange:   make(chan struct{}),
-		processingTimeout: 30 * time.Second,
+		ctx:             bgCtx,
+		connections:     make(map[string]*webSocketConnection),
+		streamMap:       make(map[string]*streamState),
+		streamMapChange: make(chan struct{}),
+		conf:            *config,
 		upgrader: &websocket.Upgrader{
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
+			ReadBufferSize:  int(config.ReadBufferSize),
+			WriteBufferSize: int(config.WriteBufferSize),
 		},
 	}
 	return s
@@ -193,8 +192,12 @@ func (s *webSocketServer) RoundTrip(ctx context.Context, stream string, payload 
 		return nil, i18n.NewError(s.ctx, i18n.MsgWebSocketClosed, rt.conn.id)
 	case <-ctx.Done():
 		// ... or stop/reset of stream, or server shutdown
-		return nil, i18n.NewError(s.ctx, i18n.MsgContextCanceled, rt.conn.id)
+		return nil, i18n.NewError(s.ctx, i18n.MsgContextCanceled)
 	}
+
+	// Set the processing timeout to wait for batch acknowledgement
+	ctxWithTimeout, cancelTimeout := context.WithTimeout(ctx, s.conf.AckTimeout)
+	defer cancelTimeout()
 
 	// Wait for the response
 	select {
@@ -202,9 +205,9 @@ func (s *webSocketServer) RoundTrip(ctx context.Context, stream string, payload 
 	case <-rt.conn.closing:
 		// handle connection closure while waiting for ack
 		return nil, i18n.NewError(s.ctx, i18n.MsgWebSocketClosed, rt.conn.id)
-	case <-ctx.Done():
-		// ... or stop/reset of stream, or server shutdown
-		return nil, i18n.NewError(s.ctx, i18n.MsgContextCanceled, rt.conn.id)
+	case <-ctxWithTimeout.Done():
+		// ... or time out, stop/reset of stream, or server shutdown
+		return nil, i18n.NewError(s.ctx, i18n.MsgWebSocketRoundTripTimeout)
 	}
 	return rt.response, rt.err
 }

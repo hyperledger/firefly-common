@@ -607,6 +607,8 @@ func setupE2ETest(t *testing.T, extraSetup ...func()) (context.Context, Persiste
 	conf := config.RootSection("ut")
 	dbConf := conf.SubSection("db")
 	esConf := conf.SubSection("eventstreams")
+	wsServerConf := conf.SubSection("wss")
+	wsserver.InitConfig(wsServerConf)
 	dbsql.InitSQLiteConfig(dbConf)
 	InitConfig(esConf)
 
@@ -629,7 +631,7 @@ func setupE2ETest(t *testing.T, extraSetup ...func()) (context.Context, Persiste
 	p.EventStreams().Validate()
 	p.Checkpoints().Validate()
 
-	wss := wsserver.NewWebSocketServer(ctx)
+	wss := wsserver.NewWebSocketServer(ctx, wsserver.GenerateConfig(wsServerConf))
 	server := httptest.NewServer(http.HandlerFunc(wss.Handler))
 
 	// Build the WS connection, but don't connect it yet
