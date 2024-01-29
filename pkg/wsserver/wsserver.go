@@ -103,8 +103,6 @@ func (s *webSocketServer) Handler(w http.ResponseWriter, r *http.Request) {
 	s.connections[c.id] = c
 }
 
-// i18n.NewError(s.ctx, i18n.MsgWebSocketClosed, connInfo)
-
 func (s *webSocketServer) connectionClosed(c *webSocketConnection) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
