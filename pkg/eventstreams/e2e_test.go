@@ -340,13 +340,18 @@ func TestE2E_ResetStreamWhileAwaitingAck(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Do a reset before we ack.
-	err = mgr.ResetStream(ctx, "stream1", nil)
+	err = mgr.ResetStream(ctx, "stream1", ptrTo("12345"))
 	assert.NoError(t, err)
 
-	// Check we ran the loop just once, and from the empty string for the checkpoint (as there was no InitialSequenceID)
+	// Should get the batch again
+	data = <-wsc.Receive()
+	err = json.Unmarshal(data, &batch)
+	assert.NoError(t, err)
+
+	// Check we did the reset
 	done()
-	assert.Equal(t, "", ts.sequenceStartedWith)
-	assert.Equal(t, 1, ts.startCount)
+	assert.Equal(t, "12345", ts.sequenceStartedWith)
+	assert.Equal(t, 2, ts.startCount)
 }
 
 func TestE2E_DeliveryWebHooks200(t *testing.T) {

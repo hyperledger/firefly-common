@@ -179,23 +179,34 @@ func (s *webSocketServer) RoundTrip(ctx context.Context, stream string, payload 
 	if err != nil {
 		return nil, err
 	}
+
+	// Ensure we clean up before returning, including in error cases
 	defer func() {
-		// Ensure we clean up before returning
 		s.mux.Lock()
 		rt.ss.inflight = nil
 		s.mux.Unlock()
 	}()
+
 	// Send the payload to initiate the exchange
 	select {
 	case rt.conn.send <- payload:
 	case <-rt.conn.closing:
+		// handle connection closure while waiting to send
 		return nil, i18n.NewError(s.ctx, i18n.MsgWebSocketClosed, rt.conn.id)
+	case <-ctx.Done():
+		// ... or stop/reset of stream, or server shutdown
+		return nil, i18n.NewError(s.ctx, i18n.MsgContextCanceled, rt.conn.id)
 	}
+
 	// Wait for the response
 	select {
 	case <-rt.done:
 	case <-rt.conn.closing:
+		// handle connection closure while waiting for ack
 		return nil, i18n.NewError(s.ctx, i18n.MsgWebSocketClosed, rt.conn.id)
+	case <-ctx.Done():
+		// ... or stop/reset of stream, or server shutdown
+		return nil, i18n.NewError(s.ctx, i18n.MsgContextCanceled, rt.conn.id)
 	}
 	return rt.response, rt.err
 }
