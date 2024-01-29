@@ -306,6 +306,49 @@ func TestE2E_WebsocketDeliveryRestartReset(t *testing.T) {
 
 }
 
+func TestE2E_ResetStreamWhileAwaitingAck(t *testing.T) {
+	ctx, p, wss, wsc, done := setupE2ETest(t)
+
+	ts := &testSource{started: make(chan struct{})}
+	close(ts.started) // start delivery immediately - will block as no WS connected
+
+	mgr, err := NewEventStreamManager[*GenericEventStream, testData](ctx, GenerateConfig[*GenericEventStream, testData](ctx), p, wss, ts)
+	assert.NoError(t, err)
+
+	// Create a stream to sub-select one topic
+	es1 := &GenericEventStream{
+		Type: &EventStreamTypeWebSocket,
+		EventStreamSpecFields: EventStreamSpecFields{
+			TopicFilter: ptrTo("topic_1"), // only one of the topics
+			BatchSize:   ptrTo(10),
+		},
+	}
+	created, err := mgr.UpsertStream(ctx, "stream1", es1)
+	assert.NoError(t, err)
+	assert.True(t, created)
+
+	// Connect our websocket and start it
+	err = wsc.Connect()
+	assert.NoError(t, err)
+	err = wsc.Send(ctx, []byte(`{"type":"start","stream":"stream1"}`))
+	assert.NoError(t, err)
+
+	// Receive the message batch
+	data := <-wsc.Receive()
+	var batch EventBatch[testData]
+	err = json.Unmarshal(data, &batch)
+	assert.NoError(t, err)
+
+	// Do a reset before we ack.
+	err = mgr.ResetStream(ctx, "stream1", nil)
+	assert.NoError(t, err)
+
+	// Check we ran the loop just once, and from the empty string for the checkpoint (as there was no InitialSequenceID)
+	done()
+	assert.Equal(t, "", ts.sequenceStartedWith)
+	assert.Equal(t, 1, ts.startCount)
+}
+
 func TestE2E_DeliveryWebHooks200(t *testing.T) {
 	ctx, p, wss, wsc, done := setupE2ETest(t)
 	defer done()
