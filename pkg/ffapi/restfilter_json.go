@@ -214,7 +214,7 @@ func joinShortNames(long, short, negated []*FilterJSONKeyValue) []*FilterJSONKey
 	if len(long) == 0 {
 		copy(res[0:], short)
 	} else {
-		copy(res[len(short):], short)
+		copy(res[len(long):], short)
 	}
 
 	negs := res[len(short)+len(long):]
