@@ -210,7 +210,7 @@ func (jq *QueryJSON) addSimpleFilters(ctx context.Context, fb FilterBuilder, jso
 func joinShortNames(long, short, negated []*FilterJSONKeyValue) []*FilterJSONKeyValue {
 	res := make([]*FilterJSONKeyValue, len(long)+len(short)+len(negated))
 	copy(res, long)
-	copy(res[len(short):], short)
+	copy(res[len(long):], short)
 	negs := res[len(short)+len(long):]
 	copy(negs, negated)
 	for _, n := range negs {

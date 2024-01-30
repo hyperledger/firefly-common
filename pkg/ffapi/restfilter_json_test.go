@@ -485,3 +485,50 @@ func TestBuildQueryJSONBadFields(t *testing.T) {
 func TestBuildQueryJSONDocumented(t *testing.T) {
 	CheckObjectDocumented(&QueryJSON{})
 }
+
+func TestBuildQueryJSONContainsShortNames(t *testing.T) {
+
+	var qf1 QueryJSON
+	err := json.Unmarshal([]byte(`{
+		"eq": [
+			{
+				"field": "sequence",
+				"value": "12345"
+			}
+		]
+	}`), &qf1)
+	assert.NoError(t, err)
+
+	filter, err := qf1.BuildFilter(context.Background(), TestQueryFactory)
+	assert.NoError(t, err)
+
+	fi, err := filter.Finalize()
+	assert.NoError(t, err)
+
+	assert.Equal(t, "sequence == 12345", fi.String())
+
+	var qf2 QueryJSON
+	err = json.Unmarshal([]byte(`{
+		"gt": [
+			{
+				"field": "sequence",
+				"value": "12345"
+			}
+		],
+		"lte": [
+			{
+				"field": "sequence",
+				"value": "12345"
+			}
+		]
+	}`), &qf2)
+	assert.NoError(t, err)
+
+	filter, err = qf2.BuildFilter(context.Background(), TestQueryFactory)
+	assert.NoError(t, err)
+
+	fi, err = filter.Finalize()
+	assert.NoError(t, err)
+
+	assert.Equal(t, "( sequence <= 12345 ) && ( sequence >> 12345 )", fi.String())
+}
