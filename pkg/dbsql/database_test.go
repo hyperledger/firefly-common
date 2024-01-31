@@ -25,6 +25,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	sq "github.com/Masterminds/squirrel"
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -132,6 +133,7 @@ func TestQueryTxBadSQL(t *testing.T) {
 }
 
 func TestQueryNoTxOk(t *testing.T) {
+	logrus.SetLevel(logrus.DebugLevel)
 	mp, mdb := NewMockProvider().UTInit()
 	mdb.ExpectQuery("SELECT.*").WillReturnRows(sqlmock.NewRows([]string{"seq"}).AddRow(12345))
 	f := TestQueryFactory.NewFilter(context.Background()).Eq("id", "12345")

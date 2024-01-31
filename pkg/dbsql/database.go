@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -462,7 +462,7 @@ func (s *Database) CommitTx(ctx context.Context, tx *TXWrapper, autoCommit bool)
 }
 
 func floatMillisSince(t time.Time) float64 {
-	return (float64)(time.Since(t).Milliseconds()) / (float64)(time.Millisecond)
+	return (float64)(time.Since(t)) / (float64)(time.Millisecond)
 }
 
 func (s *Database) DB() *sql.DB {
