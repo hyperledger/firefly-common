@@ -32,7 +32,7 @@ func (_m *WebSocketServer) Handler(w http.ResponseWriter, r *http.Request) {
 }
 
 // RoundTrip provides a mock function with given fields: ctx, stream, payload
-func (_m *WebSocketServer) RoundTrip(ctx context.Context, stream string, payload wsserver.BatchNumbered) (*wsserver.WebSocketCommandMessage, error) {
+func (_m *WebSocketServer) RoundTrip(ctx context.Context, stream string, payload wsserver.WSBatch) (*wsserver.WebSocketCommandMessage, error) {
 	ret := _m.Called(ctx, stream, payload)
 
 	if len(ret) == 0 {
@@ -41,10 +41,10 @@ func (_m *WebSocketServer) RoundTrip(ctx context.Context, stream string, payload
 
 	var r0 *wsserver.WebSocketCommandMessage
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, wsserver.BatchNumbered) (*wsserver.WebSocketCommandMessage, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, wsserver.WSBatch) (*wsserver.WebSocketCommandMessage, error)); ok {
 		return rf(ctx, stream, payload)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, wsserver.BatchNumbered) *wsserver.WebSocketCommandMessage); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, wsserver.WSBatch) *wsserver.WebSocketCommandMessage); ok {
 		r0 = rf(ctx, stream, payload)
 	} else {
 		if ret.Get(0) != nil {
@@ -52,7 +52,7 @@ func (_m *WebSocketServer) RoundTrip(ctx context.Context, stream string, payload
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, wsserver.BatchNumbered) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, string, wsserver.WSBatch) error); ok {
 		r1 = rf(ctx, stream, payload)
 	} else {
 		r1 = ret.Error(1)

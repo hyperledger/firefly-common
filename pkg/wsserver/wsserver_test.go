@@ -32,12 +32,12 @@ import (
 )
 
 type testPayload struct {
-	BatchNumber int64 `json:"batchNumber"`
-	Message     string
+	BatchHeader
+	Message string
 }
 
-func (tp *testPayload) SetBatchNumber(batchNumber int64) {
-	tp.BatchNumber = batchNumber
+func (tp *testPayload) GetBatchHeader() *BatchHeader {
+	return &tp.BatchHeader
 }
 
 func newTestWebSocketServer() (*webSocketServer, *httptest.Server) {

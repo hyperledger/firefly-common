@@ -44,11 +44,17 @@ type Protocol interface {
 	// returns an interface that can be used to send a payload to exactly one of the attached
 	// connections, and receive an ack/error from just the one connection that was picked.
 	// - Returns an error if the context is closed.
-	RoundTrip(ctx context.Context, stream string, payload BatchNumbered) (*WebSocketCommandMessage, error)
+	RoundTrip(ctx context.Context, stream string, payload WSBatch) (*WebSocketCommandMessage, error)
 }
 
-type BatchNumbered interface {
-	SetBatchNumber(batchNumber int64)
+// WSBatch is any serializable structure that contains the batch header
+type WSBatch interface {
+	GetBatchHeader() *BatchHeader
+}
+
+type BatchHeader struct {
+	BatchNumber int64  `json:"batchNumber"`
+	Stream      string `json:"stream"`
 }
 
 // WebSocketServer is the full server interface with the init call
@@ -151,7 +157,7 @@ type roundTrip struct {
 	response    *WebSocketCommandMessage
 }
 
-func (s *webSocketServer) RoundTrip(ctx context.Context, stream string, payload BatchNumbered) (*WebSocketCommandMessage, error) {
+func (s *webSocketServer) RoundTrip(ctx context.Context, stream string, payload WSBatch) (*WebSocketCommandMessage, error) {
 	var rt *roundTrip
 	err := s.waitStreamConnections(ctx, stream, func(ss *streamState) error {
 		// If there's an inflight already, that's an error - the caller is required to call NextRoundTrip sequentially,
@@ -163,7 +169,8 @@ func (s *webSocketServer) RoundTrip(ctx context.Context, stream string, payload 
 		conn := ss.conns[ss.wlmCounter%int64(len(ss.conns))]
 		ss.wlmCounter++
 		// The wlmCounter is used as the batch number in the payload
-		payload.SetBatchNumber(ss.wlmCounter)
+		payload.GetBatchHeader().BatchNumber = ss.wlmCounter
+		payload.GetBatchHeader().Stream = stream
 		rt = &roundTrip{
 			ss:          ss,
 			conn:        conn,

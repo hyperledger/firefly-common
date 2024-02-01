@@ -100,7 +100,6 @@ func (c *webSocketConnection) listen() {
 			return
 		}
 		log.L(c.ctx).Tracef("Received: %+v", msg)
-
 		switch strings.ToLower(msg.Type) {
 		case "start":
 			c.server.streamStarted(c, msg.Stream)
