@@ -26,9 +26,8 @@ const MessageTypeEventBatch = "event_batch"
 
 type EventBatch[DataType any] struct {
 	wsserver.BatchHeader
-	Type     string             `json:"type"`   // always MessageTypeEventBatch (for consistent WebSocket flow control)
-	StreamID string             `json:"stream"` // the ID of the event stream for this event
-	Events   []*Event[DataType] `json:"events"` // an array of events allows efficient batch acknowledgment
+	Type   string             `json:"type"`   // always MessageTypeEventBatch (for consistent WebSocket flow control)
+	Events []*Event[DataType] `json:"events"` // an array of events allows efficient batch acknowledgment
 }
 
 func (eb *EventBatch[DataType]) GetBatchHeader() *wsserver.BatchHeader {
