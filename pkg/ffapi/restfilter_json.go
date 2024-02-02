@@ -95,6 +95,27 @@ type QueryJSON struct {
 
 type SimpleFilterValue string
 
+type resolveCtx struct {
+	ctx           context.Context
+	jsonFilter    *FilterJSON
+	valueResolver ValueResolverFn
+	err           error
+}
+
+type ValueResolverFn func(ctx context.Context, level *FilterJSON, fieldName, suppliedValue string) (driver.Value, error)
+
+type JSONBuildFilterOpt struct {
+	valueResolver ValueResolverFn
+}
+
+// Option to add a handler that will be called at each OR level, before performing the normal
+// processing on each
+func ValueResolver(fn ValueResolverFn) *JSONBuildFilterOpt {
+	return &JSONBuildFilterOpt{
+		valueResolver: fn,
+	}
+}
+
 func (js *SimpleFilterValue) UnmarshalJSON(b []byte) error {
 	var v interface{}
 	err := json.Unmarshal(b, &v)
@@ -120,7 +141,7 @@ func (js SimpleFilterValue) String() string {
 	return (string)(js)
 }
 
-func (jq *QueryJSON) BuildFilter(ctx context.Context, qf QueryFactory) (Filter, error) {
+func (jq *QueryJSON) BuildFilter(ctx context.Context, qf QueryFactory, options ...*JSONBuildFilterOpt) (Filter, error) {
 	fb := qf.NewFilter(ctx)
 	if jq.Count != nil {
 		fb = fb.Count(*jq.Count)
@@ -134,7 +155,7 @@ func (jq *QueryJSON) BuildFilter(ctx context.Context, qf QueryFactory) (Filter, 
 	for _, s := range jq.Sort {
 		fb = fb.Sort(s)
 	}
-	return jq.BuildSubFilter(ctx, fb, &jq.FilterJSON)
+	return jq.BuildSubFilter(ctx, fb, &jq.FilterJSON, options...)
 }
 
 func validateFilterField(ctx context.Context, fb FilterBuilder, fieldAnyCase string) (string, error) {
@@ -146,7 +167,7 @@ func validateFilterField(ctx context.Context, fb FilterBuilder, fieldAnyCase str
 	return "", i18n.NewError(ctx, i18n.MsgInvalidFilterField, fieldAnyCase)
 }
 
-func (jq *QueryJSON) addSimpleFilters(ctx context.Context, fb FilterBuilder, jsonFilter *FilterJSON, andFilter AndFilter) (AndFilter, error) {
+func (jq *QueryJSON) addSimpleFilters(ctx context.Context, fb FilterBuilder, jsonFilter *FilterJSON, andFilter AndFilter, rv *resolveCtx) (AndFilter, error) {
 	for _, e := range joinShortNames(jsonFilter.Equal, jsonFilter.Eq, jsonFilter.NEq) {
 		field, err := validateFilterField(ctx, fb, e.Field)
 		if err != nil {
@@ -154,15 +175,15 @@ func (jq *QueryJSON) addSimpleFilters(ctx context.Context, fb FilterBuilder, jso
 		}
 		if e.CaseInsensitive {
 			if e.Not {
-				andFilter = andFilter.Condition(fb.NIeq(field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.NIeq(field, rv.resolve(field, e.Value.String())))
 			} else {
-				andFilter = andFilter.Condition(fb.IEq(field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.IEq(field, rv.resolve(field, e.Value.String())))
 			}
 		} else {
 			if e.Not {
-				andFilter = andFilter.Condition(fb.Neq(field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.Neq(field, rv.resolve(field, e.Value.String())))
 			} else {
-				andFilter = andFilter.Condition(fb.Eq(field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.Eq(field, rv.resolve(field, e.Value.String())))
 			}
 		}
 	}
@@ -173,15 +194,15 @@ func (jq *QueryJSON) addSimpleFilters(ctx context.Context, fb FilterBuilder, jso
 		}
 		if e.CaseInsensitive {
 			if e.Not {
-				andFilter = andFilter.Condition(fb.NotIContains(field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.NotIContains(field, rv.resolve(field, e.Value.String())))
 			} else {
-				andFilter = andFilter.Condition(fb.IContains(field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.IContains(field, rv.resolve(field, e.Value.String())))
 			}
 		} else {
 			if e.Not {
-				andFilter = andFilter.Condition(fb.NotContains(field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.NotContains(field, rv.resolve(field, e.Value.String())))
 			} else {
-				andFilter = andFilter.Condition(fb.Contains(field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.Contains(field, rv.resolve(field, e.Value.String())))
 			}
 		}
 	}
@@ -192,15 +213,15 @@ func (jq *QueryJSON) addSimpleFilters(ctx context.Context, fb FilterBuilder, jso
 		}
 		if e.CaseInsensitive {
 			if e.Not {
-				andFilter = andFilter.Condition(fb.NotIStartsWith(field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.NotIStartsWith(field, rv.resolve(field, e.Value.String())))
 			} else {
-				andFilter = andFilter.Condition(fb.IStartsWith(field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.IStartsWith(field, rv.resolve(field, e.Value.String())))
 			}
 		} else {
 			if e.Not {
-				andFilter = andFilter.Condition(fb.NotStartsWith(field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.NotStartsWith(field, rv.resolve(field, e.Value.String())))
 			} else {
-				andFilter = andFilter.Condition(fb.StartsWith(field, e.Value.String()))
+				andFilter = andFilter.Condition(fb.StartsWith(field, rv.resolve(field, e.Value.String())))
 			}
 		}
 	}
@@ -230,8 +251,35 @@ func joinInAndNin(in, nin []*FilterJSONKeyValues) []*FilterJSONKeyValues {
 	return res
 }
 
-func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonFilter *FilterJSON) (Filter, error) {
-	andFilter, err := jq.addSimpleFilters(ctx, fb, jsonFilter, fb.And())
+func (rv *resolveCtx) resolve(fieldName string, v string) driver.Value {
+	if rv.valueResolver == nil {
+		return v
+	}
+	resolved, err := rv.valueResolver(rv.ctx, rv.jsonFilter, fieldName, v)
+	if err != nil {
+		rv.err = err
+		return ""
+	}
+	return resolved
+}
+
+func (rv *resolveCtx) resolveMany(fieldName string, values []SimpleFilterValue) []driver.Value {
+	driverValues := make([]driver.Value, len(values))
+	for i, v := range values {
+		driverValues[i] = rv.resolve(fieldName, v.String())
+	}
+	return driverValues
+}
+
+func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonFilter *FilterJSON, options ...*JSONBuildFilterOpt) (Filter, error) {
+	rv := &resolveCtx{ctx: ctx, jsonFilter: jsonFilter}
+	for _, o := range options {
+		if o.valueResolver != nil {
+			rv.valueResolver = o.valueResolver
+		}
+	}
+
+	andFilter, err := jq.addSimpleFilters(ctx, fb, jsonFilter, fb.And(), rv)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +291,7 @@ func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonF
 		if e.CaseInsensitive || e.Not {
 			return nil, i18n.NewError(ctx, i18n.MsgJSONQueryOpUnsupportedMod, "lessThan", allMods)
 		}
-		andFilter = andFilter.Condition(fb.Lt(field, e.Value.String()))
+		andFilter = andFilter.Condition(fb.Lt(field, rv.resolve(field, e.Value.String())))
 	}
 	for _, e := range joinShortNames(jsonFilter.LessThanOrEqual, jsonFilter.LTE, nil) {
 		field, err := validateFilterField(ctx, fb, e.Field)
@@ -253,7 +301,7 @@ func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonF
 		if e.CaseInsensitive || e.Not {
 			return nil, i18n.NewError(ctx, i18n.MsgJSONQueryOpUnsupportedMod, "lessThanOrEqual", allMods)
 		}
-		andFilter = andFilter.Condition(fb.Lte(field, e.Value.String()))
+		andFilter = andFilter.Condition(fb.Lte(field, rv.resolve(field, e.Value.String())))
 	}
 	for _, e := range joinShortNames(jsonFilter.GreaterThan, jsonFilter.GT, nil) {
 		field, err := validateFilterField(ctx, fb, e.Field)
@@ -263,7 +311,7 @@ func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonF
 		if e.CaseInsensitive || e.Not {
 			return nil, i18n.NewError(ctx, i18n.MsgJSONQueryOpUnsupportedMod, "greaterThan", allMods)
 		}
-		andFilter = andFilter.Condition(fb.Gt(field, e.Value.String()))
+		andFilter = andFilter.Condition(fb.Gt(field, rv.resolve(field, e.Value.String())))
 	}
 	for _, e := range joinShortNames(jsonFilter.GreaterThanOrEqual, jsonFilter.GTE, nil) {
 		field, err := validateFilterField(ctx, fb, e.Field)
@@ -273,7 +321,7 @@ func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonF
 		if e.CaseInsensitive || e.Not {
 			return nil, i18n.NewError(ctx, i18n.MsgJSONQueryOpUnsupportedMod, "greaterThanOrEqual", allMods)
 		}
-		andFilter = andFilter.Condition(fb.Gte(field, e.Value.String()))
+		andFilter = andFilter.Condition(fb.Gte(field, rv.resolve(field, e.Value.String())))
 	}
 	for _, e := range joinInAndNin(jsonFilter.In, jsonFilter.NIn) {
 		field, err := validateFilterField(ctx, fb, e.Field)
@@ -284,15 +332,15 @@ func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonF
 			return nil, i18n.NewError(ctx, i18n.MsgJSONQueryOpUnsupportedMod, "in", justCaseInsensitive)
 		}
 		if e.Not {
-			andFilter = andFilter.Condition(fb.NotIn(field, toDriverValues(e.Values)))
+			andFilter = andFilter.Condition(fb.NotIn(field, rv.resolveMany(field, e.Values)))
 		} else {
-			andFilter = andFilter.Condition(fb.In(field, toDriverValues(e.Values)))
+			andFilter = andFilter.Condition(fb.In(field, rv.resolveMany(field, e.Values)))
 		}
 	}
 	if len(jsonFilter.Or) > 0 {
 		childFilter := fb.Or()
 		for _, child := range jsonFilter.Or {
-			subFilter, err := jq.BuildSubFilter(ctx, fb, child)
+			subFilter, err := jq.BuildSubFilter(ctx, fb, child, options...)
 			if err != nil {
 				return nil, err
 			}
@@ -304,16 +352,12 @@ func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonF
 			andFilter.Condition(childFilter)
 		}
 	}
+	// Any error that occurred as part of the resolver plugin, need to be reconciled
+	if rv.err != nil {
+		return nil, rv.err
+	}
 	if len(andFilter.GetConditions()) == 1 {
 		return andFilter.GetConditions()[0], nil
 	}
 	return andFilter, nil
-}
-
-func toDriverValues(values []SimpleFilterValue) []driver.Value {
-	driverValues := make([]driver.Value, len(values))
-	for i, v := range values {
-		driverValues[i] = v.String()
-	}
-	return driverValues
 }

@@ -18,7 +18,9 @@ package ffapi
 
 import (
 	"context"
+	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -128,6 +130,63 @@ func TestBuildQuerySingleNestedOr(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Equal(t, "tag == 'a'", fi.String())
+}
+
+func TestBuildQuerySingleNestedWithResolverOk(t *testing.T) {
+
+	var qf QueryJSON
+	err := json.Unmarshal([]byte(`{
+		"or": [
+			{
+				"equal": [
+					{
+						"field": "tag",
+						"value": "a"
+					}
+				]		
+			}
+		]
+	}`), &qf)
+	assert.NoError(t, err)
+
+	filter, err := qf.BuildFilter(context.Background(), TestQueryFactory, ValueResolver(func(ctx context.Context, level *FilterJSON, fieldName, suppliedValue string) (driver.Value, error) {
+		assert.Equal(t, "tag", fieldName)
+		assert.Equal(t, "a", suppliedValue)
+		assert.Len(t, level.Equal, 1)
+		return "b", nil
+	}))
+	assert.NoError(t, err)
+
+	fi, err := filter.Finalize()
+	assert.NoError(t, err)
+
+	assert.Equal(t, "tag == 'b'", fi.String())
+}
+
+func TestBuildQuerySingleNestedWithResolverError(t *testing.T) {
+
+	var qf QueryJSON
+	err := json.Unmarshal([]byte(`{
+		"or": [
+			{
+				"in": [
+					{
+						"field": "tag",
+						"values": ["a"]
+					}
+				]		
+			}
+		]
+	}`), &qf)
+	assert.NoError(t, err)
+
+	_, err = qf.BuildFilter(context.Background(), TestQueryFactory, ValueResolver(func(ctx context.Context, level *FilterJSON, fieldName, suppliedValue string) (driver.Value, error) {
+		assert.Equal(t, "tag", fieldName)
+		assert.Equal(t, "a", suppliedValue)
+		assert.Len(t, level.In, 1)
+		return "", fmt.Errorf("pop")
+	}))
+	assert.Regexp(t, "pop", err)
 }
 
 func TestBuildQueryJSONEqual(t *testing.T) {
