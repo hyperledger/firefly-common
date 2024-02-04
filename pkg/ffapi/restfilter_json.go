@@ -83,6 +83,7 @@ type FilterJSON struct {
 	GTE                []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"gte,omitempty"` // short name
 	In                 []*FilterJSONKeyValues `ffstruct:"FilterJSON" json:"in,omitempty"`
 	NIn                []*FilterJSONKeyValues `ffstruct:"FilterJSON" json:"nin,omitempty"` // negated short name
+	Null               []*FilterJSONBase      `ffstruct:"FilterJSON" json:"null,omitempty"`
 }
 
 type QueryJSON struct {
@@ -223,6 +224,17 @@ func (jq *QueryJSON) addSimpleFilters(ctx context.Context, fb FilterBuilder, jso
 			} else {
 				andFilter = andFilter.Condition(fb.StartsWith(field, rv.resolve(field, e.Value.String())))
 			}
+		}
+	}
+	for _, e := range jsonFilter.Null {
+		field, err := validateFilterField(ctx, fb, e.Field)
+		if err != nil {
+			return nil, err
+		}
+		if e.Not {
+			andFilter = andFilter.Condition(fb.Neq(field, nil))
+		} else {
+			andFilter = andFilter.Condition(fb.Eq(field, nil))
 		}
 	}
 	return andFilter, nil

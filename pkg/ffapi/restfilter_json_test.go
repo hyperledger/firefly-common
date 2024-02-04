@@ -54,6 +54,11 @@ func TestBuildQueryJSONNestedAndOr(t *testing.T) {
 				"value": 999
 			}
 		],
+		"null": [
+			{
+				"field": "cid"
+			}
+		],
 		"greaterThan": [
 			{
 				"field": "sequence",
@@ -103,7 +108,7 @@ func TestBuildQueryJSONNestedAndOr(t *testing.T) {
 	fi, err := filter.Finalize()
 	assert.NoError(t, err)
 
-	assert.Equal(t, "( tag == 'a' ) && ( masked == true ) && ( sequence != 999 ) && ( sequence >> 10 ) && ( ( ( masked == true ) && ( tag IN ['a','b','c'] ) && ( tag NI ['x','y'] ) && ( tag NI ['z'] ) ) || ( masked == false ) ) sort=tag,-sequence skip=5 limit=10", fi.String())
+	assert.Equal(t, "( tag == 'a' ) && ( masked == true ) && ( sequence != 999 ) && ( cid == null ) && ( sequence >> 10 ) && ( ( ( masked == true ) && ( tag IN ['a','b','c'] ) && ( tag NI ['x','y'] ) && ( tag NI ['z'] ) ) || ( masked == false ) ) sort=tag,-sequence skip=5 limit=10", fi.String())
 }
 
 func TestBuildQuerySingleNestedOr(t *testing.T) {
@@ -221,6 +226,12 @@ func TestBuildQueryJSONEqual(t *testing.T) {
 				"field": "tag",
 				"value": "abc"
 			}
+		],
+		"null": [
+			{
+				"not": true,
+				"field": "cid"
+			}
 		]
 	}`), &qf)
 	assert.NoError(t, err)
@@ -231,7 +242,7 @@ func TestBuildQueryJSONEqual(t *testing.T) {
 	fi, err := filter.Finalize()
 	assert.NoError(t, err)
 
-	assert.Equal(t, "( created == 0 ) && ( tag != 'abc' ) && ( tag := 'ABC' ) && ( tag ;= 'abc' ) sort=tag,sequence skip=5 limit=10 count=true", fi.String())
+	assert.Equal(t, "( created == 0 ) && ( tag != 'abc' ) && ( tag := 'ABC' ) && ( tag ;= 'abc' ) && ( cid != null ) sort=tag,sequence skip=5 limit=10 count=true", fi.String())
 }
 
 func TestBuildQueryJSONContains(t *testing.T) {
@@ -538,6 +549,12 @@ func TestBuildQueryJSONBadFields(t *testing.T) {
 	err = json.Unmarshal([]byte(`{"in": [{"field": "wrong"}]}`), &qf8)
 	assert.NoError(t, err)
 	_, err = qf8.BuildFilter(context.Background(), TestQueryFactory)
+	assert.Regexp(t, "FF00142", err)
+
+	var qf9 QueryJSON
+	err = json.Unmarshal([]byte(`{"null": [{"field": "wrong"}]}`), &qf9)
+	assert.NoError(t, err)
+	_, err = qf9.BuildFilter(context.Background(), TestQueryFactory)
 	assert.Regexp(t, "FF00142", err)
 }
 
