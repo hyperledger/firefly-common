@@ -357,3 +357,19 @@ func TestStringsForTypes(t *testing.T) {
 	assert.Equal(t, "t1,t2", (&ffNameArrayField{na: fftypes.FFStringArray{"t1", "t2"}}).String())
 	assert.Equal(t, "true", (&boolField{b: true}).String())
 }
+
+func TestValueFilterAccess(t *testing.T) {
+	fb := TestQueryFactory.NewFilter(context.Background()).Gt("sequence", 0)
+	assert.NotNil(t, fb.Builder())
+	assert.Equal(t, FilterOpGt, fb.ValueFilter().Op())
+	assert.Equal(t, "sequence", fb.ValueFilter().Field())
+	assert.Equal(t, 0, fb.ValueFilter().Value())
+
+	fb.ValueFilter().SetOp(FilterOpGte)
+	fb.ValueFilter().SetField("seq")
+	fb.ValueFilter().SetValue(12345)
+
+	assert.Equal(t, FilterOpGte, fb.ValueFilter().Op())
+	assert.Equal(t, "seq", fb.ValueFilter().Field())
+	assert.Equal(t, 12345, fb.ValueFilter().Value())
+}

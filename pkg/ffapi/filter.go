@@ -78,6 +78,15 @@ type ValueFilter interface {
 
 	// The value
 	Value() interface{}
+
+	// Set the operation for this filter
+	SetOp(op FilterOp)
+
+	// Set the field name
+	SetField(f string)
+
+	// Set the value
+	SetValue(v interface{})
 }
 
 // MultiConditionFilter gives convenience methods to add conditions
@@ -397,6 +406,18 @@ func (f *baseFilter) Field() string {
 
 func (f *baseFilter) Value() interface{} {
 	return f.value
+}
+
+func (f *baseFilter) SetOp(op FilterOp) {
+	f.op = op
+}
+
+func (f *baseFilter) SetField(field string) {
+	f.field = field
+}
+
+func (f *baseFilter) SetValue(value interface{}) {
+	f.value = value
 }
 
 func (f *baseFilter) Finalize() (fi *FilterInfo, err error) {
