@@ -67,7 +67,11 @@ type FilterJSONKeyValues struct {
 }
 
 type FilterJSON struct {
-	Or                 []*FilterJSON          `ffstruct:"FilterJSON" json:"or,omitempty"`
+	Or []*FilterJSON `ffstruct:"FilterJSON" json:"or,omitempty"`
+	FilterJSONOps
+}
+
+type FilterJSONOps struct {
 	Equal              []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"equal,omitempty"`
 	Eq                 []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"eq,omitempty"`  // short name
 	NEq                []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"neq,omitempty"` // negated short name
