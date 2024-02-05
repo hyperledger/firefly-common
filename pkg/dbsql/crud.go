@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -117,6 +117,7 @@ type CRUD[T Resource] interface {
 	NewFilterBuilder(ctx context.Context) ffapi.FilterBuilder
 	NewUpdateBuilder(ctx context.Context) ffapi.UpdateBuilder
 	GetQueryFactory() ffapi.QueryFactory
+	TableAlias() string
 	Scoped(scope sq.Eq) CRUD[T] // allows dynamic scoping to a collection
 }
 
@@ -149,6 +150,13 @@ func (c *CrudBase[T]) Scoped(scope sq.Eq) CRUD[T] {
 	cScoped := *c
 	cScoped.ScopedFilter = func() sq.Eq { return scope }
 	return &cScoped
+}
+
+func (c *CrudBase[T]) TableAlias() string {
+	if c.ReadTableAlias != "" {
+		return c.ReadTableAlias
+	}
+	return c.Table
 }
 
 func (c *CrudBase[T]) GetQueryFactory() ffapi.QueryFactory {

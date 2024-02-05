@@ -656,7 +656,9 @@ func TestLeftJOINExample(t *testing.T) {
 	ctx := context.Background()
 
 	crudables := newCRUDCollection(sql.db, "ns1")
+	assert.Equal(t, "crudables", crudables.TableAlias())
 	linkables := newLinkableCollection(sql.db, "ns1")
+	assert.Equal(t, "l", linkables.TableAlias())
 
 	c1 := &TestCRUDable{
 		ResourceBase: ResourceBase{

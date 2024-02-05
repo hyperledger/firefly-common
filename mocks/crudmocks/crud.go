@@ -478,6 +478,24 @@ func (_m *CRUD[T]) Scoped(scope squirrel.Eq) dbsql.CRUD[T] {
 	return r0
 }
 
+// TableAlias provides a mock function with given fields:
+func (_m *CRUD[T]) TableAlias() string {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for TableAlias")
+	}
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
 // Update provides a mock function with given fields: ctx, id, update, hooks
 func (_m *CRUD[T]) Update(ctx context.Context, id string, update ffapi.Update, hooks ...dbsql.PostCompletionHook) error {
 	_va := make([]interface{}, len(hooks))
