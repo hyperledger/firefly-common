@@ -97,16 +97,18 @@ type QueryJSON struct {
 type SimpleFilterValue string
 
 type resolveCtx struct {
-	ctx           context.Context
-	jsonFilter    *FilterJSON
-	valueResolver ValueResolverFn
-	err           error
+	ctx                 context.Context
+	jsonFilter          *FilterJSON
+	valueResolver       ValueResolverFn
+	skipFieldValidation bool
+	err                 error
 }
 
 type ValueResolverFn func(ctx context.Context, level *FilterJSON, fieldName, suppliedValue string) (driver.Value, error)
 
 type JSONBuildFilterOpt struct {
-	valueResolver ValueResolverFn
+	valueResolver       ValueResolverFn
+	skipFieldValidation bool
 }
 
 // Option to add a handler that will be called at each OR level, before performing the normal
@@ -114,6 +116,12 @@ type JSONBuildFilterOpt struct {
 func ValueResolver(fn ValueResolverFn) *JSONBuildFilterOpt {
 	return &JSONBuildFilterOpt{
 		valueResolver: fn,
+	}
+}
+
+func SkipFieldValidation() *JSONBuildFilterOpt {
+	return &JSONBuildFilterOpt{
+		skipFieldValidation: true,
 	}
 }
 
@@ -156,10 +164,13 @@ func (jq *QueryJSON) BuildFilter(ctx context.Context, qf QueryFactory, options .
 	for _, s := range jq.Sort {
 		fb = fb.Sort(s)
 	}
-	return jq.BuildSubFilter(ctx, fb, &jq.FilterJSON, options...)
+	return (&jq.FilterJSON).BuildSubFilter(ctx, fb, options...)
 }
 
-func validateFilterField(ctx context.Context, fb FilterBuilder, fieldAnyCase string) (string, error) {
+func validateFilterField(ctx context.Context, fb FilterBuilder, fieldAnyCase string, rv *resolveCtx) (string, error) {
+	if rv.skipFieldValidation {
+		return fieldAnyCase, nil
+	}
 	for _, f := range fb.Fields() {
 		if strings.EqualFold(fieldAnyCase, f) {
 			return f, nil
@@ -168,9 +179,9 @@ func validateFilterField(ctx context.Context, fb FilterBuilder, fieldAnyCase str
 	return "", i18n.NewError(ctx, i18n.MsgInvalidFilterField, fieldAnyCase)
 }
 
-func (jq *QueryJSON) addSimpleFilters(ctx context.Context, fb FilterBuilder, jsonFilter *FilterJSON, andFilter AndFilter, rv *resolveCtx) (AndFilter, error) {
-	for _, e := range joinShortNames(jsonFilter.Equal, jsonFilter.Eq, jsonFilter.NEq) {
-		field, err := validateFilterField(ctx, fb, e.Field)
+func (jf *FilterJSON) addSimpleFilters(ctx context.Context, fb FilterBuilder, andFilter AndFilter, rv *resolveCtx) (AndFilter, error) {
+	for _, e := range joinShortNames(jf.Equal, jf.Eq, jf.NEq) {
+		field, err := validateFilterField(ctx, fb, e.Field, rv)
 		if err != nil {
 			return nil, err
 		}
@@ -188,8 +199,8 @@ func (jq *QueryJSON) addSimpleFilters(ctx context.Context, fb FilterBuilder, jso
 			}
 		}
 	}
-	for _, e := range jsonFilter.Contains {
-		field, err := validateFilterField(ctx, fb, e.Field)
+	for _, e := range jf.Contains {
+		field, err := validateFilterField(ctx, fb, e.Field, rv)
 		if err != nil {
 			return nil, err
 		}
@@ -207,8 +218,8 @@ func (jq *QueryJSON) addSimpleFilters(ctx context.Context, fb FilterBuilder, jso
 			}
 		}
 	}
-	for _, e := range jsonFilter.StartsWith {
-		field, err := validateFilterField(ctx, fb, e.Field)
+	for _, e := range jf.StartsWith {
+		field, err := validateFilterField(ctx, fb, e.Field, rv)
 		if err != nil {
 			return nil, err
 		}
@@ -226,8 +237,8 @@ func (jq *QueryJSON) addSimpleFilters(ctx context.Context, fb FilterBuilder, jso
 			}
 		}
 	}
-	for _, e := range jsonFilter.Null {
-		field, err := validateFilterField(ctx, fb, e.Field)
+	for _, e := range jf.Null {
+		field, err := validateFilterField(ctx, fb, e.Field, rv)
 		if err != nil {
 			return nil, err
 		}
@@ -283,20 +294,38 @@ func (rv *resolveCtx) resolveMany(fieldName string, values []SimpleFilterValue) 
 	return driverValues
 }
 
-func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonFilter *FilterJSON, options ...*JSONBuildFilterOpt) (Filter, error) {
+func buildResolveCtx(ctx context.Context, jsonFilter *FilterJSON, options ...*JSONBuildFilterOpt) *resolveCtx {
 	rv := &resolveCtx{ctx: ctx, jsonFilter: jsonFilter}
 	for _, o := range options {
 		if o.valueResolver != nil {
 			rv.valueResolver = o.valueResolver
 		}
+		if o.skipFieldValidation {
+			rv.skipFieldValidation = true
+		}
 	}
+	return rv
+}
 
-	andFilter, err := jq.addSimpleFilters(ctx, fb, jsonFilter, fb.And(), rv)
+func (jf *FilterJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, options ...*JSONBuildFilterOpt) (Filter, error) {
+	andFilter, err := jf.BuildAndFilter(ctx, fb, options...)
 	if err != nil {
 		return nil, err
 	}
-	for _, e := range joinShortNames(jsonFilter.LessThan, jsonFilter.LT, nil) {
-		field, err := validateFilterField(ctx, fb, e.Field)
+	if len(andFilter.GetConditions()) == 1 {
+		return andFilter.GetConditions()[0], nil
+	}
+	return andFilter, nil
+}
+
+func (jf *FilterJSON) BuildAndFilter(ctx context.Context, fb FilterBuilder, options ...*JSONBuildFilterOpt) (AndFilter, error) {
+	rv := buildResolveCtx(ctx, jf, options...)
+	andFilter, err := jf.addSimpleFilters(ctx, fb, fb.And(), rv)
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range joinShortNames(jf.LessThan, jf.LT, nil) {
+		field, err := validateFilterField(ctx, fb, e.Field, rv)
 		if err != nil {
 			return nil, err
 		}
@@ -305,8 +334,8 @@ func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonF
 		}
 		andFilter = andFilter.Condition(fb.Lt(field, rv.resolve(field, e.Value.String())))
 	}
-	for _, e := range joinShortNames(jsonFilter.LessThanOrEqual, jsonFilter.LTE, nil) {
-		field, err := validateFilterField(ctx, fb, e.Field)
+	for _, e := range joinShortNames(jf.LessThanOrEqual, jf.LTE, nil) {
+		field, err := validateFilterField(ctx, fb, e.Field, rv)
 		if err != nil {
 			return nil, err
 		}
@@ -315,8 +344,8 @@ func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonF
 		}
 		andFilter = andFilter.Condition(fb.Lte(field, rv.resolve(field, e.Value.String())))
 	}
-	for _, e := range joinShortNames(jsonFilter.GreaterThan, jsonFilter.GT, nil) {
-		field, err := validateFilterField(ctx, fb, e.Field)
+	for _, e := range joinShortNames(jf.GreaterThan, jf.GT, nil) {
+		field, err := validateFilterField(ctx, fb, e.Field, rv)
 		if err != nil {
 			return nil, err
 		}
@@ -325,8 +354,8 @@ func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonF
 		}
 		andFilter = andFilter.Condition(fb.Gt(field, rv.resolve(field, e.Value.String())))
 	}
-	for _, e := range joinShortNames(jsonFilter.GreaterThanOrEqual, jsonFilter.GTE, nil) {
-		field, err := validateFilterField(ctx, fb, e.Field)
+	for _, e := range joinShortNames(jf.GreaterThanOrEqual, jf.GTE, nil) {
+		field, err := validateFilterField(ctx, fb, e.Field, rv)
 		if err != nil {
 			return nil, err
 		}
@@ -335,8 +364,8 @@ func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonF
 		}
 		andFilter = andFilter.Condition(fb.Gte(field, rv.resolve(field, e.Value.String())))
 	}
-	for _, e := range joinInAndNin(jsonFilter.In, jsonFilter.NIn) {
-		field, err := validateFilterField(ctx, fb, e.Field)
+	for _, e := range joinInAndNin(jf.In, jf.NIn) {
+		field, err := validateFilterField(ctx, fb, e.Field, rv)
 		if err != nil {
 			return nil, err
 		}
@@ -349,10 +378,10 @@ func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonF
 			andFilter = andFilter.Condition(fb.In(field, rv.resolveMany(field, e.Values)))
 		}
 	}
-	if len(jsonFilter.Or) > 0 {
+	if len(jf.Or) > 0 {
 		childFilter := fb.Or()
-		for _, child := range jsonFilter.Or {
-			subFilter, err := jq.BuildSubFilter(ctx, fb, child, options...)
+		for _, child := range jf.Or {
+			subFilter, err := child.BuildSubFilter(ctx, fb, options...)
 			if err != nil {
 				return nil, err
 			}
@@ -367,9 +396,6 @@ func (jq *QueryJSON) BuildSubFilter(ctx context.Context, fb FilterBuilder, jsonF
 	// Any error that occurred as part of the resolver plugin, need to be reconciled
 	if rv.err != nil {
 		return nil, rv.err
-	}
-	if len(andFilter.GetConditions()) == 1 {
-		return andFilter.GetConditions()[0], nil
 	}
 	return andFilter, nil
 }

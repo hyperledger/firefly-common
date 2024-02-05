@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -63,6 +63,21 @@ type Filter interface {
 
 	// Builder returns the builder that made it
 	Builder() FilterBuilder
+
+	// Assert that this is a value filter, not an and/or
+	ValueFilter() ValueFilter
+}
+
+// ValueFilter is accessor functions for non-Or/And filters - for advanced traversal of the un-finalized tree
+type ValueFilter interface {
+	// The operation for this filter
+	Op() FilterOp
+
+	// The field name
+	Field() string
+
+	// The value
+	Value() interface{}
 }
 
 // MultiConditionFilter gives convenience methods to add conditions
@@ -366,6 +381,22 @@ func fieldMods(f Field) []FieldMod {
 		return hfm.FieldMods()
 	}
 	return nil
+}
+
+func (f *baseFilter) ValueFilter() ValueFilter {
+	return f
+}
+
+func (f *baseFilter) Op() FilterOp {
+	return f.op
+}
+
+func (f *baseFilter) Field() string {
+	return f.field
+}
+
+func (f *baseFilter) Value() interface{} {
+	return f.value
 }
 
 func (f *baseFilter) Finalize() (fi *FilterInfo, err error) {

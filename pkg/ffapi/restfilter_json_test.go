@@ -137,6 +137,32 @@ func TestBuildQuerySingleNestedOr(t *testing.T) {
 	assert.Equal(t, "tag == 'a'", fi.String())
 }
 
+func TestBuildQuerySkipFieldValidation(t *testing.T) {
+
+	var jf *FilterJSON
+	err := json.Unmarshal([]byte(`{
+		"equal": [
+			{
+				"field": "anything at all",
+				"value": "a"
+			}
+		]		
+	}`), &jf)
+	assert.NoError(t, err)
+
+	fb := TestQueryFactory.NewFilter(context.Background())
+	andFilter, err := jf.BuildAndFilter(context.Background(), fb, SkipFieldValidation())
+	assert.NoError(t, err)
+	conditions := andFilter.GetConditions()
+	assert.Len(t, conditions, 1)
+
+	cond0 := conditions[0].ValueFilter()
+	assert.Equal(t, FilterOpEq, cond0.Op())
+	assert.Equal(t, "anything at all", cond0.Field())
+	assert.Equal(t, "a", cond0.Value())
+
+}
+
 func TestBuildQuerySingleNestedWithResolverOk(t *testing.T) {
 
 	var qf QueryJSON
