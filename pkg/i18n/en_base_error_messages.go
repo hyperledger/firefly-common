@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -178,4 +178,5 @@ var (
 	MsgJSONQueryOpUnsupportedMod                   = ffe("FF00240", "Operation '%s' does not support modifiers: %v", 400)
 	MsgJSONQueryValueUnsupported                   = ffe("FF00241", "Field value not supported (must be string, number, or boolean): %s", 400)
 	MsgJSONQuerySortUnsupported                    = ffe("FF00242", "Invalid 'order' for sort (must be 'asc', 'ascending', 'desc' or 'descending'): %s", 400)
+	MsgDBExecFailed                                = ffe("FF00243", "Database update failed")
 )

@@ -595,3 +595,30 @@ func TestInsertTxRowsIncompleteReturn(t *testing.T) {
 	err = s.InsertTxRows(ctx, "table1", tx, sb, nil, []int64{1, 2}, false)
 	assert.Regexp(t, "FF00177", err)
 }
+
+func TestExecTxOk(t *testing.T) {
+	s, mdb := NewMockProvider().UTInit()
+	mdb.ExpectBegin()
+	mdb.ExpectExec("INSERT.*").WillReturnResult(driver.ResultNoRows)
+	ctx, tx, _, err := s.BeginOrUseTx(context.Background())
+	assert.NoError(t, err)
+	q := sq.Insert("mytable").Columns("some").Values("thing")
+	sqlQuery, args, err := q.PlaceholderFormat(s.features.PlaceholderFormat).ToSql()
+	assert.NoError(t, err)
+	res, err := s.ExecTx(ctx, "mytable", tx, sqlQuery, args)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+}
+
+func TestExecTxFail(t *testing.T) {
+	s, mdb := NewMockProvider().UTInit()
+	mdb.ExpectBegin()
+	mdb.ExpectExec("INSERT.*").WillReturnError(fmt.Errorf("pop"))
+	ctx, tx, _, err := s.BeginOrUseTx(context.Background())
+	assert.NoError(t, err)
+	q := sq.Insert("mytable").Columns("some").Values("thing")
+	sqlQuery, args, err := q.PlaceholderFormat(s.features.PlaceholderFormat).ToSql()
+	assert.NoError(t, err)
+	_, err = s.ExecTx(ctx, "mytable", tx, sqlQuery, args)
+	assert.Regexp(t, "pop", err)
+}
