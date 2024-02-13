@@ -219,6 +219,8 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 				r.FP = multipart.formParams
 				r.Part = multipart.part
 				output, err = route.FormUploadHandler(r)
+			} else if route.StreamHandler != nil {
+				output, err = route.StreamHandler(r)
 			} else {
 				output, err = route.JSONHandler(r)
 			}
@@ -234,13 +236,13 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 			}
 		}
 		if err == nil {
-			status, err = hs.handleOutput(req.Context(), res, status, output)
+			status, err = hs.handleOutput(req.Context(), res, status, output, route)
 		}
 		return status, err
 	})
 }
 
-func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWriter, status int, output interface{}) (int, error) {
+func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWriter, status int, output interface{}, route *Route) (int, error) {
 	vOutput := reflect.ValueOf(output)
 	outputKind := vOutput.Kind()
 	isPointer := outputKind == reflect.Ptr
@@ -260,6 +262,9 @@ func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWri
 	case reader != nil:
 		defer reader.Close()
 		res.Header().Add("Content-Type", "application/octet-stream")
+		if route.StreamOutputContentType != "" {
+			res.Header().Set("Content-Type", route.StreamOutputContentType)
+		}
 		res.WriteHeader(status)
 		_, marshalErr = io.Copy(res, reader)
 	default:
