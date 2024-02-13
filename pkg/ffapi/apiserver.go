@@ -19,6 +19,7 @@ package ffapi
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"time"
@@ -86,7 +87,7 @@ type APIServerOptions[T any] struct {
 type APIServerRouteExt[T any] struct {
 	JSONHandler   func(*APIRequest, T) (output interface{}, err error)
 	UploadHandler func(*APIRequest, T) (output interface{}, err error)
-	StreamHandler func(*APIRequest, T) (output interface{}, err error)
+	StreamHandler func(*APIRequest, T) (output io.ReadCloser, err error)
 }
 
 // NewAPIServer makes a new server, with the specified configuration, and
@@ -203,7 +204,7 @@ func (as *apiServer[T]) routeHandler(hf *HandlerFactory, route *Route) http.Hand
 	// We also pass the Orchestrator context through
 	ext := route.Extensions.(*APIServerRouteExt[T])
 	if route.OutputType == "stream" && ext.StreamHandler != nil {
-		route.StreamHandler = func(r *APIRequest) (output interface{}, err error) {
+		route.StreamHandler = func(r *APIRequest) (output io.ReadCloser, err error) {
 			er, err := as.EnrichRequest(r)
 			if err != nil {
 				return nil, err

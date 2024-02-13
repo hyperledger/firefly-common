@@ -18,6 +18,7 @@ package ffapi
 
 import (
 	"context"
+	"io"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hyperledger/firefly-common/pkg/config"
@@ -69,7 +70,7 @@ type Route struct {
 	FormUploadHandler       func(r *APIRequest) (output interface{}, err error)
 	StreamOutputContentType string
 	// StreamHandler allows for custom request handling and non-JSON responses
-	StreamHandler func(r *APIRequest) (output interface{}, err error)
+	StreamHandler func(r *APIRequest) (output io.ReadCloser, err error)
 
 	// json or stream
 	OutputType string
