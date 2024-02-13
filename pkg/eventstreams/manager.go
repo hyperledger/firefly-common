@@ -80,13 +80,13 @@ type esManager[CT EventStreamSpec, DT any] struct {
 	mux         sync.Mutex
 	streams     map[string]*eventStream[CT, DT]
 	tlsConfigs  map[string]*tls.Config
-	wsChannels  wsserver.WebSocketChannels
+	wsProtocol  wsserver.Protocol
 	persistence Persistence[CT]
 	runtime     Runtime[CT, DT]
 	dispatchers map[EventStreamType]DispatcherFactory[CT, DT]
 }
 
-func NewEventStreamManager[CT EventStreamSpec, DT any](ctx context.Context, config *Config[CT, DT], p Persistence[CT], wsChannels wsserver.WebSocketChannels, source Runtime[CT, DT]) (es Manager[CT], err error) {
+func NewEventStreamManager[CT EventStreamSpec, DT any](ctx context.Context, config *Config[CT, DT], p Persistence[CT], wsProtocol wsserver.Protocol, source Runtime[CT, DT]) (es Manager[CT], err error) {
 
 	if config.Retry == nil {
 		return nil, i18n.NewError(ctx, i18n.MsgESConfigNotInitialized)
@@ -106,7 +106,7 @@ func NewEventStreamManager[CT EventStreamSpec, DT any](ctx context.Context, conf
 		tlsConfigs:  tlsConfigs,
 		runtime:     source,
 		persistence: p,
-		wsChannels:  wsChannels,
+		wsProtocol:  wsProtocol,
 		streams:     map[string]*eventStream[CT, DT]{},
 		dispatchers: config.AdditionalDispatchers,
 	}

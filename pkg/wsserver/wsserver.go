@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -19,63 +19,80 @@ package wsserver
 import (
 	"context"
 	"net/http"
-	"reflect"
 	"sync"
-	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
 )
 
-// WebSocketChannels is provided to allow us to do a blocking send to a namespace that will complete once a client connects on it
-// We also provide a channel to listen on for closing of the connection, to allow a select to wake on a blocking send
-type WebSocketChannels interface {
-	GetChannels(streamName string) (senderChannel chan<- interface{}, broadcastChannel chan<- interface{}, receiverChannel <-chan *WebSocketCommandMessageOrError)
+// The Protocol interface layers a protocol on top of raw websockets, that allows the server side to:
+//   - Model the concept of multiple "streams" on a single WebSocket
+//   - Block until 1 or more connections are available that have "started" a particular stream
+//   - Send a broadcast to all connections on a stream
+//   - Send a single payload to a single selected connection on a stream, and wait for an "ack" back
+//     from that specific websocket connection (or that websocket connection to disconnect)
+//
+// NOTE: This replaces a previous WebSocketChannels interface, which started its life in 2018
+//
+//	and attempted to solve the above problem set in a different way that had a challenging timing issue.
+type Protocol interface {
+	// Broadcast performs best-effort delivery to all connections currently active on the specified stream
+	Broadcast(ctx context.Context, stream string, payload interface{})
+
+	// NextRoundTrip blocks until at least one connection is started on the stream, and then
+	// returns an interface that can be used to send a payload to exactly one of the attached
+	// connections, and receive an ack/error from just the one connection that was picked.
+	// - Returns an error if the context is closed.
+	RoundTrip(ctx context.Context, stream string, payload WSBatch) (*WebSocketCommandMessage, error)
+}
+
+// WSBatch is any serializable structure that contains the batch header
+type WSBatch interface {
+	GetBatchHeader() *BatchHeader
+}
+
+type BatchHeader struct {
+	BatchNumber int64  `json:"batchNumber"`
+	Stream      string `json:"stream"`
 }
 
 // WebSocketServer is the full server interface with the init call
 type WebSocketServer interface {
-	WebSocketChannels
+	Protocol
 	Handler(w http.ResponseWriter, r *http.Request)
 	Close()
 }
 
-type webSocketServer struct {
-	ctx               context.Context
-	processingTimeout time.Duration
-	mux               sync.Mutex
-	streams           map[string]*webSocketStream
-	streamMap         map[string]map[string]*webSocketConnection
-	newStream         chan bool
-	replyChannel      chan interface{}
-	upgrader          *websocket.Upgrader
-	connections       map[string]*webSocketConnection
+type streamState struct {
+	wlmCounter int64
+	inflight   *roundTrip
+	conns      []*webSocketConnection
 }
 
-type webSocketStream struct {
-	streamName       string
-	senderChannel    chan interface{}
-	broadcastChannel chan interface{}
-	receiverChannel  chan *WebSocketCommandMessageOrError
+type webSocketServer struct {
+	ctx             context.Context
+	conf            WebSocketServerConfig
+	streamMap       map[string]*streamState
+	streamMapChange chan struct{}
+	mux             sync.Mutex
+	upgrader        *websocket.Upgrader
+	connections     map[string]*webSocketConnection
 }
 
 // NewWebSocketServer create a new server with a simplified interface
-func NewWebSocketServer(bgCtx context.Context) WebSocketServer {
+func NewWebSocketServer(bgCtx context.Context, config *WebSocketServerConfig) WebSocketServer {
 	s := &webSocketServer{
-		ctx:               bgCtx,
-		connections:       make(map[string]*webSocketConnection),
-		streams:           make(map[string]*webSocketStream),
-		streamMap:         make(map[string]map[string]*webSocketConnection),
-		newStream:         make(chan bool),
-		replyChannel:      make(chan interface{}),
-		processingTimeout: 30 * time.Second,
+		ctx:             bgCtx,
+		connections:     make(map[string]*webSocketConnection),
+		streamMap:       make(map[string]*streamState),
+		streamMapChange: make(chan struct{}),
+		conf:            *config,
 		upgrader: &websocket.Upgrader{
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
+			ReadBufferSize:  int(config.ReadBufferSize),
+			WriteBufferSize: int(config.WriteBufferSize),
 		},
 	}
-	go s.processBroadcasts()
 	return s
 }
 
@@ -91,25 +108,22 @@ func (s *webSocketServer) Handler(w http.ResponseWriter, r *http.Request) {
 	s.connections[c.id] = c
 }
 
-func (s *webSocketServer) cycleStream(connInfo string, t *webSocketStream) {
-	s.mux.Lock()
-	defer s.mux.Unlock()
-
-	// When a connection that was listening on a stream closes, we need to wake anyone
-	// that was listening for a response
-	select {
-	case t.receiverChannel <- &WebSocketCommandMessageOrError{Err: i18n.NewError(s.ctx, i18n.MsgWebSocketClosed, connInfo)}:
-	default:
-	}
-}
-
 func (s *webSocketServer) connectionClosed(c *webSocketConnection) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 	delete(s.connections, c.id)
-	for _, stream := range c.streams {
-		delete(s.streamMap[stream.streamName], c.id)
+	for _, ss := range s.streamMap {
+		// Remove the connection
+		newSSConns := make([]*webSocketConnection, 0, len(ss.conns))
+		for _, ssConn := range ss.conns {
+			if ssConn.id != c.id {
+				newSSConns = append(newSSConns, ssConn)
+			}
+		}
+		ss.conns = newSSConns
 	}
+	close(s.streamMapChange)
+	s.streamMapChange = make(chan struct{})
 }
 
 func (s *webSocketServer) Close() {
@@ -118,92 +132,155 @@ func (s *webSocketServer) Close() {
 	}
 }
 
-func (s *webSocketServer) getStream(stream string) *webSocketStream {
+func (s *webSocketServer) Broadcast(ctx context.Context, stream string, payload interface{}) {
 	s.mux.Lock()
-	t, exists := s.streams[stream]
-	if !exists {
-		t = &webSocketStream{
-			streamName:       stream,
-			senderChannel:    make(chan interface{}),
-			broadcastChannel: make(chan interface{}),
-			receiverChannel:  make(chan *WebSocketCommandMessageOrError, 10),
-		}
-		s.streams[stream] = t
-		s.streamMap[stream] = make(map[string]*webSocketConnection)
-	}
+	ss := s.streamMap[stream]
+	conns := make([]*webSocketConnection, len(ss.conns))
+	copy(conns, ss.conns)
 	s.mux.Unlock()
-	if !exists {
-		// Signal to the broadcaster that a new stream has been added
-		s.newStream <- true
-	}
-	return t
-}
-
-func (s *webSocketServer) GetChannels(stream string) (chan<- interface{}, chan<- interface{}, <-chan *WebSocketCommandMessageOrError) {
-	t := s.getStream(stream)
-	return t.senderChannel, t.broadcastChannel, t.receiverChannel
-}
-
-func (s *webSocketServer) StreamStarted(c *webSocketConnection, stream string) {
-	// Track that this connection is interested in this stream
-	s.streamMap[stream][c.id] = c
-}
-
-func (s *webSocketServer) processBroadcasts() {
-	var streams []string
-	buildCases := func() []reflect.SelectCase {
-		// only hold the lock while we're building the list of cases (not while doing the select)
-		s.mux.Lock()
-		defer s.mux.Unlock()
-		streams = make([]string, len(s.streams))
-		cases := make([]reflect.SelectCase, len(s.streams)+1)
-		i := 0
-		for _, t := range s.streams {
-			cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(t.broadcastChannel)}
-			streams[i] = t.streamName
-			i++
-		}
-		cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(s.newStream)}
-		return cases
-	}
-	cases := buildCases()
-	for {
-		chosen, value, ok := reflect.Select(cases)
-		if !ok {
-			log.L(s.ctx).Warn("An error occurred broadcasting the message")
-			return
-		}
-
-		if chosen == len(cases)-1 {
-			// Addition of a new stream
-			cases = buildCases()
-		} else {
-			// Message on one of the existing streams
-			// Gather all connections interested in this stream and send to them
-			s.mux.Lock()
-			stream := streams[chosen]
-			wsconns := getConnListFromMap(s.streamMap[stream])
-			s.mux.Unlock()
-			s.broadcastToConnections(wsconns, value.Interface())
-		}
-	}
-}
-
-// getConnListFromMap is a simple helper to snapshot a map into a list, which can be called with a short-lived lock
-func getConnListFromMap(tm map[string]*webSocketConnection) []*webSocketConnection {
-	wsconns := make([]*webSocketConnection, 0, len(tm))
-	for _, c := range tm {
-		wsconns = append(wsconns, c)
-	}
-	return wsconns
-}
-
-func (s *webSocketServer) broadcastToConnections(connections []*webSocketConnection, message interface{}) {
-	for _, c := range connections {
+	for _, c := range conns {
 		select {
-		case c.broadcast <- message:
+		case c.send <- payload:
 		case <-c.closing:
-			log.L(s.ctx).Warnf("Connection %s closed while attempting to deliver reply", c.id)
+			// This isn't an error, just move on
+			log.L(ctx).Warnf("broadcast failed to closing connection '%s'", c.id)
 		}
 	}
+}
+
+type roundTrip struct {
+	ss          *streamState
+	conn        *webSocketConnection
+	batchNumber int64
+	done        chan struct{}
+	err         error
+	response    *WebSocketCommandMessage
+}
+
+func (s *webSocketServer) RoundTrip(ctx context.Context, stream string, payload WSBatch) (*WebSocketCommandMessage, error) {
+	var rt *roundTrip
+	err := s.waitStreamConnections(ctx, stream, func(ss *streamState) error {
+		// If there's an inflight already, that's an error - the caller is required to call NextRoundTrip sequentially,
+		// and always handle the cleanup of the RoundTripper
+		if ss.inflight != nil {
+			return i18n.NewError(s.ctx, i18n.MsgWebSocketBatchInflight, stream, ss.inflight.batchNumber, ss.inflight.conn.id)
+		}
+		// Do a round-robbin pick of one of the connections
+		conn := ss.conns[ss.wlmCounter%int64(len(ss.conns))]
+		ss.wlmCounter++
+		// The wlmCounter is used as the batch number in the payload
+		payload.GetBatchHeader().BatchNumber = ss.wlmCounter
+		payload.GetBatchHeader().Stream = stream
+		rt = &roundTrip{
+			ss:          ss,
+			conn:        conn,
+			batchNumber: ss.wlmCounter, // batch number increments in this library
+			done:        make(chan struct{}),
+		}
+		ss.inflight = rt
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Ensure we clean up before returning, including in error cases
+	defer func() {
+		s.mux.Lock()
+		rt.ss.inflight = nil
+		s.mux.Unlock()
+	}()
+
+	// Send the payload to initiate the exchange
+	select {
+	case rt.conn.send <- payload:
+	case <-rt.conn.closing:
+		// handle connection closure while waiting to send
+		return nil, i18n.NewError(s.ctx, i18n.MsgWebSocketClosed, rt.conn.id)
+	case <-ctx.Done():
+		// ... or stop/reset of stream, or server shutdown
+		return nil, i18n.NewError(s.ctx, i18n.MsgContextCanceled)
+	}
+
+	// Set the processing timeout to wait for batch acknowledgement
+	ctxWithTimeout, cancelTimeout := context.WithTimeout(ctx, s.conf.AckTimeout)
+	defer cancelTimeout()
+
+	// Wait for the response
+	select {
+	case <-rt.done:
+	case <-rt.conn.closing:
+		// handle connection closure while waiting for ack
+		return nil, i18n.NewError(s.ctx, i18n.MsgWebSocketClosed, rt.conn.id)
+	case <-ctxWithTimeout.Done():
+		// ... or time out, stop/reset of stream, or server shutdown
+		return nil, i18n.NewError(s.ctx, i18n.MsgWebSocketRoundTripTimeout)
+	}
+	return rt.response, rt.err
+}
+
+func (s *webSocketServer) completeRoundTrip(stream string, msg *WebSocketCommandMessage, err error) {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+	ss := s.streamMap[stream]
+	if ss == nil || ss.inflight == nil {
+		log.L(s.ctx).Warnf("Received spurious ack for batchNumber=%d while no batch in-flight for stream '%s'", msg.BatchNumber, stream)
+		return
+	}
+	rt := ss.inflight
+	// We accept batchNumber: 0 (omitted) as an nack/ack for the last thing sent
+	if msg.BatchNumber > 0 && rt.batchNumber != msg.BatchNumber {
+		log.L(s.ctx).Warnf("Received spurious ack for batchNumber=%d while batchNumber=%d in-flight for stream '%s'", msg.BatchNumber, rt.batchNumber, stream)
+		return
+	}
+	rt.response = msg
+	rt.err = err
+	close(rt.done)
+	// We are NOT responsible for clearing ss.inflight - that is the RoundTrip() function's job
+}
+
+// waits until at least one connection is started on the requested stream, and returns an
+// snapshot list of all connections on that stream.
+func (s *webSocketServer) waitStreamConnections(ctx context.Context, stream string, lockedCallback func(ss *streamState) error) error {
+	for {
+		// check if there are connections
+		s.mux.Lock()
+		streamMapChange := s.streamMapChange
+		ss := s.streamMap[stream]
+		if ss != nil && len(ss.conns) > 0 {
+			err := lockedCallback(ss)
+			s.mux.Unlock()
+			return err
+		}
+		s.mux.Unlock()
+		select {
+		case <-streamMapChange:
+		case <-ctx.Done():
+			return i18n.NewError(ctx, i18n.MsgContextCanceled)
+		}
+	}
+}
+
+func (s *webSocketServer) streamStarted(c *webSocketConnection, stream string) {
+	// Track that this connection is interested in this stream
+	s.mux.Lock()
+	defer s.mux.Unlock()
+	ss := s.streamMap[stream]
+	if ss == nil {
+		ss = &streamState{}
+		s.streamMap[stream] = ss
+	}
+	// Ignore duplicate starts on the same connection
+	found := false
+	for _, existing := range ss.conns {
+		if existing.id == c.id {
+			found = true
+		}
+	}
+	if !found {
+		ss.conns = append(ss.conns, c)
+	}
+	// Notify anyone waiting for a connection, and setup the next waiter
+	close(s.streamMapChange)
+	s.streamMapChange = make(chan struct{})
 }

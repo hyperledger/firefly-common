@@ -28,7 +28,6 @@ import (
 )
 
 type eventStreamBatch[DataType any] struct {
-	number     int64
 	events     []*Event[DataType]
 	batchTimer *time.Timer
 }
@@ -37,7 +36,6 @@ type activeStream[CT EventStreamSpec, DT any] struct {
 	*eventStream[CT, DT]
 	ctx           context.Context
 	cancelCtx     func()
-	batchNumber   int64
 	filterSkipped int64
 	EventStreamStatistics
 	eventLoopDone chan struct{}
@@ -171,9 +169,7 @@ func (as *activeStream[CT, DT]) runBatchLoop() {
 				as.filterSkipped++
 			} else {
 				if batch == nil {
-					as.batchNumber++
 					batch = &eventStreamBatch[DT]{
-						number:     as.batchNumber,
 						batchTimer: time.NewTimer(batchTimeout),
 						events:     make([]*Event[DT], 0, *esSpec.BatchSize),
 					}
@@ -263,7 +259,6 @@ func (as *activeStream[CT, DT]) checkpointRoutine() {
 // performActionWithRetry performs an action, with exponential back-off retry up
 // to a given threshold. Only returns error in the case that the context is closed.
 func (as *activeStream[CT, DT]) dispatchBatch(batch *eventStreamBatch[DT]) (err error) {
-	as.LastDispatchNumber = batch.number
 	as.LastDispatchTime = fftypes.Now()
 	as.LastDispatchFailure = ""
 	as.LastDispatchAttempts = 0
@@ -273,17 +268,13 @@ func (as *activeStream[CT, DT]) dispatchBatch(batch *eventStreamBatch[DT]) (err 
 	for {
 		// Short exponential back-off retry
 		err := as.retry.Do(as.ctx, "action", func(_ int) (retry bool, err error) {
-			log.L(as.ctx).Debugf("Batch %d attempt %d dispatching. Len=%d",
-				batch.number, as.LastDispatchAttempts, len(batch.events))
+			log.L(as.ctx).Debugf("Batch attempt %d dispatching. Len=%d", as.LastDispatchAttempts, len(batch.events))
 			err = as.action.AttemptDispatch(as.ctx, as.LastDispatchAttempts, &EventBatch[DT]{
-				Type:        MessageTypeEventBatch,
-				StreamID:    as.spec.GetID(),
-				BatchNumber: batch.number,
-				Events:      batch.events,
+				Type:   MessageTypeEventBatch,
+				Events: batch.events,
 			})
 			if err != nil {
-				log.L(as.ctx).Errorf("Batch %d attempt %d failed. err=%s",
-					batch.number, as.LastDispatchAttempts, err)
+				log.L(as.ctx).Errorf("Batch attempt %d failed. err=%s", as.LastDispatchAttempts, err)
 				as.LastDispatchAttempts++
 				as.LastDispatchFailure = err.Error()
 				as.LastDispatchStatus = DispatchStatusRetrying

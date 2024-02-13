@@ -37,6 +37,7 @@ var (
 	FilterJSONLTE                = ffm("FilterJSON.lte", "Short name for lessThanOrEqual")
 	FilterJSONIn                 = ffm("FilterJSON.in", "Array of field + values-array combinations to apply as 'in' filters (matching one of a set of values) - all filters must match")
 	FilterJSONNIn                = ffm("FilterJSON.nin", "Shortcut for in with all conditions negated (the not property of all children is overridden)")
+	FilterJSONNull               = ffm("FilterJSON.null", "Tests if the specified field is null (unset)")
 	FilterJSONLimit              = ffm("FilterJSON.limit", "Limit on the results to return")
 	FilterJSONSkip               = ffm("FilterJSON.skip", "Number of results to skip before returning entries, for skip+limit based pagination")
 	FilterJSONSort               = ffm("FilterJSON.sort", "Array of fields to sort by. A '-' prefix on a field requests that field is sorted in descending order")

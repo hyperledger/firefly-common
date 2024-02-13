@@ -370,6 +370,20 @@ func (s *Database) DeleteTx(ctx context.Context, table string, tx *TXWrapper, q 
 	return nil
 }
 
+func (s *Database) ExecTx(ctx context.Context, table string, tx *TXWrapper, sqlQuery string, args []interface{}) (sql.Result, error) {
+	l := log.L(ctx)
+	before := time.Now()
+	l.Tracef(`SQL-> exec: %s args: %+v`, sqlQuery, args)
+	res, err := tx.sqlTX.ExecContext(ctx, sqlQuery, args...)
+	if err != nil {
+		l.Errorf(`SQL exec: %s sql=[ %s ]: %s`, err, sqlQuery, err)
+		return nil, i18n.WrapError(ctx, err, i18n.MsgDBExecFailed)
+	}
+	ra, _ := res.RowsAffected()
+	l.Debugf(`SQL<- exec: %s affected=%d (%.2fms)`, table, ra, floatMillisSince(before))
+	return res, nil
+}
+
 func (s *Database) UpdateTx(ctx context.Context, table string, tx *TXWrapper, q sq.UpdateBuilder, postCommit func()) (int64, error) {
 	l := log.L(ctx)
 	sqlQuery, args, err := q.PlaceholderFormat(s.features.PlaceholderFormat).ToSql()

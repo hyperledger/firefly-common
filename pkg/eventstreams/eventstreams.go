@@ -106,7 +106,6 @@ type EventStreamSpecFields struct {
 type EventStreamStatistics struct {
 	StartTime            *fftypes.FFTime `ffstruct:"EventStreamStatistics" json:"startTime"`
 	LastDispatchTime     *fftypes.FFTime `ffstruct:"EventStreamStatistics" json:"lastDispatchTime"`
-	LastDispatchNumber   int64           `ffstruct:"EventStreamStatistics" json:"lastDispatchBatch"`
 	LastDispatchAttempts int             `ffstruct:"EventStreamStatistics" json:"lastDispatchAttempts,omitempty"`
 	LastDispatchFailure  string          `ffstruct:"EventStreamStatistics" json:"lastDispatchFailure,omitempty"`
 	LastDispatchStatus   DispatchStatus  `ffstruct:"EventStreamStatistics" json:"lastDispatchComplete"`

@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2023 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -14,4 +14,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package eventstreams
+package wsserver
+
+import (
+	"testing"
+	"time"
+
+	"github.com/hyperledger/firefly-common/pkg/config"
+	"gotest.tools/assert"
+)
+
+func TestGenerateConfigTLS(t *testing.T) {
+
+	config.RootConfigReset()
+	conf := config.RootSection("ut")
+	InitConfig(conf)
+
+	configObj := GenerateConfig(conf)
+	assert.Equal(t, WebSocketServerConfig{
+		AckTimeout:      2 * time.Minute,
+		ReadBufferSize:  4096,
+		WriteBufferSize: 4096,
+	}, *configObj)
+
+}

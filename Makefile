@@ -35,7 +35,7 @@ endef
 $(eval $(call makemock, $$(DBMIGRATE_PATH),        Driver,             dbmigratemocks))
 $(eval $(call makemock, pkg/httpserver,            GoHTTPServer,       httpservermocks))
 $(eval $(call makemock, pkg/auth,                  Plugin,             authmocks))
-$(eval $(call makemock, pkg/wsserver,              WebSocketChannels,  wsservermocks))
+$(eval $(call makemock, pkg/wsserver,              Protocol,           wsservermocks))
 $(eval $(call makemock, pkg/wsserver,              WebSocketServer,    wsservermocks))
 $(eval $(call makemock, pkg/dbsql,                 CRUD,               crudmocks))
 
