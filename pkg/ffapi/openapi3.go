@@ -314,6 +314,9 @@ func (sg *SwaggerGen) addOutput(ctx context.Context, doc *openapi3.T, route *Rou
 		})
 	}
 	for code, res := range route.CustomResponseRefs {
+		if res.Value != nil && res.Value.Description == nil {
+			res.Value.Description = &s
+		}
 		op.Responses.Set(code, res)
 	}
 }
