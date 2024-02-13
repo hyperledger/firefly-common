@@ -215,13 +215,14 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 			if len(route.JSONOutputCodes) > 0 {
 				r.SuccessStatus = route.JSONOutputCodes[0]
 			}
-			if multipart != nil {
+			switch {
+			case multipart != nil:
 				r.FP = multipart.formParams
 				r.Part = multipart.part
 				output, err = route.FormUploadHandler(r)
-			} else if route.StreamHandler != nil {
+			case route.OutputType == RouteOutputTypeStream && route.StreamHandler != nil:
 				output, err = route.StreamHandler(r)
-			} else {
+			default:
 				output, err = route.JSONHandler(r)
 			}
 			status = r.SuccessStatus // Can be updated by the route
