@@ -203,7 +203,7 @@ func (as *apiServer[T]) routeHandler(hf *HandlerFactory, route *Route) http.Hand
 	// We extend the base ffapi functionality, with standardized DB filter support for all core resources.
 	// We also pass the Orchestrator context through
 	ext := route.Extensions.(*APIServerRouteExt[T])
-	if route.OutputType == "stream" && ext.StreamHandler != nil {
+	if route.OutputType == RouteOutputTypeStream && ext.StreamHandler != nil {
 		route.StreamHandler = func(r *APIRequest) (output io.ReadCloser, err error) {
 			er, err := as.EnrichRequest(r)
 			if err != nil {

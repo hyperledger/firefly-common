@@ -278,7 +278,7 @@ func CheckObjectDocumented(example interface{}) {
 
 func (sg *SwaggerGen) addOutput(ctx context.Context, doc *openapi3.T, route *Route, op *openapi3.Operation) {
 	s := i18n.Expand(ctx, i18n.APISuccessResponse)
-	if route.OutputType == "stream" {
+	if route.OutputType == RouteOutputTypeStream {
 		contentType := "application/octet-stream"
 		if route.StreamOutputContentType != "" {
 			contentType = route.StreamOutputContentType

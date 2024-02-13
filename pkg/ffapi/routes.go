@@ -67,14 +67,13 @@ type Route struct {
 	// JSONHandler is a function for handling JSON content type input. Input/Output objects are returned by JSONInputValue/JSONOutputValue funcs
 	JSONHandler func(r *APIRequest) (output interface{}, err error)
 	// FormUploadHandler takes a single file upload, and returns a JSON object
-	FormUploadHandler       func(r *APIRequest) (output interface{}, err error)
+	FormUploadHandler func(r *APIRequest) (output interface{}, err error)
+	// StreamOutputContentType allows for overriding the default binary (application/octet-stream) with a custom MIME type
 	StreamOutputContentType string
-	// StreamHandler allows for custom request handling and non-JSON responses
+	// StreamHandler allows for custom request handling with explicit stream (io.ReadCloser) responses
 	StreamHandler func(r *APIRequest) (output io.ReadCloser, err error)
-
-	// json or stream
-	OutputType string
-
+	// OutputType for OpenAPI generation, either 'json' or 'stream'. Defaults to 'json' if none is provided
+	OutputType RouteOutputType
 	// Deprecated whether this route is deprecated
 	Deprecated bool
 	// Tag a category identifier for this route in the generated OpenAPI spec
@@ -82,6 +81,13 @@ type Route struct {
 	// Extensions allows extension of the route struct by individual microservices
 	Extensions interface{}
 }
+
+type RouteOutputType string
+
+const (
+	RouteOutputTypeJSON   RouteOutputType = "json"
+	RouteOutputTypeStream RouteOutputType = "stream"
+)
 
 // PathParam is a description of a path parameter
 type PathParam struct {
