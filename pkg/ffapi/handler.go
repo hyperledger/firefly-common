@@ -237,13 +237,13 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 			}
 		}
 		if err == nil {
-			status, err = hs.handleOutput(req.Context(), res, status, output, route)
+			status, err = hs.handleOutput(req.Context(), res, status, output, route.StreamOutputContentType)
 		}
 		return status, err
 	})
 }
 
-func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWriter, status int, output interface{}, route *Route) (int, error) {
+func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWriter, status int, output interface{}, streamContentType string) (int, error) {
 	vOutput := reflect.ValueOf(output)
 	outputKind := vOutput.Kind()
 	isPointer := outputKind == reflect.Ptr
@@ -263,8 +263,8 @@ func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWri
 	case reader != nil:
 		defer reader.Close()
 		res.Header().Add("Content-Type", "application/octet-stream")
-		if route.StreamOutputContentType != "" {
-			res.Header().Set("Content-Type", route.StreamOutputContentType)
+		if streamContentType != "" {
+			res.Header().Set("Content-Type", streamContentType)
 		}
 		res.WriteHeader(status)
 		_, marshalErr = io.Copy(res, reader)
