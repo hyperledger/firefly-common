@@ -277,23 +277,9 @@ func CheckObjectDocumented(example interface{}) {
 }
 
 func (sg *SwaggerGen) addOutput(ctx context.Context, doc *openapi3.T, route *Route, op *openapi3.Operation) {
-	s := i18n.Expand(ctx, i18n.APISuccessResponse)
-	if route.OutputType == RouteOutputTypeStream {
-		contentType := "application/octet-stream"
-		if route.StreamOutputContentType != "" {
-			contentType = route.StreamOutputContentType
-		}
-		op.Responses.Set("200", &openapi3.ResponseRef{
-			Value: &openapi3.Response{
-				Description: &s,
-				Content: openapi3.Content{
-					contentType: &openapi3.MediaType{},
-				},
-			},
-		})
-	}
 	var schemaRef *openapi3.SchemaRef
 	var err error
+	s := i18n.Expand(ctx, i18n.APISuccessResponse)
 	schemaCustomizer := func(name string, t reflect.Type, tag reflect.StructTag, schema *openapi3.Schema) error {
 		sg.addCustomType(t, schema)
 		return sg.ffOutputTagHandler(ctx, route, name, tag, schema)
@@ -326,6 +312,9 @@ func (sg *SwaggerGen) addOutput(ctx context.Context, doc *openapi3.T, route *Rou
 				},
 			},
 		})
+	}
+	for code, res := range route.CustomResponseRefs {
+		op.Responses.Set(code, res)
 	}
 }
 

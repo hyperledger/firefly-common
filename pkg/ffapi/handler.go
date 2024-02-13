@@ -190,7 +190,7 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 		}
 
 		status := 400 // if fail parsing input
-		output := handlerOutput{}
+		var output interface{}
 		if err == nil {
 			queryParams, pathParams, queryArrayParams = hs.getParams(req, route)
 		}
@@ -202,15 +202,17 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 
 		if err == nil {
 			r := &APIRequest{
-				Req:             req,
-				PP:              pathParams,
-				QP:              queryParams,
-				QAP:             queryArrayParams,
-				Filter:          filter,
-				Input:           jsonInput,
-				SuccessStatus:   http.StatusOK,
+				Req:            req,
+				PP:             pathParams,
+				QP:             queryParams,
+				QAP:            queryArrayParams,
+				Filter:         filter,
+				Input:          jsonInput,
+				SuccessStatus:  http.StatusOK,
+				AlwaysPaginate: hs.AlwaysPaginate,
+
+				// res.Header() returns a map which is a ref type so handler header edits are persisted
 				ResponseHeaders: res.Header(),
-				AlwaysPaginate:  hs.AlwaysPaginate,
 			}
 			if len(route.JSONOutputCodes) > 0 {
 				r.SuccessStatus = route.JSONOutputCodes[0]
@@ -219,12 +221,11 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 			case multipart != nil:
 				r.FP = multipart.formParams
 				r.Part = multipart.part
-				output.out, err = route.FormUploadHandler(r)
+				output, err = route.FormUploadHandler(r)
 			case route.OutputType == RouteOutputTypeStream && route.StreamHandler != nil:
-				output.out, err = route.StreamHandler(r)
-				output.contentType = route.StreamOutputContentType
+				output, err = route.StreamHandler(r)
 			default:
-				output.out, err = route.JSONHandler(r)
+				output, err = route.JSONHandler(r)
 			}
 			status = r.SuccessStatus // Can be updated by the route
 		}
@@ -244,18 +245,12 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 	})
 }
 
-// a wrapper around a dynamic output, allowing for customizing returned content types
-type handlerOutput struct {
-	out         interface{}
-	contentType string
-}
-
-func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWriter, status int, output handlerOutput) (int, error) {
-	vOutput := reflect.ValueOf(output.out)
+func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWriter, status int, output interface{}) (int, error) {
+	vOutput := reflect.ValueOf(output)
 	outputKind := vOutput.Kind()
 	isPointer := outputKind == reflect.Ptr
 	invalid := outputKind == reflect.Invalid
-	isNil := output.out == nil || invalid || (isPointer && vOutput.IsNil())
+	isNil := output == nil || invalid || (isPointer && vOutput.IsNil())
 	var reader io.ReadCloser
 	var marshalErr error
 	if !isNil && vOutput.CanInterface() {
@@ -269,16 +264,15 @@ func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWri
 		res.WriteHeader(204)
 	case reader != nil:
 		defer reader.Close()
-		res.Header().Add("Content-Type", "application/octet-stream")
-		if output.contentType != "" {
-			res.Header().Set("Content-Type", output.contentType)
+		if res.Header().Get("Content-Type") == "" {
+			res.Header().Add("Content-Type", "application/octet-stream")
 		}
 		res.WriteHeader(status)
 		_, marshalErr = io.Copy(res, reader)
 	default:
 		res.Header().Add("Content-Type", "application/json")
 		res.WriteHeader(status)
-		marshalErr = json.NewEncoder(res).Encode(output.out)
+		marshalErr = json.NewEncoder(res).Encode(output)
 	}
 	if marshalErr != nil {
 		err := i18n.WrapError(ctx, marshalErr, i18n.MsgResponseMarshalError)
