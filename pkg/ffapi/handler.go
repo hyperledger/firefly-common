@@ -189,8 +189,8 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 			}
 		}
 
-		var status = 400 // if fail parsing input
-		var output interface{}
+		status := 400 // if fail parsing input
+		output := &handlerOutput{}
 		if err == nil {
 			queryParams, pathParams, queryArrayParams = hs.getParams(req, route)
 		}
@@ -219,11 +219,12 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 			case multipart != nil:
 				r.FP = multipart.formParams
 				r.Part = multipart.part
-				output, err = route.FormUploadHandler(r)
+				output.out, err = route.FormUploadHandler(r)
 			case route.OutputType == RouteOutputTypeStream && route.StreamHandler != nil:
-				output, err = route.StreamHandler(r)
+				output.out, err = route.StreamHandler(r)
+				output.contentType = route.StreamOutputContentType
 			default:
-				output, err = route.JSONHandler(r)
+				output.out, err = route.JSONHandler(r)
 			}
 			status = r.SuccessStatus // Can be updated by the route
 		}
@@ -237,14 +238,20 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 			}
 		}
 		if err == nil {
-			status, err = hs.handleOutput(req.Context(), res, status, output, route.StreamOutputContentType)
+			status, err = hs.handleOutput(req.Context(), res, status, output)
 		}
 		return status, err
 	})
 }
 
-func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWriter, status int, output interface{}, streamContentType string) (int, error) {
-	vOutput := reflect.ValueOf(output)
+// a wrapper around a dynamic output, allowing for customizing returned content types
+type handlerOutput struct {
+	out         interface{}
+	contentType string
+}
+
+func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWriter, status int, output *handlerOutput) (int, error) {
+	vOutput := reflect.ValueOf(output.out)
 	outputKind := vOutput.Kind()
 	isPointer := outputKind == reflect.Ptr
 	invalid := outputKind == reflect.Invalid
@@ -263,8 +270,8 @@ func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWri
 	case reader != nil:
 		defer reader.Close()
 		res.Header().Add("Content-Type", "application/octet-stream")
-		if streamContentType != "" {
-			res.Header().Set("Content-Type", streamContentType)
+		if output.contentType != "" {
+			res.Header().Set("Content-Type", output.contentType)
 		}
 		res.WriteHeader(status)
 		_, marshalErr = io.Copy(res, reader)
