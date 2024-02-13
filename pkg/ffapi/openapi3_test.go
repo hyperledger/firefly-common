@@ -155,6 +155,20 @@ var testRoutes = []*Route{
 		JSONOutputValue: func() interface{} { return &TestStruct1{} },
 		JSONOutputCodes: []int{http.StatusOK},
 	},
+	{
+		Name:              "op7",
+		Path:              "example4",
+		IgnoreFromOpenAPI: true,
+		Method:            http.MethodGet,
+		PathParams:        nil,
+		QueryParams: []*QueryParam{
+			{Name: "scope", IsArray: true},
+		},
+		Description:     ExampleDesc,
+		JSONInputValue:  func() interface{} { return &TestStruct1{} },
+		JSONOutputValue: func() interface{} { return &TestStruct1{} },
+		JSONOutputCodes: []int{http.StatusOK},
+	},
 }
 
 type TestInOutType struct {
@@ -414,4 +428,30 @@ func TestCheckObjectDocumented(t *testing.T) {
 		assert.Regexp(t, "FF00158.*ThisDoesNotHaveDocs.field1", recover())
 	}()
 	CheckObjectDocumented(&Undocumented{})
+}
+
+func TestIgnoreFromOpenAPI(t *testing.T) {
+	doc := NewSwaggerGen(&SwaggerGenOptions{
+		Title:   "UnitTest",
+		Version: "1.0",
+		BaseURL: "http://localhost:12345/api/v1/{param}",
+		BaseURLVariables: map[string]BaseURLVariable{
+			"param": {
+				Default: "default-value",
+			},
+		},
+	}).Generate(context.Background(), testRoutes)
+	err := doc.Validate(context.Background())
+	assert.NoError(t, err)
+
+	server := doc.Servers[0]
+	if assert.Contains(t, server.Variables, "param") {
+		assert.Equal(t, "default-value", server.Variables["param"].Default)
+	}
+
+	paths := doc.Paths
+	assert.NotContains(t, paths, "/example4")
+
+	_, err = yaml.Marshal(doc)
+	assert.NoError(t, err)
 }

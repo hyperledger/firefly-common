@@ -73,6 +73,8 @@ type Route struct {
 	Tag string
 	// Extensions allows extension of the route struct by individual microservices
 	Extensions interface{}
+	// IgnoreFromOpenAPI is a flag to not add this route to the OpenAPI document generated
+	IgnoreFromOpenAPI bool
 }
 
 // PathParam is a description of a path parameter

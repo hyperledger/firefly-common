@@ -102,6 +102,10 @@ func (sg *SwaggerGen) Generate(ctx context.Context, routes []*Route) *openapi3.T
 		if route.Name == "" || opIds[route.Name] {
 			log.Panicf("Duplicate/invalid name (used as operation ID in swagger): %s", route.Name)
 		}
+		// Not adding route to OpenAPI if flag set
+		if route.IgnoreFromOpenAPI {
+			continue
+		}
 		sg.addRoute(ctx, doc, route)
 		opIds[route.Name] = true
 	}
