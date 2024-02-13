@@ -190,7 +190,7 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 		}
 
 		status := 400 // if fail parsing input
-		output := &handlerOutput{}
+		output := handlerOutput{}
 		if err == nil {
 			queryParams, pathParams, queryArrayParams = hs.getParams(req, route)
 		}
@@ -250,12 +250,12 @@ type handlerOutput struct {
 	contentType string
 }
 
-func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWriter, status int, output *handlerOutput) (int, error) {
+func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWriter, status int, output handlerOutput) (int, error) {
 	vOutput := reflect.ValueOf(output.out)
 	outputKind := vOutput.Kind()
 	isPointer := outputKind == reflect.Ptr
 	invalid := outputKind == reflect.Invalid
-	isNil := output == nil || invalid || (isPointer && vOutput.IsNil())
+	isNil := output.out == nil || invalid || (isPointer && vOutput.IsNil())
 	var reader io.ReadCloser
 	var marshalErr error
 	if !isNil && vOutput.CanInterface() {
@@ -278,7 +278,7 @@ func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWri
 	default:
 		res.Header().Add("Content-Type", "application/json")
 		res.WriteHeader(status)
-		marshalErr = json.NewEncoder(res).Encode(output)
+		marshalErr = json.NewEncoder(res).Encode(output.out)
 	}
 	if marshalErr != nil {
 		err := i18n.WrapError(ctx, marshalErr, i18n.MsgResponseMarshalError)
