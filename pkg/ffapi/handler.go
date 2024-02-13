@@ -222,7 +222,7 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 				r.FP = multipart.formParams
 				r.Part = multipart.part
 				output, err = route.FormUploadHandler(r)
-			case route.OutputType == RouteOutputTypeStream && route.StreamHandler != nil:
+			case route.StreamHandler != nil:
 				output, err = route.StreamHandler(r)
 			default:
 				output, err = route.JSONHandler(r)
