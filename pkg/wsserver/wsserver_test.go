@@ -359,6 +359,35 @@ func TestConnectBadWebsocketHandshake(t *testing.T) {
 
 }
 
+func TestBroadcastStartWithoutConnections(t *testing.T) {
+	assert := assert.New(t)
+
+	w, ts := newTestWebSocketServer()
+	defer ts.Close()
+	defer w.Close()
+
+	u, _ := url.Parse(ts.URL)
+	u.Scheme = "ws"
+	u.Path = "/ws"
+	stream := "banana"
+
+	go w.Broadcast(w.ctx, stream, "Hello World")
+
+	c1, _, err := ws.DefaultDialer.Dial(u.String(), nil)
+	assert.NoError(err)
+	c1.WriteJSON(&WebSocketCommandMessage{
+		Type:   "start",
+		Stream: stream,
+	})
+
+	c2, _, err := ws.DefaultDialer.Dial(u.String(), nil)
+	assert.NoError(err)
+	c2.WriteJSON(&WebSocketCommandMessage{
+		Type:   "start",
+		Stream: stream,
+	})
+}
+
 func TestBroadcast(t *testing.T) {
 	assert := assert.New(t)
 

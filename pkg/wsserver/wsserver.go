@@ -135,6 +135,10 @@ func (s *webSocketServer) Close() {
 func (s *webSocketServer) Broadcast(ctx context.Context, stream string, payload interface{}) {
 	s.mux.Lock()
 	ss := s.streamMap[stream]
+	if ss == nil {
+		ss = &streamState{}
+		s.streamMap[stream] = ss
+	}
 	conns := make([]*webSocketConnection, len(ss.conns))
 	copy(conns, ss.conns)
 	s.mux.Unlock()
