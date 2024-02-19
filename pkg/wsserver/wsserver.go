@@ -139,13 +139,11 @@ func (s *webSocketServer) Broadcast(ctx context.Context, stream string, payload 
 		s.mux.Unlock()
 		// Waiting for a least one connection to start the stream
 		// before we start broadcasting
-		err := s.waitStreamConnections(ctx, stream, func(providedState *streamState) error {
+		// Err always nil per callback function
+		_ = s.waitStreamConnections(ctx, stream, func(providedState *streamState) error {
 			ss = providedState
 			return nil
 		})
-		if err != nil {
-			return err
-		}
 		s.mux.Lock()
 	}
 	conns := make([]*webSocketConnection, len(ss.conns))
