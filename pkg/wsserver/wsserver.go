@@ -38,7 +38,7 @@ import (
 //	and attempted to solve the above problem set in a different way that had a challenging timing issue.
 type Protocol interface {
 	// Broadcast performs best-effort delivery to all connections currently active on the specified stream
-	Broadcast(ctx context.Context, stream string, payload interface{}) error
+	Broadcast(ctx context.Context, stream string, payload interface{})
 
 	// NextRoundTrip blocks until at least one connection is started on the stream, and then
 	// returns an interface that can be used to send a payload to exactly one of the attached
@@ -132,7 +132,7 @@ func (s *webSocketServer) Close() {
 	}
 }
 
-func (s *webSocketServer) Broadcast(ctx context.Context, stream string, payload interface{}) error {
+func (s *webSocketServer) Broadcast(ctx context.Context, stream string, payload interface{}) {
 	s.mux.Lock()
 	ss := s.streamMap[stream]
 	if ss == nil {
@@ -150,8 +150,6 @@ func (s *webSocketServer) Broadcast(ctx context.Context, stream string, payload 
 			log.L(ctx).Warnf("broadcast failed to closing connection '%s'", c.id)
 		}
 	}
-
-	return nil
 }
 
 type roundTrip struct {
