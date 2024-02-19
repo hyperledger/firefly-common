@@ -80,8 +80,7 @@ func (w *webSocketAction[DT]) AttemptDispatch(ctx context.Context, attempt int, 
 	isBroadcast := *w.spec.DistributionMode == DistributionModeBroadcast
 
 	if isBroadcast {
-		w.wsProtocol.Broadcast(ctx, w.topic, batch)
-		return nil
+		return w.wsProtocol.Broadcast(ctx, w.topic, batch)
 	}
 
 	_, err = w.wsProtocol.RoundTrip(ctx, w.topic, batch)
