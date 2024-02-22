@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -141,6 +141,8 @@ func (jd JSONObject) GetObjectOk(key string) (JSONObject, bool) {
 			return JSONObject(vMap), true
 		case JSONObject:
 			return vMap, true
+		case nil:
+			return JSONObject{}, false // Ensures a non-nil return
 		default:
 			log.L(context.Background()).Errorf("Invalid object value '%+v' for key '%s'", vInterace, key)
 			return JSONObject{}, false // Ensures a non-nil return
