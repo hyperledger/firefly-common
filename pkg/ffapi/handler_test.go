@@ -173,7 +173,7 @@ text
 			"200": {
 				Value: &openapi3.Response{
 					Content: openapi3.Content{
-						"text/plain": &openapi3.MediaType{},
+						"text/plain": {},
 					},
 				},
 			},
