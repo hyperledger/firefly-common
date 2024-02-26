@@ -19,6 +19,7 @@ package ffapi
 import (
 	"context"
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"net/http"
 	"testing"
 
@@ -296,6 +297,36 @@ func TestFFExcludeTag(t *testing.T) {
 	assert.Regexp(t, "no schema", err)
 	_, err = swagger.Paths.Find("/namespaces/{ns}/example1/test").Post.RequestBody.Value.Content.Get("application/json").Schema.Value.Properties.JSONLookup("conditionalInput")
 	assert.Regexp(t, "no schema", err)
+}
+
+func TestCustomResponseRefs(t *testing.T) {
+	routes := []*Route{
+		{
+			Name:   "CustomResponseRefTest",
+			Path:   "/test",
+			Method: http.MethodGet,
+			CustomResponseRefs: map[string]*openapi3.ResponseRef{
+				"200": {
+					Value: &openapi3.Response{
+						Content: openapi3.Content{
+							"text/plain": &openapi3.MediaType{},
+						},
+					},
+				},
+			},
+		},
+	}
+	swagger := NewSwaggerGen(&SwaggerGenOptions{
+		Title:   "UnitTest",
+		Version: "1.0",
+		BaseURL: "http://localhost:12345/api/v1",
+	}).Generate(context.Background(), routes)
+	assert.Nil(t, swagger.Paths.Find("/test").Get.RequestBody)
+	require.NotEmpty(t, swagger.Paths.Find("/test").Get.Responses)
+	require.NotNil(t, swagger.Paths.Find("/test").Get.Responses.Value("200"))
+	require.NotNil(t, swagger.Paths.Find("/test").Get.Responses.Value("200").Value)
+	assert.NotNil(t, swagger.Paths.Find("/test").Get.Responses.Value("200").Value.Content.Get("text/plain"))
+	assert.Nil(t, swagger.Paths.Find("/test").Get.Responses.Value("201"))
 }
 
 func TestPanicOnMissingDescription(t *testing.T) {

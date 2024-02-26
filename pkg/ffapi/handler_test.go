@@ -21,6 +21,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/stretchr/testify/require"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -154,6 +156,72 @@ func TestJSONHTTPNilResponseNon204(t *testing.T) {
 	var resJSON map[string]interface{}
 	json.NewDecoder(res.Body).Decode(&resJSON)
 	assert.Regexp(t, "FF00164", resJSON["error"])
+}
+
+func TestStreamHttpResponsePlainText200(t *testing.T) {
+	text := `
+some stream
+of
+text
+!!!
+`
+	s, _, done := newTestServer(t, []*Route{{
+		Name:   "testRoute",
+		Path:   "/test",
+		Method: "GET",
+		CustomResponseRefs: map[string]*openapi3.ResponseRef{
+			"200": {
+				Value: &openapi3.Response{
+					Content: openapi3.Content{
+						"text/plain": {},
+					},
+				},
+			},
+		},
+		StreamHandler: func(r *APIRequest) (output io.ReadCloser, err error) {
+			r.ResponseHeaders.Add("Content-Type", "text/plain")
+			return io.NopCloser(strings.NewReader(text)), nil
+		},
+	}}, "", nil)
+	defer done()
+
+	res, err := http.Get(fmt.Sprintf("http://%s/test", s.Addr()))
+	require.NoError(t, err)
+	assert.Equal(t, 200, res.StatusCode)
+	assert.Equal(t, "text/plain", res.Header.Get("Content-Type"))
+	b, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	assert.Equal(t, text, string(b))
+}
+
+func TestStreamHttpResponseBinary200(t *testing.T) {
+	randomBytes := []byte{3, 255, 192, 201, 33, 50}
+	s, _, done := newTestServer(t, []*Route{{
+		Name:   "testRoute",
+		Path:   "/test",
+		Method: "GET",
+		CustomResponseRefs: map[string]*openapi3.ResponseRef{
+			"200": {
+				Value: &openapi3.Response{
+					Content: openapi3.Content{
+						"application/octet-stream": &openapi3.MediaType{},
+					},
+				},
+			},
+		},
+		StreamHandler: func(r *APIRequest) (output io.ReadCloser, err error) {
+			return io.NopCloser(bytes.NewReader(randomBytes)), nil
+		},
+	}}, "", nil)
+	defer done()
+
+	res, err := http.Get(fmt.Sprintf("http://%s/test", s.Addr()))
+	require.NoError(t, err)
+	assert.Equal(t, 200, res.StatusCode)
+	assert.Equal(t, "application/octet-stream", res.Header.Get("Content-Type"))
+	b, err := io.ReadAll(res.Body)
+	require.NoError(t, err)
+	assert.Equal(t, randomBytes, b)
 }
 
 func TestJSONHTTPDefault500Error(t *testing.T) {
