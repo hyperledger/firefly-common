@@ -313,6 +313,12 @@ func (sg *SwaggerGen) addOutput(ctx context.Context, doc *openapi3.T, route *Rou
 			},
 		})
 	}
+	for code, res := range route.CustomResponseRefs {
+		if res.Value != nil && res.Value.Description == nil {
+			res.Value.Description = &s
+		}
+		op.Responses.Set(code, res)
+	}
 }
 
 func (sg *SwaggerGen) AddParam(ctx context.Context, op *openapi3.Operation, in, name, def, example string, description i18n.MessageKey, deprecated bool, msgArgs ...interface{}) {

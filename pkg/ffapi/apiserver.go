@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -19,6 +19,7 @@ package ffapi
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"time"
@@ -86,6 +87,7 @@ type APIServerOptions[T any] struct {
 type APIServerRouteExt[T any] struct {
 	JSONHandler   func(*APIRequest, T) (output interface{}, err error)
 	UploadHandler func(*APIRequest, T) (output interface{}, err error)
+	StreamHandler func(*APIRequest, T) (output io.ReadCloser, err error)
 }
 
 // NewAPIServer makes a new server, with the specified configuration, and
@@ -201,13 +203,25 @@ func (as *apiServer[T]) routeHandler(hf *HandlerFactory, route *Route) http.Hand
 	// We extend the base ffapi functionality, with standardized DB filter support for all core resources.
 	// We also pass the Orchestrator context through
 	ext := route.Extensions.(*APIServerRouteExt[T])
-	route.JSONHandler = func(r *APIRequest) (output interface{}, err error) {
-		er, err := as.EnrichRequest(r)
-		if err != nil {
-			return nil, err
+	switch {
+	case ext.StreamHandler != nil:
+		route.StreamHandler = func(r *APIRequest) (output io.ReadCloser, err error) {
+			er, err := as.EnrichRequest(r)
+			if err != nil {
+				return nil, err
+			}
+			return ext.StreamHandler(r, er)
 		}
-		return ext.JSONHandler(r, er)
+	case ext.JSONHandler != nil:
+		route.JSONHandler = func(r *APIRequest) (output interface{}, err error) {
+			er, err := as.EnrichRequest(r)
+			if err != nil {
+				return nil, err
+			}
+			return ext.JSONHandler(r, er)
+		}
 	}
+
 	return hf.RouteHandler(route)
 }
 
@@ -247,7 +261,7 @@ func (as *apiServer[T]) createMuxRouter(ctx context.Context) *mux.Router {
 				return ce.UploadHandler(r, er)
 			}
 		}
-		if ce.JSONHandler != nil || ce.UploadHandler != nil {
+		if ce.JSONHandler != nil || ce.UploadHandler != nil || ce.StreamHandler != nil {
 			r.HandleFunc(fmt.Sprintf("/api/v1/%s", route.Path), as.routeHandler(hf, route)).
 				Methods(route.Method)
 		}

@@ -128,6 +128,8 @@ func setup(ctx context.Context) (pubSubESManager, *inMemoryStream, func()) {
 	// Use SQLite in-memory DB
 	conf := config.RootSection("ffpubsub")
 	eventstreams.InitConfig(conf)
+	wsConf := conf.SubSection("ws")
+	wsserver.InitConfig(wsConf)
 	dbConf := conf.SubSection("sqlite")
 	dbsql.InitSQLiteConfig(dbConf)
 	dbConf.Set(dbsql.SQLConfMigrationsAuto, true)
@@ -139,7 +141,7 @@ func setup(ctx context.Context) (pubSubESManager, *inMemoryStream, func()) {
 	sql, err := dbsql.NewSQLiteProvider(ctx, dbConf)
 	assertNoError(err)
 
-	wsServer := wsserver.NewWebSocketServer(ctx)
+	wsServer := wsserver.NewWebSocketServer(ctx, wsserver.GenerateConfig(wsConf))
 	server := httptest.NewServer(http.HandlerFunc(wsServer.Handler))
 	u, err := url.Parse(server.URL)
 	assertNoError(err)

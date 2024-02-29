@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -133,8 +133,8 @@ func (jd JSONObject) GetObject(key string) JSONObject {
 }
 
 func (jd JSONObject) GetObjectOk(key string) (JSONObject, bool) {
-	vInterace, ok := jd[key]
-	if ok && vInterace != nil {
+	vInterface, ok := jd[key]
+	if ok && vInterface != nil {
 		vInterface := jd[key]
 		switch vMap := vInterface.(type) {
 		case map[string]interface{}:
@@ -142,7 +142,7 @@ func (jd JSONObject) GetObjectOk(key string) (JSONObject, bool) {
 		case JSONObject:
 			return vMap, true
 		default:
-			log.L(context.Background()).Errorf("Invalid object value '%+v' for key '%s'", vInterace, key)
+			log.L(context.Background()).Errorf("Invalid object value '%+v' for key '%s'", vInterface, key)
 			return JSONObject{}, false // Ensures a non-nil return
 		}
 	}
@@ -187,11 +187,10 @@ func (jd JSONObject) GetObjectArray(key string) JSONObjectArray {
 }
 
 func (jd JSONObject) GetObjectArrayOk(key string) (JSONObjectArray, bool) {
-	vInterace, ok := jd[key]
-	if ok && vInterace != nil {
-		return ToJSONObjectArray(vInterace)
+	vInterface, ok := jd[key]
+	if ok && vInterface != nil {
+		return ToJSONObjectArray(vInterface)
 	}
-	log.L(context.Background()).Errorf("Invalid object value '%+v' for key '%s'", vInterace, key)
 	return JSONObjectArray{}, false // Ensures a non-nil return
 }
 
@@ -201,11 +200,11 @@ func (jd JSONObject) GetStringArray(key string) []string {
 }
 
 func (jd JSONObject) GetStringArrayOk(key string) ([]string, bool) {
-	vInterace, ok := jd[key]
-	if ok && vInterace != nil {
-		return ToStringArray(vInterace)
+	vInterface, ok := jd[key]
+	if ok && vInterface != nil {
+		return ToStringArray(vInterface)
 	}
-	log.L(context.Background()).Errorf("Invalid string array value '%+v' for key '%s'", vInterace, key)
+	log.L(context.Background()).Errorf("Invalid string array value '%+v' for key '%s'", vInterface, key)
 	return []string{}, false // Ensures a non-nil return
 }
 
