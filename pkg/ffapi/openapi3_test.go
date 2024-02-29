@@ -182,11 +182,17 @@ func TestOpenAPI3SwaggerGen(t *testing.T) {
 		},
 		SupportFieldRedaction: true,
 	}).Generate(context.Background(), testRoutes)
-	err := doc.Validate(context.Background())
-	assert.NoError(t, err)
 
+	sl := openapi3.NewLoader()
 	b, err := yaml.Marshal(doc)
 	assert.NoError(t, err)
+
+	doc, err = sl.LoadFromData(b)
+	assert.NoError(t, err)
+
+	err = doc.Validate(sl.Context)
+	assert.NoError(t, err)
+
 	fmt.Print(string(b))
 }
 
@@ -427,17 +433,24 @@ func TestBaseURLVariables(t *testing.T) {
 			},
 		},
 	}).Generate(context.Background(), testRoutes)
-	err := doc.Validate(context.Background())
+
+	sl := openapi3.NewLoader()
+	b, err := yaml.Marshal(doc)
+	assert.NoError(t, err)
+
+	doc, err = sl.LoadFromData(b)
+	assert.NoError(t, err)
+
+	// Validate doesn't like references
+	// so LoadFromData resolves those references
+	// before we validate
+	err = doc.Validate(sl.Context)
 	assert.NoError(t, err)
 
 	server := doc.Servers[0]
 	if assert.Contains(t, server.Variables, "param") {
 		assert.Equal(t, "default-value", server.Variables["param"].Default)
 	}
-
-	b, err := yaml.Marshal(doc)
-	assert.NoError(t, err)
-	fmt.Print(string(b))
 }
 
 func TestCheckObjectDocumented(t *testing.T) {
