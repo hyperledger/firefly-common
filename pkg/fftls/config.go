@@ -23,14 +23,21 @@ import (
 const (
 	// HTTPConfTLSCAFile the TLS certificate authority file for the HTTP server
 	HTTPConfTLSCAFile = "caFile"
+	// HTTPConfTLSCA the TLS certificate authority in PEM format
+	HTTPConfTLSCA = "ca"
 	// HTTPConfTLSCertFile the TLS certificate file for the HTTP server
 	HTTPConfTLSCertFile = "certFile"
+	// HTTPConfTLSCert the TLS certificate in PEM format
+	HTTPConfTLSCert = "cert"
 	// HTTPConfTLSClientAuth whether the HTTP server requires a mutual TLS connection
 	HTTPConfTLSClientAuth = "clientAuth"
 	// HTTPConfTLSEnabled whether TLS is enabled for the HTTP server
 	HTTPConfTLSEnabled = "enabled"
 	// HTTPConfTLSKeyFile the private key file for TLS on the server
 	HTTPConfTLSKeyFile = "keyFile"
+	// HTTPConfTLSKey the TLS certificate key in PEM format
+	HTTPConfTLSKey = "key"
+
 	// HTTPConfTLSInsecureSkipHostVerify disables host verification - insecure (for dev only)
 	HTTPConfTLSInsecureSkipHostVerify = "insecureSkipHostVerify"
 
@@ -44,8 +51,11 @@ type Config struct {
 	Enabled                bool                   `ffstruct:"tlsconfig" json:"enabled"`
 	ClientAuth             bool                   `ffstruct:"tlsconfig" json:"clientAuth,omitempty"`
 	CAFile                 string                 `ffstruct:"tlsconfig" json:"caFile,omitempty"`
+	CA                     string                 `ffstruct:"tlsconfig" json:"ca,omitempty"`
 	CertFile               string                 `ffstruct:"tlsconfig" json:"certFile,omitempty"`
+	Cert                   string                 `ffstruct:"tlsconfig" json:"cert,omitempty"`
 	KeyFile                string                 `ffstruct:"tlsconfig" json:"keyFile,omitempty"`
+	Key                    string                 `ffstruct:"tlsconfig" json:"key,omitempty"`
 	InsecureSkipHostVerify bool                   `ffstruct:"tlsconfig" json:"insecureSkipHostVerify"`
 	RequiredDNAttributes   map[string]interface{} `ffstruct:"tlsconfig" json:"requiredDNAttributes,omitempty"`
 }
@@ -53,9 +63,12 @@ type Config struct {
 func InitTLSConfig(conf config.Section) {
 	conf.AddKnownKey(HTTPConfTLSEnabled, defaultHTTPTLSEnabled)
 	conf.AddKnownKey(HTTPConfTLSCAFile)
+	conf.AddKnownKey(HTTPConfTLSCA)
 	conf.AddKnownKey(HTTPConfTLSClientAuth)
 	conf.AddKnownKey(HTTPConfTLSCertFile)
+	conf.AddKnownKey(HTTPConfTLSCert)
 	conf.AddKnownKey(HTTPConfTLSKeyFile)
+	conf.AddKnownKey(HTTPConfTLSKey)
 	conf.AddKnownKey(HTTPConfTLSRequiredDNAttributes)
 	conf.AddKnownKey(HTTPConfTLSInsecureSkipHostVerify)
 }
@@ -65,8 +78,11 @@ func GenerateConfig(conf config.Section) *Config {
 		Enabled:                conf.GetBool(HTTPConfTLSEnabled),
 		ClientAuth:             conf.GetBool(HTTPConfTLSClientAuth),
 		CAFile:                 conf.GetString(HTTPConfTLSCAFile),
+		CA:                     conf.GetString(HTTPConfTLSCA),
 		CertFile:               conf.GetString(HTTPConfTLSCertFile),
+		Cert:                   conf.GetString(HTTPConfTLSCert),
 		KeyFile:                conf.GetString(HTTPConfTLSKeyFile),
+		Key:                    conf.GetString(HTTPConfTLSKey),
 		InsecureSkipHostVerify: conf.GetBool(HTTPConfTLSInsecureSkipHostVerify),
 		RequiredDNAttributes:   conf.GetObject(HTTPConfTLSRequiredDNAttributes),
 	}

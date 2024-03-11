@@ -24,9 +24,11 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"github.com/stretchr/testify/require"
 	"math/big"
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,6 +37,34 @@ import (
 )
 
 func buildSelfSignedTLSKeyPair(t *testing.T, subject pkix.Name) (string, string) {
+	// Create an X509 certificate pair
+	privatekey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	publickey := &privatekey.PublicKey
+	var privateKeyBytes []byte = x509.MarshalPKCS1PrivateKey(privatekey)
+	privateKeyBlock := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: privateKeyBytes}
+	privateKeyPEM := &strings.Builder{}
+	err := pem.Encode(privateKeyPEM, privateKeyBlock)
+	require.NoError(t, err)
+	serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	x509Template := &x509.Certificate{
+		SerialNumber:          serialNumber,
+		Subject:               subject,
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(100 * time.Second),
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+		IPAddresses:           []net.IP{net.IPv4(127, 0, 0, 1)},
+	}
+	require.NoError(t, err)
+	derBytes, err := x509.CreateCertificate(rand.Reader, x509Template, x509Template, publickey, privatekey)
+	require.NoError(t, err)
+	publicKeyPEM := &strings.Builder{}
+	err = pem.Encode(publicKeyPEM, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
+	require.NoError(t, err)
+	return publicKeyPEM.String(), privateKeyPEM.String()
+}
+
+func buildSelfSignedTLSKeyPairFiles(t *testing.T, subject pkix.Name) (string, string) {
 	// Create an X509 certificate pair
 	privatekey, _ := rsa.GenerateKey(rand.Reader, 2048)
 	publickey := &privatekey.PublicKey
@@ -129,7 +159,7 @@ func TestTLSDefault(t *testing.T) {
 func TestErrInvalidCAFile(t *testing.T) {
 
 	config.RootConfigReset()
-	_, notTheCAFileTheKey := buildSelfSignedTLSKeyPair(t, pkix.Name{
+	_, notTheCAFileTheKey := buildSelfSignedTLSKeyPairFiles(t, pkix.Name{
 		CommonName: "server.example.com",
 	})
 
@@ -146,7 +176,7 @@ func TestErrInvalidCAFile(t *testing.T) {
 func TestErrInvalidKeyPairFile(t *testing.T) {
 
 	config.RootConfigReset()
-	notTheKeyFile, notTheCertFile := buildSelfSignedTLSKeyPair(t, pkix.Name{
+	notTheKeyFile, notTheCertFile := buildSelfSignedTLSKeyPairFiles(t, pkix.Name{
 		CommonName: "server.example.com",
 	})
 
@@ -162,11 +192,10 @@ func TestErrInvalidKeyPairFile(t *testing.T) {
 }
 
 func TestMTLSOk(t *testing.T) {
-
-	serverPublicKeyFile, serverKeyFile := buildSelfSignedTLSKeyPair(t, pkix.Name{
+	serverPublicKey, serverKey := buildSelfSignedTLSKeyPair(t, pkix.Name{
 		CommonName: "server.example.com",
 	})
-	clientPublicKeyFile, clientKeyFile := buildSelfSignedTLSKeyPair(t, pkix.Name{
+	clientPublicKey, clientKey := buildSelfSignedTLSKeyPair(t, pkix.Name{
 		CommonName: "client.example.com",
 	})
 
@@ -175,9 +204,9 @@ func TestMTLSOk(t *testing.T) {
 	serverConf := config.RootSection("fftls_server")
 	InitTLSConfig(serverConf)
 	serverConf.Set(HTTPConfTLSEnabled, true)
-	serverConf.Set(HTTPConfTLSCAFile, clientPublicKeyFile)
-	serverConf.Set(HTTPConfTLSCertFile, serverPublicKeyFile)
-	serverConf.Set(HTTPConfTLSKeyFile, serverKeyFile)
+	serverConf.Set(HTTPConfTLSCA, clientPublicKey)
+	serverConf.Set(HTTPConfTLSCert, serverPublicKey)
+	serverConf.Set(HTTPConfTLSKey, serverKey)
 	serverConf.Set(HTTPConfTLSClientAuth, true)
 
 	addr, done := buildTLSListener(t, serverConf, ServerType)
@@ -186,9 +215,9 @@ func TestMTLSOk(t *testing.T) {
 	clientConf := config.RootSection("fftls_client")
 	InitTLSConfig(clientConf)
 	clientConf.Set(HTTPConfTLSEnabled, true)
-	clientConf.Set(HTTPConfTLSCAFile, serverPublicKeyFile)
-	clientConf.Set(HTTPConfTLSCertFile, clientPublicKeyFile)
-	clientConf.Set(HTTPConfTLSKeyFile, clientKeyFile)
+	clientConf.Set(HTTPConfTLSCA, serverPublicKey)
+	clientConf.Set(HTTPConfTLSCert, clientPublicKey)
+	clientConf.Set(HTTPConfTLSKey, clientKey)
 
 	tlsConfig, err := ConstructTLSConfig(context.Background(), clientConf, ClientType)
 	assert.NoError(t, err)
@@ -208,7 +237,7 @@ func TestMTLSOk(t *testing.T) {
 
 func TestMTLSMissingClientCert(t *testing.T) {
 
-	serverPublicKeyFile, serverKeyFile := buildSelfSignedTLSKeyPair(t, pkix.Name{
+	serverPublicKeyFile, serverKeyFile := buildSelfSignedTLSKeyPairFiles(t, pkix.Name{
 		CommonName: "server.example.com",
 	})
 
@@ -243,10 +272,10 @@ func TestMTLSMissingClientCert(t *testing.T) {
 
 func TestMTLSMatchFullSubject(t *testing.T) {
 
-	serverPublicKeyFile, serverKeyFile := buildSelfSignedTLSKeyPair(t, pkix.Name{
+	serverPublicKeyFile, serverKeyFile := buildSelfSignedTLSKeyPairFiles(t, pkix.Name{
 		CommonName: "server.example.com",
 	})
-	clientPublicKeyFile, clientKeyFile := buildSelfSignedTLSKeyPair(t, pkix.Name{
+	clientPublicKeyFile, clientKeyFile := buildSelfSignedTLSKeyPairFiles(t, pkix.Name{
 		CommonName:         "client.example.com",
 		Country:            []string{"GB"},
 		Organization:       []string{"hyperledger"},
@@ -306,10 +335,10 @@ func TestMTLSMatchFullSubject(t *testing.T) {
 
 func TestMTLSMismatchSubject(t *testing.T) {
 
-	serverPublicKeyFile, serverKeyFile := buildSelfSignedTLSKeyPair(t, pkix.Name{
+	serverPublicKeyFile, serverKeyFile := buildSelfSignedTLSKeyPairFiles(t, pkix.Name{
 		CommonName: "server.example.com",
 	})
-	clientPublicKeyFile, clientKeyFile := buildSelfSignedTLSKeyPair(t, pkix.Name{
+	clientPublicKeyFile, clientKeyFile := buildSelfSignedTLSKeyPairFiles(t, pkix.Name{
 		CommonName: "wrong.example.com",
 	})
 
@@ -429,7 +458,7 @@ func TestMTLSDNValidatorEmptyChain(t *testing.T) {
 
 func TestConnectSkipVerification(t *testing.T) {
 
-	serverPublicKeyFile, serverKeyFile := buildSelfSignedTLSKeyPair(t, pkix.Name{
+	serverPublicKeyFile, serverKeyFile := buildSelfSignedTLSKeyPairFiles(t, pkix.Name{
 		CommonName: "server.example.com",
 	})
 

@@ -72,6 +72,12 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 				err = i18n.NewError(ctx, i18n.MsgInvalidCAFile)
 			}
 		}
+	} else if config.CA != "" {
+		rootCAs = x509.NewCertPool()
+		ok := rootCAs.AppendCertsFromPEM([]byte(config.CA))
+		if !ok {
+			err = i18n.NewError(ctx, i18n.MsgInvalidCAFile)
+		}
 	} else {
 		rootCAs, err = x509.SystemCertPool()
 	}
@@ -89,7 +95,12 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, i18n.MsgInvalidKeyPairFiles)
 		}
-
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	} else if config.Cert != "" && config.Key != "" {
+		cert, err := tls.X509KeyPair([]byte(config.Cert), []byte(config.Key))
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, i18n.MsgInvalidKeyPairFiles)
+		}
 		tlsConfig.Certificates = []tls.Certificate{cert}
 	}
 
