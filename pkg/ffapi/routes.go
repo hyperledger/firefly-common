@@ -78,6 +78,9 @@ type Route struct {
 	Tag string
 	// Extensions allows extension of the route struct by individual microservices
 	Extensions interface{}
+	// ExportTopLevelComponentSchema defines whether the top level schema for the output and input should be exported
+	// by default it's set to true
+	ExportTopLevelComponentSchema *bool
 }
 
 // PathParam is a description of a path parameter
