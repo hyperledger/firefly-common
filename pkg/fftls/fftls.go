@@ -62,7 +62,8 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 	var err error
 	// Support custom CA file
 	var rootCAs *x509.CertPool
-	if config.CAFile != "" {
+	switch {
+	case config.CAFile != "":
 		rootCAs = x509.NewCertPool()
 		var caBytes []byte
 		caBytes, err = os.ReadFile(config.CAFile)
@@ -72,13 +73,13 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 				err = i18n.NewError(ctx, i18n.MsgInvalidCAFile)
 			}
 		}
-	} else if config.CA != "" {
+	case config.CA != "":
 		rootCAs = x509.NewCertPool()
 		ok := rootCAs.AppendCertsFromPEM([]byte(config.CA))
 		if !ok {
 			err = i18n.NewError(ctx, i18n.MsgInvalidCAFile)
 		}
-	} else {
+	default:
 		rootCAs, err = x509.SystemCertPool()
 	}
 
