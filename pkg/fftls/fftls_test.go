@@ -170,7 +170,22 @@ func TestErrInvalidCAFile(t *testing.T) {
 
 	_, err := ConstructTLSConfig(context.Background(), conf, ClientType)
 	assert.Regexp(t, "FF00152", err)
+}
 
+func TestErrInvalidCA(t *testing.T) {
+
+	config.RootConfigReset()
+	_, notTheCATheKey := buildSelfSignedTLSKeyPair(t, pkix.Name{
+		CommonName: "server.example.com",
+	})
+
+	conf := config.RootSection("fftls_server")
+	InitTLSConfig(conf)
+	conf.Set(HTTPConfTLSEnabled, true)
+	conf.Set(HTTPConfTLSCA, notTheCATheKey)
+
+	_, err := ConstructTLSConfig(context.Background(), conf, ClientType)
+	assert.Regexp(t, "FF00152", err)
 }
 
 func TestErrInvalidKeyPairFile(t *testing.T) {
@@ -185,6 +200,24 @@ func TestErrInvalidKeyPairFile(t *testing.T) {
 	conf.Set(HTTPConfTLSEnabled, true)
 	conf.Set(HTTPConfTLSKeyFile, notTheKeyFile)
 	conf.Set(HTTPConfTLSCertFile, notTheCertFile)
+
+	_, err := ConstructTLSConfig(context.Background(), conf, ClientType)
+	assert.Regexp(t, "FF00206", err)
+
+}
+
+func TestErrInvalidKeyPair(t *testing.T) {
+
+	config.RootConfigReset()
+	notTheKey, notTheCert := buildSelfSignedTLSKeyPair(t, pkix.Name{
+		CommonName: "server.example.com",
+	})
+
+	conf := config.RootSection("fftls_server")
+	InitTLSConfig(conf)
+	conf.Set(HTTPConfTLSEnabled, true)
+	conf.Set(HTTPConfTLSKey, notTheKey)
+	conf.Set(HTTPConfTLSCert, notTheCert)
 
 	_, err := ConstructTLSConfig(context.Background(), conf, ClientType)
 	assert.Regexp(t, "FF00206", err)
