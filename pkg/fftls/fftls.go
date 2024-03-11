@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -62,7 +62,8 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 	var err error
 	// Support custom CA file
 	var rootCAs *x509.CertPool
-	if config.CAFile != "" {
+	switch {
+	case config.CAFile != "":
 		rootCAs = x509.NewCertPool()
 		var caBytes []byte
 		caBytes, err = os.ReadFile(config.CAFile)
@@ -72,7 +73,13 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 				err = i18n.NewError(ctx, i18n.MsgInvalidCAFile)
 			}
 		}
-	} else {
+	case config.CA != "":
+		rootCAs = x509.NewCertPool()
+		ok := rootCAs.AppendCertsFromPEM([]byte(config.CA))
+		if !ok {
+			err = i18n.NewError(ctx, i18n.MsgInvalidCAFile)
+		}
+	default:
 		rootCAs, err = x509.SystemCertPool()
 	}
 
@@ -89,7 +96,12 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, i18n.MsgInvalidKeyPairFiles)
 		}
-
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	} else if config.Cert != "" && config.Key != "" {
+		cert, err := tls.X509KeyPair([]byte(config.Cert), []byte(config.Key))
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, i18n.MsgInvalidKeyPairFiles)
+		}
 		tlsConfig.Certificates = []tls.Certificate{cert}
 	}
 
