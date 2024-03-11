@@ -23,11 +23,11 @@ import (
 const (
 	// HTTPConfTLSCAFile the TLS certificate authority file for the HTTP server
 	HTTPConfTLSCAFile = "caFile"
-	// HTTPConfTLSCA the TLS certificate authority in PEM format
+	// HTTPConfTLSCA the TLS certificate authority in PEM format, this option is ignored if HTTPConfTLSCAFile is also set
 	HTTPConfTLSCA = "ca"
 	// HTTPConfTLSCertFile the TLS certificate file for the HTTP server
 	HTTPConfTLSCertFile = "certFile"
-	// HTTPConfTLSCert the TLS certificate in PEM format
+	// HTTPConfTLSCert the TLS certificate in PEM format, this option is ignored if HTTPConfTLSCertFile is also set
 	HTTPConfTLSCert = "cert"
 	// HTTPConfTLSClientAuth whether the HTTP server requires a mutual TLS connection
 	HTTPConfTLSClientAuth = "clientAuth"
@@ -35,7 +35,7 @@ const (
 	HTTPConfTLSEnabled = "enabled"
 	// HTTPConfTLSKeyFile the private key file for TLS on the server
 	HTTPConfTLSKeyFile = "keyFile"
-	// HTTPConfTLSKey the TLS certificate key in PEM format
+	// HTTPConfTLSKey the TLS certificate key in PEM format, this option is ignored if HTTPConfTLSKeyFile is also set
 	HTTPConfTLSKey = "key"
 
 	// HTTPConfTLSInsecureSkipHostVerify disables host verification - insecure (for dev only)
