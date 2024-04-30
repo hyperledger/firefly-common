@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -206,7 +206,7 @@ func (s *Database) mapFieldName(tableName, fieldName string, tm map[string]strin
 			field = mf
 		}
 	}
-	if tableName != "" {
+	if tableName != "" && !strings.Contains(field, ".") {
 		field = fmt.Sprintf("%s.%s", tableName, field)
 	}
 	return field
