@@ -145,6 +145,7 @@ type CrudBase[T Resource] struct {
 	ReadTableAlias    string
 	ReadOnlyColumns   []string
 	ReadQueryModifier QueryModifier
+	AfterLoad         func(ctx context.Context, inst T) error
 }
 
 func (c *CrudBase[T]) Scoped(scope sq.Eq) CRUD[T] {
@@ -634,6 +635,9 @@ func (c *CrudBase[T]) GetByID(ctx context.Context, id string, getOpts ...GetOpti
 	if err != nil {
 		return c.NilValue(), err
 	}
+	if c.AfterLoad != nil {
+		return inst, c.AfterLoad(ctx, inst)
+	}
 	return inst, nil
 }
 
@@ -735,6 +739,12 @@ func (c *CrudBase[T]) getManyScoped(ctx context.Context, tableFrom string, fi *f
 		inst, err := c.scanRow(ctx, cols, rows)
 		if err != nil {
 			return nil, nil, err
+		}
+		if c.AfterLoad != nil {
+			err = c.AfterLoad(ctx, inst)
+			if err != nil {
+				return nil, nil, err
+			}
 		}
 		instances = append(instances, inst)
 	}
