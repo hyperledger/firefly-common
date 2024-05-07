@@ -1294,3 +1294,24 @@ func TestValidateNameSemanticsWithoutQueryFactory(t *testing.T) {
 		tc.Validate()
 	})
 }
+
+func TestCustomIDColumn(t *testing.T) {
+	db, _ := NewMockProvider().UTInit()
+	tc := &CrudBase[*TestCRUDable]{
+		DB:            &db.Database,
+		NewInstance:   func() *TestCRUDable { return &TestCRUDable{} },
+		NilValue:      func() *TestCRUDable { return nil },
+		IDField:       "f1",
+		Columns:       []string{"f1"},
+		TimesDisabled: true,
+		PatchDisabled: true,
+		GetFieldPtr: func(inst *TestCRUDable, col string) interface{} {
+			if col == "id" {
+				var t *string
+				return &t
+			}
+			return nil
+		},
+	}
+	tc.Validate()
+}
