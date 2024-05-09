@@ -377,10 +377,19 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	assert.Equal(t, Created, collection.events[0])
 	collection.events = nil
 
+	// Install an AfterLoad handler
+	afterLoadCalled := false
+	collection.AfterLoad = func(ctx context.Context, inst *TestCRUDable) error {
+		afterLoadCalled = true
+		return nil
+	}
+
 	// Check we get it back
 	c1copy, err := iCrud.GetByID(ctx, c1.ID.String())
 	assert.NoError(t, err)
 	checkEqualExceptTimes(t, *c1, *c1copy)
+	assert.True(t, afterLoadCalled)
+	collection.AfterLoad = nil
 
 	// Check we get it back by name
 	c1copy, err = iCrud.GetByName(ctx, *c1.Name)
@@ -411,6 +420,14 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	}).GetByName(ctx, *c1.Name)
 	assert.NoError(t, err)
 	checkEqualExceptTimes(t, *c1, *c1copy)
+
+	// Check AfterLoad error behavior
+	collection.AfterLoad = func(ctx context.Context, inst *TestCRUDable) error {
+		return fmt.Errorf("pop")
+	}
+	_, _, err = iCrud.GetMany(ctx, CRUDableQueryFactory.NewFilter(ctx).And())
+	assert.EqualError(t, err, "pop")
+	collection.AfterLoad = nil
 
 	// Upsert the existing row optimized
 	c1copy.Field1 = ptrTo("hello again - 1")
@@ -1293,4 +1310,25 @@ func TestValidateNameSemanticsWithoutQueryFactory(t *testing.T) {
 	assert.PanicsWithValue(t, "QueryFactory must be set when name semantics are enabled", func() {
 		tc.Validate()
 	})
+}
+
+func TestCustomIDColumn(t *testing.T) {
+	db, _ := NewMockProvider().UTInit()
+	tc := &CrudBase[*TestCRUDable]{
+		DB:            &db.Database,
+		NewInstance:   func() *TestCRUDable { return &TestCRUDable{} },
+		NilValue:      func() *TestCRUDable { return nil },
+		IDField:       "f1",
+		Columns:       []string{"f1"},
+		TimesDisabled: true,
+		PatchDisabled: true,
+		GetFieldPtr: func(inst *TestCRUDable, col string) interface{} {
+			if col == "id" {
+				var t *string
+				return &t
+			}
+			return nil
+		},
+	}
+	tc.Validate()
 }

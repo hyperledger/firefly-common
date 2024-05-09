@@ -129,6 +129,7 @@ type CrudBase[T Resource] struct {
 	TimesDisabled    bool // no management of the time columns
 	PatchDisabled    bool // allows non-pointer fields, but prevents UpdateSparse function
 	ImmutableColumns []string
+	IDField          string                                        // override default ID field
 	NameField        string                                        // If supporting name semantics
 	QueryFactory     ffapi.QueryFactory                            // Must be set when name is set
 	DefaultSort      func() []interface{}                          // optionally override the default sort - array of *ffapi.SortField or string
@@ -144,6 +145,7 @@ type CrudBase[T Resource] struct {
 	ReadTableAlias    string
 	ReadOnlyColumns   []string
 	ReadQueryModifier QueryModifier
+	AfterLoad         func(ctx context.Context, inst T) error // perform final validation/formatting after an instance is loaded from db
 }
 
 func (c *CrudBase[T]) Scoped(scope sq.Eq) CRUD[T] {
@@ -157,6 +159,13 @@ func (c *CrudBase[T]) TableAlias() string {
 		return c.ReadTableAlias
 	}
 	return c.Table
+}
+
+func (c *CrudBase[T]) GetIDField() string {
+	if c.IDField != "" {
+		return c.IDField
+	}
+	return ColumnID
 }
 
 func (c *CrudBase[T]) GetQueryFactory() ffapi.QueryFactory {
@@ -212,7 +221,7 @@ func (c *CrudBase[T]) Validate() {
 	ptrs := map[string]interface{}{}
 	fieldMap := map[string]bool{
 		// Mandatory column checks
-		ColumnID: false,
+		c.GetIDField(): false,
 	}
 	if !c.TimesDisabled {
 		fieldMap[ColumnCreated] = false
@@ -260,7 +269,7 @@ func (c *CrudBase[T]) idFilter(id string) sq.Eq {
 		filter = sq.Eq{}
 	}
 	if c.ReadTableAlias != "" {
-		filter[fmt.Sprintf("%s.id", c.ReadTableAlias)] = id
+		filter[fmt.Sprintf("%s.%s", c.ReadTableAlias, c.GetIDField())] = id
 	} else {
 		filter["id"] = id
 	}
@@ -270,7 +279,7 @@ func (c *CrudBase[T]) idFilter(id string) sq.Eq {
 func (c *CrudBase[T]) buildUpdateList(_ context.Context, update sq.UpdateBuilder, inst T, includeNil bool) sq.UpdateBuilder {
 colLoop:
 	for _, col := range c.Columns {
-		for _, immutable := range append(c.ImmutableColumns, ColumnID, ColumnCreated, ColumnUpdated, c.DB.sequenceColumn) {
+		for _, immutable := range append(c.ImmutableColumns, c.GetIDField(), ColumnCreated, ColumnUpdated, c.DB.sequenceColumn) {
 			if col == immutable {
 				continue colLoop
 			}
@@ -626,6 +635,9 @@ func (c *CrudBase[T]) GetByID(ctx context.Context, id string, getOpts ...GetOpti
 	if err != nil {
 		return c.NilValue(), err
 	}
+	if c.AfterLoad != nil {
+		return inst, c.AfterLoad(ctx, inst)
+	}
 	return inst, nil
 }
 
@@ -727,6 +739,12 @@ func (c *CrudBase[T]) getManyScoped(ctx context.Context, tableFrom string, fi *f
 		inst, err := c.scanRow(ctx, cols, rows)
 		if err != nil {
 			return nil, nil, err
+		}
+		if c.AfterLoad != nil {
+			err = c.AfterLoad(ctx, inst)
+			if err != nil {
+				return nil, nil, err
+			}
 		}
 		instances = append(instances, inst)
 	}
