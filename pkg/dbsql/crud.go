@@ -145,7 +145,7 @@ type CrudBase[T Resource] struct {
 	ReadTableAlias    string
 	ReadOnlyColumns   []string
 	ReadQueryModifier QueryModifier
-	AfterLoad         func(ctx context.Context, inst T) error
+	AfterLoad         func(ctx context.Context, inst T) error // perform final validation/formatting after an instance is loaded from db
 }
 
 func (c *CrudBase[T]) Scoped(scope sq.Eq) CRUD[T] {

@@ -44,7 +44,6 @@ type TestCRUDable struct {
 	Field4 *int64              `json:"f4"`
 	Field5 *bool               `json:"f5"`
 	Field6 *fftypes.FFDuration `json:"f6"`
-	Gen    *string             `json:"gen"`
 }
 
 var CRUDableQueryFactory = &ffapi.QueryFields{
@@ -379,17 +378,17 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	collection.events = nil
 
 	// Install an AfterLoad handler
+	afterLoadCalled := false
 	collection.AfterLoad = func(ctx context.Context, inst *TestCRUDable) error {
-		inst.Gen = ptrTo("generated")
+		afterLoadCalled = true
 		return nil
 	}
 
 	// Check we get it back
 	c1copy, err := iCrud.GetByID(ctx, c1.ID.String())
 	assert.NoError(t, err)
-	assert.Equal(t, "generated", *c1copy.Gen)
-	c1copy.Gen = nil
 	checkEqualExceptTimes(t, *c1, *c1copy)
+	assert.True(t, afterLoadCalled)
 	collection.AfterLoad = nil
 
 	// Check we get it back by name
