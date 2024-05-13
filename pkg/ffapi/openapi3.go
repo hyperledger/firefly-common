@@ -97,13 +97,13 @@ func (sg *SwaggerGen) Generate(ctx context.Context, routes []*Route) *openapi3.T
 			Schemas: make(openapi3.Schemas),
 		},
 	}
-	opIds := make(map[string]bool)
+	opIDs := make(map[string]bool)
 	for _, route := range routes {
-		if route.Name == "" || opIds[route.Name] {
+		if route.Name == "" || opIDs[route.Name] {
 			log.Panicf("Duplicate/invalid name (used as operation ID in swagger): %s", route.Name)
 		}
 		sg.addRoute(ctx, doc, route)
-		opIds[route.Name] = true
+		opIDs[route.Name] = true
 	}
 	return doc
 }

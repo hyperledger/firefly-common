@@ -27,7 +27,7 @@ func ShowConfigCommand(initConf func() error) *cobra.Command {
 		Use:     "showconfig",
 		Aliases: []string{"showconf"},
 		Short:   "List out the configuration options",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			if err := initConf(); err != nil {
 				return err
 			}

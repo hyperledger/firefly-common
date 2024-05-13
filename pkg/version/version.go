@@ -66,7 +66,7 @@ func NewInfo(buildDate, buildCommit, buildVersionOverride, license string) *Info
 		Use:   "version",
 		Short: "Prints the version info",
 		Long:  "Prints the version info in plain, JSON or YAML formats",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			if shortened {
 				fmt.Println(info.Version)
 			} else {

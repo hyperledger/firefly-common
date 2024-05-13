@@ -181,4 +181,6 @@ var (
 	MsgWebSocketBatchInflight                      = ffe("FF00243", "Stream '%s' already has batch '%d' inflight on websocket connection '%s'")
 	MsgWebSocketRoundTripTimeout                   = ffe("FF00244", "Timed out or cancelled waiting for acknowledgement")
 	MsgDBExecFailed                                = ffe("FF00245", "Database update failed")
+	MsgDBErrorBuildingStatement                    = ffe("FF00247", "Error building statement: %s")
+	MsgDBReadInsertTSFailed                        = ffe("FF00248", "Failed to read timestamp from database optimized upsert: %s")
 )
