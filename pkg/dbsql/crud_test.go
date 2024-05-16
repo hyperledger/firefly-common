@@ -784,7 +784,7 @@ func TestUpsertPSQLOptimizedCreated(t *testing.T) {
 	db, mock := mp.UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
-	mock.ExpectQuery("INSERT INTO crudables.*ON CONFLICT id DO UPDATE SET.*RETURNING created").WillReturnRows(
+	mock.ExpectQuery("INSERT INTO crudables.*ON CONFLICT .* DO UPDATE SET.*RETURNING created").WillReturnRows(
 		sqlmock.NewRows([]string{"created"}).AddRow(after.String()),
 	)
 	mock.ExpectCommit()
@@ -805,7 +805,7 @@ func TestUpsertPSQLOptimizedUpdated(t *testing.T) {
 	db, mock := mp.UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
-	mock.ExpectQuery("INSERT INTO crudables.*ON CONFLICT id DO UPDATE SET.*RETURNING created").WillReturnRows(
+	mock.ExpectQuery("INSERT INTO crudables.*ON CONFLICT .* DO UPDATE SET.*RETURNING created").WillReturnRows(
 		sqlmock.NewRows([]string{"created"}).AddRow(before.String()),
 	)
 	mock.ExpectCommit()
@@ -837,7 +837,7 @@ func TestUpsertPSQLOptimizedQueryFail(t *testing.T) {
 	db, mock := mp.UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
-	mock.ExpectQuery("INSERT INTO crudables.*ON CONFLICT id DO UPDATE SET.*RETURNING created").WillReturnError(fmt.Errorf("pop"))
+	mock.ExpectQuery("INSERT INTO crudables.*ON CONFLICT .* DO UPDATE SET.*RETURNING created").WillReturnError(fmt.Errorf("pop"))
 	mock.ExpectRollback()
 	_, err := tc.Upsert(context.Background(), &TestCRUDable{
 		ResourceBase: ResourceBase{
@@ -854,7 +854,7 @@ func TestUpsertPSQLOptimizedBadTimeReturn(t *testing.T) {
 	db, mock := mp.UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")
 	mock.ExpectBegin()
-	mock.ExpectQuery("INSERT INTO crudables.*ON CONFLICT id DO UPDATE SET.*RETURNING created").WillReturnRows(
+	mock.ExpectQuery("INSERT INTO crudables.*ON CONFLICT .* DO UPDATE SET.*RETURNING created").WillReturnRows(
 		sqlmock.NewRows([]string{"created"}).AddRow("!!!this is not a time!!!"),
 	)
 	mock.ExpectRollback()

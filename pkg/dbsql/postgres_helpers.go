@@ -42,6 +42,6 @@ func BuildPostgreSQLOptimizedUpsert(ctx context.Context, table string, idColumn 
 	if err != nil || !ok {
 		return insert, i18n.NewError(ctx, i18n.MsgDBErrorBuildingStatement, err)
 	}
-	return insert.Suffix(fmt.Sprintf("ON CONFLICT %s DO UPDATE", idColumn)).SuffixExpr(sq.Expr(updateSQL, updateValues...)).Suffix("RETURNING " + returnCol), nil
+	return insert.Suffix(fmt.Sprintf("ON CONFLICT (%s) DO UPDATE", idColumn)).SuffixExpr(sq.Expr(updateSQL, updateValues...)).Suffix("RETURNING " + returnCol), nil
 
 }
