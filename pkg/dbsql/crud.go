@@ -461,7 +461,7 @@ func (c *CrudBase[T]) dbOptimizedUpsert(ctx context.Context, tx *TXWrapper, inst
 		}
 	}
 	var rows *sql.Rows
-	query, err := optimizedInsertBuilder(ctx, c.Table, c.Columns, updateCols, ColumnCreated, values)
+	query, err := optimizedInsertBuilder(ctx, c.Table, c.GetIDField(), c.Columns, updateCols, ColumnCreated, values)
 	if err == nil {
 		rows, _, err = c.DB.RunAsQueryTx(ctx, c.Table, tx, query.PlaceholderFormat(c.DB.features.PlaceholderFormat))
 	}

@@ -32,7 +32,7 @@ type SQLFeatures struct {
 	AcquireLock       func(lockName string) string
 	// DB specific query builder for RDBMS-side optimized upsert, returning the requested column from the query
 	// (the CRUD layer will request the create time column to detect if the record was new or not)
-	DBOptimizedUpsertBuilder func(ctx context.Context, table string, insertCols, updateCols []string, returnCol string, values map[string]driver.Value) (sq.InsertBuilder, error)
+	DBOptimizedUpsertBuilder func(ctx context.Context, table string, idColumn string, insertCols, updateCols []string, returnCol string, values map[string]driver.Value) (sq.InsertBuilder, error)
 }
 
 func DefaultSQLProviderFeatures() SQLFeatures {

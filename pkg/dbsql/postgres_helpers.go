@@ -19,6 +19,7 @@ package dbsql
 import (
 	"context"
 	"database/sql/driver"
+	"fmt"
 	"strings"
 
 	sq "github.com/Masterminds/squirrel"
@@ -26,7 +27,7 @@ import (
 )
 
 // PostgreSQL helper to avoid implementing this lots of times in child packages
-func BuildPostgreSQLOptimizedUpsert(ctx context.Context, table string, insertCols, updateCols []string, returnCol string, values map[string]driver.Value) (insert sq.InsertBuilder, err error) {
+func BuildPostgreSQLOptimizedUpsert(ctx context.Context, table string, idColumn string, insertCols, updateCols []string, returnCol string, values map[string]driver.Value) (insert sq.InsertBuilder, err error) {
 	insertValues := make([]interface{}, 0, len(insertCols))
 	for _, c := range insertCols {
 		insertValues = append(insertValues, values[c])
@@ -41,6 +42,6 @@ func BuildPostgreSQLOptimizedUpsert(ctx context.Context, table string, insertCol
 	if err != nil || !ok {
 		return insert, i18n.NewError(ctx, i18n.MsgDBErrorBuildingStatement, err)
 	}
-	return insert.Suffix("ON CONFLICT DO UPDATE").SuffixExpr(sq.Expr(updateSQL, updateValues...)).Suffix("RETURNING " + returnCol), nil
+	return insert.Suffix(fmt.Sprintf("ON CONFLICT %s DO UPDATE", idColumn)).SuffixExpr(sq.Expr(updateSQL, updateValues...)).Suffix("RETURNING " + returnCol), nil
 
 }

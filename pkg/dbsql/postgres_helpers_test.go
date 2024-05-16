@@ -28,7 +28,7 @@ import (
 func TestBuildPostgreSQLOptimizedUpsert(t *testing.T) {
 
 	now := fftypes.Now()
-	q, err := BuildPostgreSQLOptimizedUpsert(context.Background(), "table1", []string{
+	q, err := BuildPostgreSQLOptimizedUpsert(context.Background(), "table1", "id", []string{
 		"created",
 		"updated",
 		"mutable_col",
@@ -46,7 +46,7 @@ func TestBuildPostgreSQLOptimizedUpsert(t *testing.T) {
 
 	queryStr, values, err := q.ToSql()
 	assert.NoError(t, err)
-	assert.Equal(t, "INSERT INTO table1 (created,updated,mutable_col,immutable_col) VALUES (?,?,?,?) ON CONFLICT DO UPDATE SET updated = ?, mutable_col = ? RETURNING created", queryStr)
+	assert.Equal(t, "INSERT INTO table1 (created,updated,mutable_col,immutable_col) VALUES (?,?,?,?) ON CONFLICT id DO UPDATE SET updated = ?, mutable_col = ? RETURNING created", queryStr)
 	assert.Equal(t, []interface{}{
 		now, now, "value1", "value2",
 		now, "value1",
@@ -56,7 +56,7 @@ func TestBuildPostgreSQLOptimizedUpsert(t *testing.T) {
 
 func TestBuildPostgreSQLOptimizedUpsertFail(t *testing.T) {
 
-	_, err := BuildPostgreSQLOptimizedUpsert(context.Background(), "", []string{}, []string{}, "", map[string]driver.Value{})
+	_, err := BuildPostgreSQLOptimizedUpsert(context.Background(), "", "", []string{}, []string{}, "", map[string]driver.Value{})
 	assert.Regexp(t, "FF00247", err)
 
 }
