@@ -460,11 +460,11 @@ func (c *CrudBase[T]) dbOptimizedUpsert(ctx context.Context, tx *TXWrapper, inst
 			updateCols = append(updateCols, col)
 		}
 	}
+	var rows *sql.Rows
 	query, err := optimizedInsertBuilder(ctx, c.Table, c.Columns, updateCols, ColumnCreated, values)
-	if err != nil {
-		return false, err
+	if err == nil {
+		rows, _, err = c.DB.RunAsQueryTx(ctx, c.Table, tx, query.PlaceholderFormat(c.DB.features.PlaceholderFormat))
 	}
-	rows, _, err := c.DB.RunAsQueryTx(ctx, c.Table, tx, query.PlaceholderFormat(c.DB.features.PlaceholderFormat))
 	if err != nil {
 		return false, err
 	}
@@ -474,7 +474,7 @@ func (c *CrudBase[T]) dbOptimizedUpsert(ctx context.Context, tx *TXWrapper, inst
 		if err = rows.Scan(&createTime); err != nil {
 			return false, i18n.NewError(ctx, i18n.MsgDBReadInsertTSFailed, err)
 		}
-		created = createTime.Equal(now)
+		created = !createTime.Time().Before(*now.Time())
 	}
 	return created, nil
 

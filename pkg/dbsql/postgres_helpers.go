@@ -27,11 +27,11 @@ import (
 
 // PostgreSQL helper to avoid implementing this lots of times in child packages
 func BuildPostgreSQLOptimizedUpsert(ctx context.Context, table string, insertCols, updateCols []string, returnCol string, values map[string]driver.Value) (insert sq.InsertBuilder, err error) {
-	insertValues := make([]driver.Value, 0, len(insertCols))
+	insertValues := make([]interface{}, 0, len(insertCols))
 	for _, c := range insertCols {
 		insertValues = append(insertValues, values[c])
 	}
-	insert = sq.Insert(table).Columns(insertCols...).Values(insertValues)
+	insert = sq.Insert(table).Columns(insertCols...).Values(insertValues...)
 	update := sq.Update("REMOVED_BEFORE_RUNNING" /* cheat to avoid table name */)
 	for _, c := range updateCols {
 		update = update.Set(c, values[c])

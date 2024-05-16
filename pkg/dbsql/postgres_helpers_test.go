@@ -46,11 +46,10 @@ func TestBuildPostgreSQLOptimizedUpsert(t *testing.T) {
 
 	queryStr, values, err := q.ToSql()
 	assert.NoError(t, err)
-	assert.Equal(t, "INSERT INTO table1 (created,updated,mutable_col,immutable_col) VALUES (?) ON CONFLICT DO UPDATE SET updated = ?, mutable_col = ? RETURNING created", queryStr)
+	assert.Equal(t, "INSERT INTO table1 (created,updated,mutable_col,immutable_col) VALUES (?,?,?,?) ON CONFLICT DO UPDATE SET updated = ?, mutable_col = ? RETURNING created", queryStr)
 	assert.Equal(t, []interface{}{
-		[]driver.Value{now, now, "value1", "value2"},
-		driver.Value(now),
-		driver.Value("value1"),
+		now, now, "value1", "value2",
+		now, "value1",
 	}, values)
 
 }
@@ -58,6 +57,6 @@ func TestBuildPostgreSQLOptimizedUpsert(t *testing.T) {
 func TestBuildPostgreSQLOptimizedUpsertFail(t *testing.T) {
 
 	_, err := BuildPostgreSQLOptimizedUpsert(context.Background(), "", []string{}, []string{}, "", map[string]driver.Value{})
-	assert.Regexp(t, "FF00248", err)
+	assert.Regexp(t, "FF00247", err)
 
 }
