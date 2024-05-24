@@ -72,7 +72,7 @@ func (as *activeStream[CT, DT]) runEventLoop() {
 	checkpointSequenceID, err := as.loadCheckpoint()
 	if err == nil {
 		// Run the inner source read loop until it exits
-		err = as.retry.Do(as.ctx, "source run loop", func(attempt int) (retry bool, err error) {
+		err = as.retry.Do(as.ctx, "source run loop", func(_ int) (retry bool, err error) {
 			if err = as.runSourceLoop(checkpointSequenceID); err != nil {
 				log.L(as.ctx).Errorf("source loop error: %s", err)
 				return true, err
@@ -88,7 +88,7 @@ func (as *activeStream[CT, DT]) runEventLoop() {
 }
 
 func (as *activeStream[CT, DT]) loadCheckpoint() (sequencedID string, err error) {
-	err = as.retry.Do(as.ctx, "load checkpoint", func(attempt int) (retry bool, err error) {
+	err = as.retry.Do(as.ctx, "load checkpoint", func(_ int) (retry bool, err error) {
 		log.L(as.ctx).Debugf("Loading checkpoint: %s", as.spec.GetID())
 		cp, err := as.persistence.Checkpoints().GetByID(as.ctx, as.spec.GetID())
 		if err != nil {
@@ -238,7 +238,7 @@ func (as *activeStream[CT, DT]) checkpointRoutine() {
 		if checkpointSequenceID == "" {
 			return // We're done
 		}
-		err := as.retry.Do(as.ctx, "checkpoint", func(attempt int) (retry bool, err error) {
+		err := as.retry.Do(as.ctx, "checkpoint", func(_ int) (retry bool, err error) {
 			log.L(as.bgCtx).Debugf("Writing checkpoint id=%s sequenceID=%s", as.spec.GetID(), checkpointSequenceID)
 			_, err = as.esm.persistence.Checkpoints().Upsert(as.ctx, &EventStreamCheckpoint{
 				ID:         ptrTo(as.spec.GetID()), // the ID of the stream is the ID of the checkpoint

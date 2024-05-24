@@ -160,7 +160,7 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 
 	client.SetTimeout(time.Duration(ffrestyConfig.HTTPRequestTimeout))
 
-	client.OnBeforeRequest(func(c *resty.Client, req *resty.Request) error {
+	client.OnBeforeRequest(func(_ *resty.Client, req *resty.Request) error {
 		rCtx := req.Context()
 		rc := rCtx.Value(retryCtxKey{})
 		if rc == nil {

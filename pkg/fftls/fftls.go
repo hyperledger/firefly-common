@@ -48,7 +48,7 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12,
-		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+		VerifyPeerCertificate: func(_ [][]byte, verifiedChains [][]*x509.Certificate) error {
 			if len(verifiedChains) > 0 && len(verifiedChains[0]) > 0 {
 				cert := verifiedChains[0][0]
 				log.L(ctx).Debugf("Client certificate provided Subject=%s Issuer=%s Expiry=%s", cert.Subject, cert.Issuer, cert.NotAfter)
@@ -186,7 +186,7 @@ func buildDNValidator(ctx context.Context, requiredDNAttributes map[string]inter
 		}
 		validators[attr] = validator
 	}
-	return func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+	return func(_ [][]byte, verifiedChains [][]*x509.Certificate) error {
 		if len(verifiedChains) == 0 {
 			log.L(ctx).Errorf("Failed TLS DN check: Nil cert chain")
 			return i18n.NewError(ctx, i18n.MsgInvalidTLSDnChain)

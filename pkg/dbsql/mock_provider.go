@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -41,11 +41,12 @@ type MockProvider struct {
 }
 
 type MockProviderConfig struct {
-	FakePSQLInsert          bool
-	OpenError               error
-	GetMigrationDriverError error
-	IndividualSort          bool
-	MultiRowInsert          bool
+	FakePSQLInsert             bool
+	OpenError                  error
+	GetMigrationDriverError    error
+	IndividualSort             bool
+	MultiRowInsert             bool
+	FakePSQLUpsertOptimization bool
 }
 
 func NewMockProvider() *MockProvider {
@@ -87,6 +88,9 @@ func (mp *MockProvider) Features() SQLFeatures {
 		return fmt.Sprintf(`<acquire lock %s>`, lockName)
 	}
 	features.MultiRowInsert = mp.MultiRowInsert
+	if mp.FakePSQLUpsertOptimization {
+		features.DBOptimizedUpsertBuilder = BuildPostgreSQLOptimizedUpsert
+	}
 	return features
 }
 
