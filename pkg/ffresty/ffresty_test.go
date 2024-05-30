@@ -88,6 +88,51 @@ func TestRequestOK(t *testing.T) {
 	assert.Equal(t, 1, httpmock.GetTotalCallCount())
 }
 
+func TestRequestWithRateLimiter(t *testing.T) {
+	rps := 5
+	expectedNumberOfRequest := 20 // should take longer than 3 seconds less than 4 seconds
+
+	customClient := &http.Client{}
+
+	resetConf()
+	utConf.Set(HTTPConfigURL, "http://localhost:12345")
+	utConf.Set(HTTPConfigHeaders, map[string]interface{}{
+		"someheader": "headervalue",
+	})
+	utConf.Set(HTTPConfigAuthUsername, "user")
+	utConf.Set(HTTPConfigAuthPassword, "pass")
+	utConf.Set(HTTPRPS, rps)
+	utConf.Set(HTTPConfigRetryEnabled, true)
+	utConf.Set(HTTPCustomClient, customClient)
+
+	c, err := New(context.Background(), utConf)
+	assert.Nil(t, err)
+	httpmock.ActivateNonDefault(customClient)
+	defer httpmock.DeactivateAndReset()
+
+	httpmock.RegisterResponder("GET", "http://localhost:12345/test",
+		func(req *http.Request) (*http.Response, error) {
+			assert.Equal(t, "headervalue", req.Header.Get("someheader"))
+			assert.Equal(t, "Basic dXNlcjpwYXNz", req.Header.Get("Authorization"))
+			return httpmock.NewStringResponder(200, `{"some": "data"}`)(req)
+		})
+
+	startTime := time.Now()
+	for i := 0; i < expectedNumberOfRequest; i++ {
+		resp, err := c.R().Get("/test")
+		assert.NoError(t, err)
+		assert.Equal(t, 200, resp.StatusCode())
+		assert.Equal(t, `{"some": "data"}`, resp.String())
+	}
+
+	duration := time.Since(startTime)
+
+	assert.GreaterOrEqual(t, duration, 3*time.Second)
+	assert.LessOrEqual(t, duration, 4*time.Second)
+
+	assert.Equal(t, expectedNumberOfRequest, httpmock.GetTotalCallCount())
+}
+
 func TestRequestRetry(t *testing.T) {
 
 	ctx := context.Background()

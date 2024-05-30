@@ -35,6 +35,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/time/rate"
 )
 
 type retryCtxKey struct{}
@@ -61,6 +62,7 @@ type HTTPConfig struct {
 	HTTPExpectContinueTimeout     fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"expectContinueTimeout,omitempty"`
 	AuthUsername                  string                                    `ffstruct:"RESTConfig" json:"authUsername,omitempty"`
 	AuthPassword                  string                                    `ffstruct:"RESTConfig" json:"authPassword,omitempty"`
+	RequestPerSecond              int                                       `ffstruct:"RESTConfig" json:"rps,omitempty"`
 	Retry                         bool                                      `ffstruct:"RESTConfig" json:"retry,omitempty"`
 	RetryCount                    int                                       `ffstruct:"RESTConfig" json:"retryCount,omitempty"`
 	RetryInitialDelay             fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"retryInitialDelay,omitempty"`
@@ -148,6 +150,12 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 		client = resty.NewWithClient(httpClient)
 	}
 
+	var rpsLimiter *rate.Limiter
+	if ffrestyConfig.RequestPerSecond != 0 { // NOTE: 0 is treated as RPS control disabled
+		rps := ffrestyConfig.RequestPerSecond
+		rpsLimiter = rate.NewLimiter(rate.Limit(rps), rps)
+	}
+
 	url := strings.TrimSuffix(ffrestyConfig.URL, "/")
 	if url != "" {
 		client.SetBaseURL(url)
@@ -160,7 +168,14 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 
 	client.SetTimeout(time.Duration(ffrestyConfig.HTTPRequestTimeout))
 
-	client.OnBeforeRequest(func(c *resty.Client, req *resty.Request) error {
+	client.OnBeforeRequest(func(_ *resty.Client, req *resty.Request) error {
+		if rpsLimiter != nil {
+			// Wait for permission to proceed with the request
+			err := rpsLimiter.Wait(context.Background())
+			if err != nil {
+				return err
+			}
+		}
 		rCtx := req.Context()
 		rc := rCtx.Value(retryCtxKey{})
 		if rc == nil {

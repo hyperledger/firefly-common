@@ -67,6 +67,8 @@ const (
 	HTTPIdleTimeout = "idleTimeout"
 	// HTTPMaxIdleConns the max number of idle connections to hold pooled
 	HTTPMaxIdleConns = "maxIdleConns"
+	// HTTPRPS the max number of request to submit per second, default value is 0, which turns off the RPS control
+	HTTPRPS = "rps"
 	// HTTPMaxConnsPerHost the max number of concurrent connections
 	HTTPMaxConnsPerHost = "maxConnsPerHost"
 	// HTTPConnectionTimeout the connection timeout for new connections
@@ -94,6 +96,7 @@ func InitConfig(conf config.Section) {
 	conf.AddKnownKey(HTTPConfigRetryMaxDelay, defaultRetryMaxWaitTime)
 	conf.AddKnownKey(HTTPConfigRetryErrorStatusCodeRegex)
 	conf.AddKnownKey(HTTPConfigRequestTimeout, defaultRequestTimeout)
+	conf.AddKnownKey(HTTPRPS)
 	conf.AddKnownKey(HTTPIdleTimeout, defaultHTTPIdleTimeout)
 	conf.AddKnownKey(HTTPMaxIdleConns, defaultHTTPMaxIdleConns)
 	conf.AddKnownKey(HTTPMaxConnsPerHost, defaultHTTPMaxConnsPerHost)
@@ -120,6 +123,7 @@ func GenerateConfig(ctx context.Context, conf config.Section) (*Config, error) {
 			RetryInitialDelay:             fftypes.FFDuration(conf.GetDuration(HTTPConfigRetryInitDelay)),
 			RetryMaximumDelay:             fftypes.FFDuration(conf.GetDuration(HTTPConfigRetryMaxDelay)),
 			RetryErrorStatusCodeRegex:     conf.GetString(HTTPConfigRetryErrorStatusCodeRegex),
+			RequestPerSecond:              conf.GetInt(HTTPRPS),
 			HTTPRequestTimeout:            fftypes.FFDuration(conf.GetDuration(HTTPConfigRequestTimeout)),
 			HTTPIdleConnTimeout:           fftypes.FFDuration(conf.GetDuration(HTTPIdleTimeout)),
 			HTTPMaxIdleConns:              conf.GetInt(HTTPMaxIdleConns),

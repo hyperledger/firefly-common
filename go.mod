@@ -30,6 +30,7 @@ require (
 	gitlab.com/hfuss/mux-prometheus v0.0.5
 	golang.org/x/crypto v0.18.0
 	golang.org/x/text v0.14.0
+	golang.org/x/time v0.5.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gotest.tools v2.2.0+incompatible
 )
