@@ -34,6 +34,8 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
+type QueryModifier = func(sq.SelectBuilder) (sq.SelectBuilder, error)
+
 type Database struct {
 	db             *sql.DB
 	provider       Provider
@@ -41,8 +43,6 @@ type Database struct {
 	connLimit      int
 	sequenceColumn string
 }
-
-type QueryModifier = func(sq.SelectBuilder) (sq.SelectBuilder, error)
 
 // PreCommitAccumulator is a structure that can accumulate state during
 // the transaction, then has a function that is called just before commit.
@@ -202,12 +202,17 @@ func (s *Database) QueryTx(ctx context.Context, table string, tx *TXWrapper, q s
 		// in the read operations (read after insert for example).
 		tx = GetTXFromContext(ctx)
 	}
+	return s.RunAsQueryTx(ctx, table, tx, q.PlaceholderFormat(s.features.PlaceholderFormat))
+}
+
+func (s *Database) RunAsQueryTx(ctx context.Context, table string, tx *TXWrapper, q sq.Sqlizer) (*sql.Rows, *TXWrapper, error) {
 
 	l := log.L(ctx)
-	sqlQuery, args, err := q.PlaceholderFormat(s.features.PlaceholderFormat).ToSql()
+	sqlQuery, args, err := q.ToSql()
 	if err != nil {
 		return nil, tx, i18n.WrapError(ctx, err, i18n.MsgDBQueryBuildFailed)
 	}
+
 	before := time.Now()
 	l.Tracef(`SQL-> query: %s (args: %+v)`, sqlQuery, args)
 	var rows *sql.Rows

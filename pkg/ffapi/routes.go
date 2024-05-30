@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -18,6 +18,7 @@ package ffapi
 
 import (
 	"context"
+	"io"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hyperledger/firefly-common/pkg/config"
@@ -61,12 +62,16 @@ type Route struct {
 	JSONOutputSchema func(ctx context.Context, schemaGen SchemaGenerator) (*openapi3.SchemaRef, error)
 	// JSONOutputValue is a function that returns a pointer to a structure to take JSON output
 	JSONOutputValue func() interface{}
-	// JSONOutputCodes is the success response code
+	// JSONOutputCodes is the success response codes that could be returned by the API. Error codes are explicitly not supported by the framework since they could be subject to change by the errors thrown or how errors are handled.
 	JSONOutputCodes []int
-	// JSONHandler is a function for handling JSON content type input. Input/Ouptut objects are returned by JSONInputValue/JSONOutputValue funcs
+	// JSONHandler is a function for handling JSON content type input. Input/Output objects are returned by JSONInputValue/JSONOutputValue funcs
 	JSONHandler func(r *APIRequest) (output interface{}, err error)
 	// FormUploadHandler takes a single file upload, and returns a JSON object
 	FormUploadHandler func(r *APIRequest) (output interface{}, err error)
+	// StreamHandler allows for custom request handling with explicit stream (io.ReadCloser) responses
+	StreamHandler func(r *APIRequest) (output io.ReadCloser, err error)
+	// CustomResponseRefs allows for specifying custom responses for a route
+	CustomResponseRefs map[string]*openapi3.ResponseRef
 	// Deprecated whether this route is deprecated
 	Deprecated bool
 	// Tag a category identifier for this route in the generated OpenAPI spec

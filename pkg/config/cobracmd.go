@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -27,7 +27,7 @@ func ShowConfigCommand(initConf func() error) *cobra.Command {
 		Use:     "showconfig",
 		Aliases: []string{"showconf"},
 		Short:   "List out the configuration options",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			if err := initConf(); err != nil {
 				return err
 			}

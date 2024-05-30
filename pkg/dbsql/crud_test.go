@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/Masterminds/squirrel"
@@ -377,10 +378,19 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	assert.Equal(t, Created, collection.events[0])
 	collection.events = nil
 
+	// Install an AfterLoad handler
+	afterLoadCalled := false
+	collection.AfterLoad = func(ctx context.Context, inst *TestCRUDable) error {
+		afterLoadCalled = true
+		return nil
+	}
+
 	// Check we get it back
 	c1copy, err := iCrud.GetByID(ctx, c1.ID.String())
 	assert.NoError(t, err)
 	checkEqualExceptTimes(t, *c1, *c1copy)
+	assert.True(t, afterLoadCalled)
+	collection.AfterLoad = nil
 
 	// Check we get it back by name
 	c1copy, err = iCrud.GetByName(ctx, *c1.Name)
@@ -411,6 +421,14 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 	}).GetByName(ctx, *c1.Name)
 	assert.NoError(t, err)
 	checkEqualExceptTimes(t, *c1, *c1copy)
+
+	// Check AfterLoad error behavior
+	collection.AfterLoad = func(ctx context.Context, inst *TestCRUDable) error {
+		return fmt.Errorf("pop")
+	}
+	_, _, err = iCrud.GetMany(ctx, CRUDableQueryFactory.NewFilter(ctx).And())
+	assert.EqualError(t, err, "pop")
+	collection.AfterLoad = nil
 
 	// Upsert the existing row optimized
 	c1copy.Field1 = ptrTo("hello again - 1")
@@ -756,6 +774,96 @@ func TestUpsertFailUpdate(t *testing.T) {
 	mock.ExpectExec("UPDATE.*").WillReturnError(fmt.Errorf("pop"))
 	_, err := tc.Upsert(context.Background(), &TestCRUDable{}, UpsertOptimizationSkip)
 	assert.Regexp(t, "FF00178", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUpsertPSQLOptimizedCreated(t *testing.T) {
+	after := (fftypes.FFTime)(fftypes.Now().Time().Add(1 * time.Hour))
+	mp := NewMockProvider()
+	mp.FakePSQLUpsertOptimization = true
+	db, mock := mp.UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectQuery("INSERT INTO crudables.*ON CONFLICT .* DO UPDATE SET.*RETURNING created").WillReturnRows(
+		sqlmock.NewRows([]string{"created"}).AddRow(after.String()),
+	)
+	mock.ExpectCommit()
+	created, err := tc.Upsert(context.Background(), &TestCRUDable{
+		ResourceBase: ResourceBase{
+			ID: fftypes.NewUUID(),
+		},
+	}, UpsertOptimizationDB)
+	assert.NoError(t, err)
+	assert.True(t, created)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUpsertPSQLOptimizedUpdated(t *testing.T) {
+	before := fftypes.Now()
+	mp := NewMockProvider()
+	mp.FakePSQLUpsertOptimization = true
+	db, mock := mp.UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectQuery("INSERT INTO crudables.*ON CONFLICT .* DO UPDATE SET.*RETURNING created").WillReturnRows(
+		sqlmock.NewRows([]string{"created"}).AddRow(before.String()),
+	)
+	mock.ExpectCommit()
+	created, err := tc.Upsert(context.Background(), &TestCRUDable{
+		ResourceBase: ResourceBase{
+			ID: fftypes.NewUUID(),
+		},
+	}, UpsertOptimizationDB)
+	assert.NoError(t, err)
+	assert.False(t, created)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUpsertPSQLOptimizedBadID(t *testing.T) {
+	mp := NewMockProvider()
+	mp.FakePSQLUpsertOptimization = true
+	db, mock := mp.UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectRollback()
+	_, err := tc.Upsert(context.Background(), &TestCRUDable{}, UpsertOptimizationDB)
+	assert.Regexp(t, "FF00138", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUpsertPSQLOptimizedQueryFail(t *testing.T) {
+	mp := NewMockProvider()
+	mp.FakePSQLUpsertOptimization = true
+	db, mock := mp.UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectQuery("INSERT INTO crudables.*ON CONFLICT .* DO UPDATE SET.*RETURNING created").WillReturnError(fmt.Errorf("pop"))
+	mock.ExpectRollback()
+	_, err := tc.Upsert(context.Background(), &TestCRUDable{
+		ResourceBase: ResourceBase{
+			ID: fftypes.NewUUID(),
+		},
+	}, UpsertOptimizationDB)
+	assert.Regexp(t, "FF00176.*pop", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUpsertPSQLOptimizedBadTimeReturn(t *testing.T) {
+	mp := NewMockProvider()
+	mp.FakePSQLUpsertOptimization = true
+	db, mock := mp.UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectQuery("INSERT INTO crudables.*ON CONFLICT .* DO UPDATE SET.*RETURNING created").WillReturnRows(
+		sqlmock.NewRows([]string{"created"}).AddRow("!!!this is not a time!!!"),
+	)
+	mock.ExpectRollback()
+	_, err := tc.Upsert(context.Background(), &TestCRUDable{
+		ResourceBase: ResourceBase{
+			ID: fftypes.NewUUID(),
+		},
+	}, UpsertOptimizationDB)
+	assert.Regexp(t, "FF00248.*FF00136", err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -1293,4 +1401,25 @@ func TestValidateNameSemanticsWithoutQueryFactory(t *testing.T) {
 	assert.PanicsWithValue(t, "QueryFactory must be set when name semantics are enabled", func() {
 		tc.Validate()
 	})
+}
+
+func TestCustomIDColumn(t *testing.T) {
+	db, _ := NewMockProvider().UTInit()
+	tc := &CrudBase[*TestCRUDable]{
+		DB:            &db.Database,
+		NewInstance:   func() *TestCRUDable { return &TestCRUDable{} },
+		NilValue:      func() *TestCRUDable { return nil },
+		IDField:       "f1",
+		Columns:       []string{"f1"},
+		TimesDisabled: true,
+		PatchDisabled: true,
+		GetFieldPtr: func(inst *TestCRUDable, col string) interface{} {
+			if col == "id" {
+				var t *string
+				return &t
+			}
+			return nil
+		},
+	}
+	tc.Validate()
 }

@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -189,7 +189,7 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 			}
 		}
 
-		var status = 400 // if fail parsing input
+		status := 400 // if fail parsing input
 		var output interface{}
 		if err == nil {
 			queryParams, pathParams, queryArrayParams = hs.getParams(req, route)
@@ -202,24 +202,29 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 
 		if err == nil {
 			r := &APIRequest{
-				Req:             req,
-				PP:              pathParams,
-				QP:              queryParams,
-				QAP:             queryArrayParams,
-				Filter:          filter,
-				Input:           jsonInput,
-				SuccessStatus:   http.StatusOK,
+				Req:            req,
+				PP:             pathParams,
+				QP:             queryParams,
+				QAP:            queryArrayParams,
+				Filter:         filter,
+				Input:          jsonInput,
+				SuccessStatus:  http.StatusOK,
+				AlwaysPaginate: hs.AlwaysPaginate,
+
+				// res.Header() returns a map which is a ref type so handler header edits are persisted
 				ResponseHeaders: res.Header(),
-				AlwaysPaginate:  hs.AlwaysPaginate,
 			}
 			if len(route.JSONOutputCodes) > 0 {
 				r.SuccessStatus = route.JSONOutputCodes[0]
 			}
-			if multipart != nil {
+			switch {
+			case multipart != nil:
 				r.FP = multipart.formParams
 				r.Part = multipart.part
 				output, err = route.FormUploadHandler(r)
-			} else {
+			case route.StreamHandler != nil:
+				output, err = route.StreamHandler(r)
+			default:
 				output, err = route.JSONHandler(r)
 			}
 			status = r.SuccessStatus // Can be updated by the route
@@ -259,7 +264,9 @@ func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWri
 		res.WriteHeader(204)
 	case reader != nil:
 		defer reader.Close()
-		res.Header().Add("Content-Type", "application/octet-stream")
+		if res.Header().Get("Content-Type") == "" {
+			res.Header().Add("Content-Type", "application/octet-stream")
+		}
 		res.WriteHeader(status)
 		_, marshalErr = io.Copy(res, reader)
 	default:
