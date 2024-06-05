@@ -101,7 +101,7 @@ func TestRequestWithRateLimiter(t *testing.T) {
 	})
 	utConf.Set(HTTPConfigAuthUsername, "user")
 	utConf.Set(HTTPConfigAuthPassword, "pass")
-	utConf.Set(HTTPRPS, rps)
+	utConf.Set(HTTPRateControlRPS, rps)
 	utConf.Set(HTTPConfigRetryEnabled, true)
 	utConf.Set(HTTPCustomClient, customClient)
 

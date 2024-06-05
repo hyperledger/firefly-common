@@ -84,7 +84,7 @@ var (
 	ConfigGlobalExpectContinueTimeout     = ffc("config.global.expectContinueTimeout", "See [ExpectContinueTimeout in the Go docs](https://pkg.go.dev/net/http#Transport)", TimeDurationType)
 	ConfigGlobalHeaders                   = ffc("config.global.headers", "Adds custom headers to HTTP requests", MapStringStringType)
 	ConfigGlobalIdleTimeout               = ffc("config.global.idleTimeout", "The max duration to hold a HTTP keepalive connection between calls", TimeDurationType)
-	ConfigGlobalRPS                       = ffc("config.global.rps", "The max number of requests to submit per second, this rate limiter is off by default with value 0", IntType)
+	ConfigGlobalRPS                       = ffc("config.global.rateControl.rps", "The max number of requests to submit per second, this rate limiter is off by default with value 0. Request over the limit will wait.", IntType)
 	ConfigGlobalMaxIdleConns              = ffc("config.global.maxIdleConns", "The max number of idle connections to hold pooled", IntType)
 	ConfigGlobalMaxConnsPerHost           = ffc("config.global.maxConnsPerHost", "The max number of connections, per unique hostname. Zero means no limit", IntType)
 	ConfigGlobalMethod                    = ffc("config.global.method", "The HTTP method to use when making requests to the Address Resolver", StringType)
