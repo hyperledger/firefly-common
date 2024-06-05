@@ -171,7 +171,7 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 	client.OnBeforeRequest(func(_ *resty.Client, req *resty.Request) error {
 		if rpsLimiter != nil {
 			// Wait for permission to proceed with the request
-			err := rpsLimiter.Wait(context.Background())
+			err := rpsLimiter.Wait(req.Context())
 			if err != nil {
 				return err
 			}
