@@ -51,6 +51,8 @@ type Config struct {
 	HTTPConfig
 }
 
+var rateLimiter *rate.Limiter
+
 // HTTPConfig is all the optional configuration separate to the URL you wish to invoke.
 // This is JSON serializable with docs, so you can embed it into API objects.
 type HTTPConfig struct {
@@ -62,7 +64,7 @@ type HTTPConfig struct {
 	HTTPExpectContinueTimeout     fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"expectContinueTimeout,omitempty"`
 	AuthUsername                  string                                    `ffstruct:"RESTConfig" json:"authUsername,omitempty"`
 	AuthPassword                  string                                    `ffstruct:"RESTConfig" json:"authPassword,omitempty"`
-	RequestPerSecond              int                                       `ffstruct:"RESTConfig" json:"rps,omitempty"`
+	RequestPerSecond              int                                       `ffstruct:"RESTConfig" json:"requestsPerSecond,omitempty"`
 	Retry                         bool                                      `ffstruct:"RESTConfig" json:"retry,omitempty"`
 	RetryCount                    int                                       `ffstruct:"RESTConfig" json:"retryCount,omitempty"`
 	RetryInitialDelay             fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"retryInitialDelay,omitempty"`
@@ -150,10 +152,8 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 		client = resty.NewWithClient(httpClient)
 	}
 
-	var rpsLimiter *rate.Limiter
 	if ffrestyConfig.RequestPerSecond != 0 { // NOTE: 0 is treated as RPS control disabled
-		rps := ffrestyConfig.RequestPerSecond
-		rpsLimiter = rate.NewLimiter(rate.Limit(rps), rps)
+		rateLimiter = rate.NewLimiter(rate.Limit(ffrestyConfig.RequestPerSecond), ffrestyConfig.RequestPerSecond)
 	}
 
 	url := strings.TrimSuffix(ffrestyConfig.URL, "/")
@@ -169,9 +169,9 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 	client.SetTimeout(time.Duration(ffrestyConfig.HTTPRequestTimeout))
 
 	client.OnBeforeRequest(func(_ *resty.Client, req *resty.Request) error {
-		if rpsLimiter != nil {
+		if rateLimiter != nil {
 			// Wait for permission to proceed with the request
-			err := rpsLimiter.Wait(req.Context())
+			err := rateLimiter.Wait(req.Context())
 			if err != nil {
 				return err
 			}

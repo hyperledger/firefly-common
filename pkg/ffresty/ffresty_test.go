@@ -43,6 +43,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/time/rate"
 )
 
 const configDir = "../../test/data/config"
@@ -101,7 +102,7 @@ func TestRequestWithRateLimiter(t *testing.T) {
 	})
 	utConf.Set(HTTPConfigAuthUsername, "user")
 	utConf.Set(HTTPConfigAuthPassword, "pass")
-	utConf.Set(HTTPRateControlRPS, rps)
+	utConf.Set(HTTPRequestsPerSecond, rps)
 	utConf.Set(HTTPConfigRetryEnabled, true)
 	utConf.Set(HTTPCustomClient, customClient)
 
@@ -116,21 +117,63 @@ func TestRequestWithRateLimiter(t *testing.T) {
 			assert.Equal(t, "Basic dXNlcjpwYXNz", req.Header.Get("Authorization"))
 			return httpmock.NewStringResponder(200, `{"some": "data"}`)(req)
 		})
-
+	requestChan := make(chan bool, expectedNumberOfRequest)
 	startTime := time.Now()
 	for i := 0; i < expectedNumberOfRequest; i++ {
-		resp, err := c.R().Get("/test")
-		assert.NoError(t, err)
-		assert.Equal(t, 200, resp.StatusCode())
-		assert.Equal(t, `{"some": "data"}`, resp.String())
+		go func() {
+			resp, err := c.R().Get("/test")
+			assert.NoError(t, err)
+			assert.Equal(t, 200, resp.StatusCode())
+			assert.Equal(t, `{"some": "data"}`, resp.String())
+			requestChan <- true
+		}()
+	}
+	count := 0
+	for {
+		<-requestChan
+		count++
+		if count == expectedNumberOfRequest {
+			break
+
+		}
 	}
 
 	duration := time.Since(startTime)
-
 	assert.GreaterOrEqual(t, duration, 3*time.Second)
 	assert.LessOrEqual(t, duration, 4*time.Second)
-
 	assert.Equal(t, expectedNumberOfRequest, httpmock.GetTotalCallCount())
+}
+
+func TestRateLimiterFailure(t *testing.T) {
+	customClient := &http.Client{}
+
+	resetConf()
+	utConf.Set(HTTPConfigURL, "http://localhost:12345")
+	utConf.Set(HTTPConfigHeaders, map[string]interface{}{
+		"someheader": "headervalue",
+	})
+	utConf.Set(HTTPConfigAuthUsername, "user")
+	utConf.Set(HTTPConfigAuthPassword, "pass")
+	utConf.Set(HTTPConfigRetryEnabled, true)
+	utConf.Set(HTTPCustomClient, customClient)
+
+	c, err := New(context.Background(), utConf)
+	assert.Nil(t, err)
+	httpmock.ActivateNonDefault(customClient)
+	defer httpmock.DeactivateAndReset()
+
+	httpmock.RegisterResponder("GET", "http://localhost:12345/test",
+		func(req *http.Request) (*http.Response, error) {
+			assert.Equal(t, "headervalue", req.Header.Get("someheader"))
+			assert.Equal(t, "Basic dXNlcjpwYXNz", req.Header.Get("Authorization"))
+			return httpmock.NewStringResponder(200, `{"some": "data"}`)(req)
+		})
+	rateLimiter = rate.NewLimiter(rate.Limit(0), 0) // fake limiter with error
+	resp, err := c.R().Get("/test")
+	assert.Error(t, err)
+	assert.Regexp(t, "exceeds", err)
+	assert.Nil(t, resp)
+	rateLimiter = nil // reset limiter
 }
 
 func TestRequestRetry(t *testing.T) {
