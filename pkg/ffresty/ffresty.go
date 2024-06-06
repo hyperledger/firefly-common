@@ -177,12 +177,9 @@ func New(ctx context.Context, staticConfig config.Section) (client *resty.Client
 }
 
 func getRateLimiter(rps, burst int) *rate.Limiter {
-	if rps != 0 || burst != 0 { // if neither was set, no need for a rate limiter
+	if rps != 0 { // if rps is not set no need for a rate limiter
 		rpsLimiter := rate.Limit(rps)
-		if rps == 0 { // only want to control max concurrent requests
-			rpsLimiter = rate.Inf
-		}
-		if rps != 0 && burst == 0 {
+		if burst == 0 {
 			burst = rps
 		}
 		return rate.NewLimiter(rpsLimiter, burst)
