@@ -41,6 +41,8 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
 	"github.com/hyperledger/firefly-common/pkg/fftls"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/hyperledger/firefly-common/pkg/metric"
+
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/time/rate"
@@ -599,4 +601,107 @@ func TestMTLSClientWithServer(t *testing.T) {
 		assert.Equal(t, "world", resBody["hello"])
 	}
 	cancelCtx()
+}
+
+func TestEnableClientMetricsError(t *testing.T) {
+	ctx := context.Background()
+	mr := metric.NewPrometheusMetricsRegistry("testerr")
+	//claim the "resty subsystem before resty can :/"
+	_, _ = mr.NewMetricsManagerForSubsystem(ctx, "resty")
+	err := EnableClientMetrics(ctx, mr)
+	assert.Error(t, err)
+}
+
+func TestEnableClientMetrics(t *testing.T) {
+
+	ctx := context.Background()
+	mr := metric.NewPrometheusMetricsRegistry("test")
+
+    err := EnableClientMetrics(ctx, mr)
+	assert.NoError(t, err)
+
+}
+
+
+
+func TestEnableClientMetricsIdempotent(t *testing.T) {
+	ctx := context.Background()
+	mr := metric.NewPrometheusMetricsRegistry("test")
+    _ = EnableClientMetrics(ctx, mr)
+	err := EnableClientMetrics(ctx, mr)
+	assert.NoError(t, err)
+}
+
+func TestHooks(t *testing.T) {
+
+	ctx := context.Background()
+	mr := metric.NewPrometheusMetricsRegistry("test")
+
+    err := EnableClientMetrics(ctx, mr)
+	assert.NoError(t, err)
+
+	onErrorCount := 0
+	onSuccessCount := 0
+
+	customOnError := func(req *resty.Request, err error){
+		onErrorCount++
+	}
+
+	customOnSuccess := func(c *resty.Client, resp *resty.Response){
+		onSuccessCount++
+	}
+
+	RegisterGlobalOnError(customOnError)
+	RegisterGlobalOnSuccess(customOnSuccess)
+
+	resetConf()
+	utConf.Set(HTTPConfigURL, "http://localhost:12345")
+	utConf.Set(HTTPConfigRetryEnabled, false)
+
+	c, err := New(ctx, utConf)
+	assert.Nil(t, err)
+	httpmock.ActivateNonDefault(c.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	resText := strings.Builder{}
+	for i := 0; i < 512; i++ {
+		resText.WriteByte(byte('a' + (i % 26)))
+	}
+	httpmock.RegisterResponder("GET", "http://localhost:12345/testerr",
+		httpmock.NewErrorResponder(fmt.Errorf("pop")))
+
+	httpmock.RegisterResponder("GET", "http://localhost:12345/testerrhttp",
+		func(req *http.Request) (*http.Response, error) {
+			return httpmock.NewStringResponse(502, `{"Status": "Service Not Available"}`), fmt.Errorf("Service Not Available")
+		})
+
+	httpmock.RegisterResponder("GET", "http://localhost:12345/testok",
+		func(req *http.Request) (*http.Response, error) {
+			return httpmock.NewStringResponder(200, `{"some": "data"}`)(req)
+		})
+
+	resp, err := c.R().Get("/testerr")
+	err = WrapRestErr(ctx, resp, err, i18n.MsgConfigFailed)
+	assert.Error(t, err)
+
+	assert.Equal(t, onErrorCount, 1)
+	assert.Equal(t, onSuccessCount, 0)
+
+	resp, err = c.R().Get("/testerrhttp")
+	err = WrapRestErr(ctx, resp, err, i18n.MsgConfigFailed)
+	assert.Error(t, err)
+
+	assert.Equal(t, onErrorCount, 2)
+	assert.Equal(t, onSuccessCount, 0)
+
+	resp, err = c.R().Get("/testok")
+	assert.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode())
+	assert.Equal(t, `{"some": "data"}`, resp.String())
+
+	assert.Equal(t, 3, httpmock.GetTotalCallCount())
+
+	assert.Equal(t, onErrorCount, 2)
+	assert.Equal(t, onSuccessCount, 1)
+
 }
