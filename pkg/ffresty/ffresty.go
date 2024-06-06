@@ -24,6 +24,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -34,6 +35,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
+	"github.com/hyperledger/firefly-common/pkg/metric"
 	"github.com/sirupsen/logrus"
 )
 
@@ -49,6 +51,12 @@ type Config struct {
 	URL string `json:"httpURL,omitempty"`
 	HTTPConfig
 }
+
+var (
+	metricsManager metric.MetricsManager
+	onErrorHooks   []resty.ErrorHook
+	onSuccessHooks []resty.SuccessHook
+)
 
 // HTTPConfig is all the optional configuration separate to the URL you wish to invoke.
 // This is JSON serializable with docs, so you can embed it into API objects.
@@ -77,6 +85,48 @@ type HTTPConfig struct {
 	OnBeforeRequest               func(req *resty.Request) error            `json:"-"` // called before each request, even retry
 }
 
+func EnableClientMetrics(ctx context.Context, metricsRegistry metric.MetricsRegistry) error {
+	// create a metrics manager (if not already set)
+	if metricsManager == nil {
+		mm, err := metricsRegistry.NewMetricsManagerForSubsystem(ctx, "resty")
+		metricsManager = mm
+		if err != nil {
+			return err
+		}
+		metricsManager.NewCounterMetricWithLabels(ctx, "http_response", "HTTP response", []string{"status", "error", "host", "method"}, false)
+		metricsManager.NewCounterMetricWithLabels(ctx, "network_error", "Network error", []string{"host", "method"}, false)
+	}
+
+	// create hooks
+	onErrorMetricsHook := func(req *resty.Request, _ error) {
+		method := req.Method
+		u, _ := url.Parse(req.URL)
+		host := u.Host
+		// whilst there it is a possibility to get an response returned in the error here (and resty doc for OnError shows this) it seems to be a special case and the statuscode in such cases was not set.
+		// therefore we log all cases as network_error we may in future find reason to extract more detail from the error
+		metricsManager.IncCounterMetricWithLabels(ctx, "network_error", map[string]string{"host": host, "method": method}, nil)
+	}
+	RegisterGlobalOnError(onErrorMetricsHook)
+
+	onSuccessMetricsHook := func(_ *resty.Client, resp *resty.Response) {
+		method := resp.Request.Method
+		u, _ := url.Parse(resp.Request.URL)
+		host := u.Host
+		code := resp.RawResponse.StatusCode
+		metricsManager.IncCounterMetricWithLabels(ctx, "http_response", map[string]string{"status": fmt.Sprintf("%d", code), "error": "false", "host": host, "method": method}, nil)
+	}
+	RegisterGlobalOnSuccess(onSuccessMetricsHook)
+	return nil
+}
+
+func RegisterGlobalOnError(onError func(req *resty.Request, err error)) {
+	onErrorHooks = append(onErrorHooks, onError)
+}
+
+func RegisterGlobalOnSuccess(onSuccess func(c *resty.Client, resp *resty.Response)) {
+	onSuccessHooks = append(onSuccessHooks, onSuccess)
+}
+
 // OnAfterResponse when using SetDoNotParseResponse(true) for streaming binary replies,
 // the caller should invoke ffresty.OnAfterResponse on the response manually.
 // The middleware is disabled on this path :-(
@@ -94,6 +144,18 @@ func OnAfterResponse(c *resty.Client, resp *resty.Response) {
 		level = logrus.ErrorLevel
 	}
 	log.L(rCtx).Logf(level, "<== %s %s [%d] (%.2fms)", resp.Request.Method, resp.Request.URL, status, elapsed)
+}
+
+func OnError(req *resty.Request, err error) {
+	for _, hook := range onErrorHooks {
+		hook(req, err)
+	}
+}
+
+func OnSuccess(c *resty.Client, resp *resty.Response) {
+	for _, hook := range onSuccessHooks {
+		hook(c, resp)
+	}
 }
 
 // New creates a new Resty client, using static configuration (from the config file)
@@ -204,8 +266,10 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 	})
 
 	// Note that callers using SetNotParseResponse will need to invoke this themselves
-
 	client.OnAfterResponse(func(c *resty.Client, r *resty.Response) error { OnAfterResponse(c, r); return nil })
+
+	client.OnError(func(req *resty.Request, e error) { OnError(req, e) })
+	client.OnSuccess(func(c *resty.Client, r *resty.Response) { OnSuccess(c, r) })
 
 	for k, v := range ffrestyConfig.HTTPHeaders {
 		if vs, ok := v.(string); ok {
