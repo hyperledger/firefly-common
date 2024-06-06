@@ -42,10 +42,10 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftls"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/metric"
+	"golang.org/x/time/rate"
 
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/time/rate"
 )
 
 const configDir = "../../test/data/config"
@@ -104,7 +104,7 @@ func TestRequestWithRateLimiter(t *testing.T) {
 	})
 	utConf.Set(HTTPConfigAuthUsername, "user")
 	utConf.Set(HTTPConfigAuthPassword, "pass")
-	utConf.Set(HTTPRequestsPerSecond, rps)
+	utConf.Set(HTTPThrottleRequestsPerSecond, rps)
 	utConf.Set(HTTPConfigRetryEnabled, true)
 	utConf.Set(HTTPCustomClient, customClient)
 
@@ -146,7 +146,9 @@ func TestRequestWithRateLimiter(t *testing.T) {
 	assert.Equal(t, expectedNumberOfRequest, httpmock.GetTotalCallCount())
 }
 
-func TestRateLimiterFailure(t *testing.T) {
+func TestRequestWithRateLimiterHighBurst(t *testing.T) {
+	expectedNumberOfRequest := 20 // should take longer than 3 seconds less than 4 seconds
+
 	customClient := &http.Client{}
 
 	resetConf()
@@ -156,6 +158,8 @@ func TestRateLimiterFailure(t *testing.T) {
 	})
 	utConf.Set(HTTPConfigAuthUsername, "user")
 	utConf.Set(HTTPConfigAuthPassword, "pass")
+	utConf.Set(HTTPThrottleRequestsPerSecond, 0)
+	utConf.Set(HTTPThrottleBurst, expectedNumberOfRequest)
 	utConf.Set(HTTPConfigRetryEnabled, true)
 	utConf.Set(HTTPCustomClient, customClient)
 
@@ -170,7 +174,58 @@ func TestRateLimiterFailure(t *testing.T) {
 			assert.Equal(t, "Basic dXNlcjpwYXNz", req.Header.Get("Authorization"))
 			return httpmock.NewStringResponder(200, `{"some": "data"}`)(req)
 		})
-	rateLimiter = rate.NewLimiter(rate.Limit(0), 0) // fake limiter with error
+	requestChan := make(chan bool, expectedNumberOfRequest)
+	startTime := time.Now()
+	for i := 0; i < expectedNumberOfRequest; i++ {
+		go func() {
+			resp, err := c.R().Get("/test")
+			assert.NoError(t, err)
+			assert.Equal(t, 200, resp.StatusCode())
+			assert.Equal(t, `{"some": "data"}`, resp.String())
+			requestChan <- true
+		}()
+	}
+	count := 0
+	for {
+		<-requestChan
+		count++
+		if count == expectedNumberOfRequest {
+			break
+
+		}
+	}
+
+	duration := time.Since(startTime)
+	assert.Less(t, duration, 1*time.Second)
+	assert.Equal(t, expectedNumberOfRequest, httpmock.GetTotalCallCount())
+}
+
+func TestRateLimiterFailure(t *testing.T) {
+	customClient := &http.Client{}
+
+	resetConf()
+	utConf.Set(HTTPConfigURL, "http://localhost:12345")
+	utConf.Set(HTTPConfigHeaders, map[string]interface{}{
+		"someheader": "headervalue",
+	})
+	utConf.Set(HTTPConfigAuthUsername, "user")
+	utConf.Set(HTTPConfigAuthPassword, "pass")
+	utConf.Set(HTTPConfigRetryEnabled, true)
+
+	utConf.Set(HTTPCustomClient, customClient)
+
+	c, err := New(context.Background(), utConf)
+	assert.Nil(t, err)
+	httpmock.ActivateNonDefault(customClient)
+	defer httpmock.DeactivateAndReset()
+
+	httpmock.RegisterResponder("GET", "http://localhost:12345/test",
+		func(req *http.Request) (*http.Response, error) {
+			assert.Equal(t, "headervalue", req.Header.Get("someheader"))
+			assert.Equal(t, "Basic dXNlcjpwYXNz", req.Header.Get("Authorization"))
+			return httpmock.NewStringResponder(200, `{"some": "data"}`)(req)
+		})
+	rateLimiter = rate.NewLimiter(rate.Limit(1), 0) // artificially create an broken rate limiter, this is not possible with our config default
 	resp, err := c.R().Get("/test")
 	assert.Error(t, err)
 	assert.Regexp(t, "exceeds", err)
@@ -617,17 +672,15 @@ func TestEnableClientMetrics(t *testing.T) {
 	ctx := context.Background()
 	mr := metric.NewPrometheusMetricsRegistry("test")
 
-    err := EnableClientMetrics(ctx, mr)
+	err := EnableClientMetrics(ctx, mr)
 	assert.NoError(t, err)
 
 }
 
-
-
 func TestEnableClientMetricsIdempotent(t *testing.T) {
 	ctx := context.Background()
 	mr := metric.NewPrometheusMetricsRegistry("test")
-    _ = EnableClientMetrics(ctx, mr)
+	_ = EnableClientMetrics(ctx, mr)
 	err := EnableClientMetrics(ctx, mr)
 	assert.NoError(t, err)
 }
@@ -637,17 +690,17 @@ func TestHooks(t *testing.T) {
 	ctx := context.Background()
 	mr := metric.NewPrometheusMetricsRegistry("test")
 
-    err := EnableClientMetrics(ctx, mr)
+	err := EnableClientMetrics(ctx, mr)
 	assert.NoError(t, err)
 
 	onErrorCount := 0
 	onSuccessCount := 0
 
-	customOnError := func(req *resty.Request, err error){
+	customOnError := func(req *resty.Request, err error) {
 		onErrorCount++
 	}
 
-	customOnSuccess := func(c *resty.Client, resp *resty.Response){
+	customOnSuccess := func(c *resty.Client, resp *resty.Response) {
 		onSuccessCount++
 	}
 

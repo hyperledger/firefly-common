@@ -71,7 +71,8 @@ type HTTPConfig struct {
 	HTTPExpectContinueTimeout     fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"expectContinueTimeout,omitempty"`
 	AuthUsername                  string                                    `ffstruct:"RESTConfig" json:"authUsername,omitempty"`
 	AuthPassword                  string                                    `ffstruct:"RESTConfig" json:"authPassword,omitempty"`
-	RequestPerSecond              int                                       `ffstruct:"RESTConfig" json:"requestsPerSecond,omitempty"`
+	ThrottleRequestsPerSecond     int                                       `ffstruct:"RESTConfig" json:"requestsPerSecond,omitempty"`
+	ThrottleBurst                 int                                       `ffstruct:"RESTConfig" json:"burst,omitempty"`
 	Retry                         bool                                      `ffstruct:"RESTConfig" json:"retry,omitempty"`
 	RetryCount                    int                                       `ffstruct:"RESTConfig" json:"retryCount,omitempty"`
 	RetryInitialDelay             fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"retryInitialDelay,omitempty"`
@@ -175,6 +176,20 @@ func New(ctx context.Context, staticConfig config.Section) (client *resty.Client
 	return NewWithConfig(ctx, *ffrestyConfig), nil
 }
 
+func getRateLimiter(rps, burst int) *rate.Limiter {
+	if rps != 0 || burst != 0 { // if neither was set, no need for a rate limiter
+		rpsLimiter := rate.Limit(rps)
+		if rps == 0 { // only want to control max concurrent requests
+			rpsLimiter = rate.Inf
+		}
+		if rps != 0 && burst == 0 {
+			burst = rps
+		}
+		return rate.NewLimiter(rpsLimiter, burst)
+	}
+	return nil
+}
+
 // New creates a new Resty client, using static configuration (from the config file)
 // from a given section in the static configuration
 //
@@ -213,9 +228,7 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 		client = resty.NewWithClient(httpClient)
 	}
 
-	if ffrestyConfig.RequestPerSecond != 0 { // NOTE: 0 is treated as RPS control disabled
-		rateLimiter = rate.NewLimiter(rate.Limit(ffrestyConfig.RequestPerSecond), ffrestyConfig.RequestPerSecond)
-	}
+	rateLimiter = getRateLimiter(ffrestyConfig.ThrottleRequestsPerSecond, ffrestyConfig.ThrottleBurst)
 
 	url := strings.TrimSuffix(ffrestyConfig.URL, "/")
 	if url != "" {
