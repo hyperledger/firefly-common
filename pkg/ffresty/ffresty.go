@@ -94,7 +94,7 @@ func EnableClientMetrics(ctx context.Context, metricsRegistry metric.MetricsRegi
 			return err
 		}
 		metricsManager.NewCounterMetricWithLabels(ctx, "http_response", "HTTP response", []string{"status", "error", "host", "method"}, false)
-		metricsManager.NewCounterMetricWithLabels(ctx, "network_error", "Network error", []string{"host", "method"}, false)	
+		metricsManager.NewCounterMetricWithLabels(ctx, "network_error", "Network error", []string{"host", "method"}, false)
 	}
 
 	// create hooks
