@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -67,6 +67,14 @@ const (
 	HTTPIdleTimeout = "idleTimeout"
 	// HTTPMaxIdleConns the max number of idle connections to hold pooled
 	HTTPMaxIdleConns = "maxIdleConns"
+	// HTTPThrottleRequestsPerSecond The average rate at which requests are allowed to pass through over time. Default to RPS
+	// requests over the limit will be blocked using a buffered channel
+	// the blocked time period is not counted in request timeout
+	HTTPThrottleRequestsPerSecond = "throttle.requestsPerSecond"
+
+	// HTTPThrottleBurst The maximum number of requests that can be made in a short period of time before the RPS throttling kicks in.
+	HTTPThrottleBurst = "throttle.burst"
+
 	// HTTPMaxConnsPerHost the max number of concurrent connections
 	HTTPMaxConnsPerHost = "maxConnsPerHost"
 	// HTTPConnectionTimeout the connection timeout for new connections
@@ -94,6 +102,8 @@ func InitConfig(conf config.Section) {
 	conf.AddKnownKey(HTTPConfigRetryMaxDelay, defaultRetryMaxWaitTime)
 	conf.AddKnownKey(HTTPConfigRetryErrorStatusCodeRegex)
 	conf.AddKnownKey(HTTPConfigRequestTimeout, defaultRequestTimeout)
+	conf.AddKnownKey(HTTPThrottleRequestsPerSecond)
+	conf.AddKnownKey(HTTPThrottleBurst)
 	conf.AddKnownKey(HTTPIdleTimeout, defaultHTTPIdleTimeout)
 	conf.AddKnownKey(HTTPMaxIdleConns, defaultHTTPMaxIdleConns)
 	conf.AddKnownKey(HTTPMaxConnsPerHost, defaultHTTPMaxConnsPerHost)
@@ -120,6 +130,8 @@ func GenerateConfig(ctx context.Context, conf config.Section) (*Config, error) {
 			RetryInitialDelay:             fftypes.FFDuration(conf.GetDuration(HTTPConfigRetryInitDelay)),
 			RetryMaximumDelay:             fftypes.FFDuration(conf.GetDuration(HTTPConfigRetryMaxDelay)),
 			RetryErrorStatusCodeRegex:     conf.GetString(HTTPConfigRetryErrorStatusCodeRegex),
+			ThrottleRequestsPerSecond:     conf.GetInt(HTTPThrottleRequestsPerSecond),
+			ThrottleBurst:                 conf.GetInt(HTTPThrottleBurst),
 			HTTPRequestTimeout:            fftypes.FFDuration(conf.GetDuration(HTTPConfigRequestTimeout)),
 			HTTPIdleConnTimeout:           fftypes.FFDuration(conf.GetDuration(HTTPIdleTimeout)),
 			HTTPMaxIdleConns:              conf.GetInt(HTTPMaxIdleConns),

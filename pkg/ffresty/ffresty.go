@@ -37,6 +37,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/log"
 	"github.com/hyperledger/firefly-common/pkg/metric"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/time/rate"
 )
 
 type retryCtxKey struct{}
@@ -53,6 +54,7 @@ type Config struct {
 }
 
 var (
+	rateLimiter    *rate.Limiter
 	metricsManager metric.MetricsManager
 	onErrorHooks   []resty.ErrorHook
 	onSuccessHooks []resty.SuccessHook
@@ -69,6 +71,8 @@ type HTTPConfig struct {
 	HTTPExpectContinueTimeout     fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"expectContinueTimeout,omitempty"`
 	AuthUsername                  string                                    `ffstruct:"RESTConfig" json:"authUsername,omitempty"`
 	AuthPassword                  string                                    `ffstruct:"RESTConfig" json:"authPassword,omitempty"`
+	ThrottleRequestsPerSecond     int                                       `ffstruct:"RESTConfig" json:"requestsPerSecond,omitempty"`
+	ThrottleBurst                 int                                       `ffstruct:"RESTConfig" json:"burst,omitempty"`
 	Retry                         bool                                      `ffstruct:"RESTConfig" json:"retry,omitempty"`
 	RetryCount                    int                                       `ffstruct:"RESTConfig" json:"retryCount,omitempty"`
 	RetryInitialDelay             fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"retryInitialDelay,omitempty"`
@@ -172,6 +176,17 @@ func New(ctx context.Context, staticConfig config.Section) (client *resty.Client
 	return NewWithConfig(ctx, *ffrestyConfig), nil
 }
 
+func getRateLimiter(rps, burst int) *rate.Limiter {
+	if rps != 0 { // if rps is not set no need for a rate limiter
+		rpsLimiter := rate.Limit(rps)
+		if burst == 0 {
+			burst = rps
+		}
+		return rate.NewLimiter(rpsLimiter, burst)
+	}
+	return nil
+}
+
 // New creates a new Resty client, using static configuration (from the config file)
 // from a given section in the static configuration
 //
@@ -210,6 +225,8 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 		client = resty.NewWithClient(httpClient)
 	}
 
+	rateLimiter = getRateLimiter(ffrestyConfig.ThrottleRequestsPerSecond, ffrestyConfig.ThrottleBurst)
+
 	url := strings.TrimSuffix(ffrestyConfig.URL, "/")
 	if url != "" {
 		client.SetBaseURL(url)
@@ -223,6 +240,13 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 	client.SetTimeout(time.Duration(ffrestyConfig.HTTPRequestTimeout))
 
 	client.OnBeforeRequest(func(_ *resty.Client, req *resty.Request) error {
+		if rateLimiter != nil {
+			// Wait for permission to proceed with the request
+			err := rateLimiter.Wait(req.Context())
+			if err != nil {
+				return err
+			}
+		}
 		rCtx := req.Context()
 		rc := rCtx.Value(retryCtxKey{})
 		if rc == nil {
