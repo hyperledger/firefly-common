@@ -188,21 +188,34 @@ func (sg *SwaggerGen) ffTagHandler(ctx context.Context, route *Route, name strin
 }
 
 func (sg *SwaggerGen) addCustomType(t reflect.Type, schema *openapi3.Schema) {
-	typeString := "string"
+	typeString := openapi3.TypeString
 	switch t.Name() {
 	case "UUID":
-		schema.Type = typeString
+		schema.Type = &openapi3.Types{typeString}
 		schema.Format = "uuid"
 	case "FFTime":
-		schema.Type = typeString
+		schema.Type = &openapi3.Types{typeString}
 		schema.Format = "date-time"
 	case "Bytes32":
-		schema.Type = typeString
+		schema.Type = &openapi3.Types{typeString}
 		schema.Format = "byte"
 	case "FFBigInt":
-		schema.Type = typeString
+		schema.Type = &openapi3.Types{typeString}
 	case "JSONAny":
-		schema.Type = ""
+		schema.Type = &openapi3.Types{}
+	}
+}
+
+func constructExportComponentSchemasOptions(route *Route) openapi3gen.ExportComponentSchemasOptions {
+	exportTopLevelSchema := false
+	if route.ExportTopLevelComponentSchema != nil {
+		exportTopLevelSchema = *route.ExportTopLevelComponentSchema
+	}
+
+	return openapi3gen.ExportComponentSchemasOptions{
+		ExportComponentSchemas: true,
+		ExportTopLevelSchema:   exportTopLevelSchema,
+		ExportGenerics:         true,
 	}
 }
 
@@ -216,13 +229,13 @@ func (sg *SwaggerGen) addInput(ctx context.Context, doc *openapi3.T, route *Rout
 	switch {
 	case route.JSONInputSchema != nil:
 		schemaRef, err = route.JSONInputSchema(ctx, func(obj interface{}) (*openapi3.SchemaRef, error) {
-			return openapi3gen.NewSchemaRefForValue(obj, doc.Components.Schemas, openapi3gen.SchemaCustomizer(schemaCustomizer))
+			return openapi3gen.NewSchemaRefForValue(obj, doc.Components.Schemas, openapi3gen.SchemaCustomizer(schemaCustomizer), openapi3gen.CreateComponentSchemas(constructExportComponentSchemasOptions(route)))
 		})
 		if err != nil {
 			panic(fmt.Sprintf("invalid schema: %s", err))
 		}
 	case route.JSONInputValue != nil:
-		schemaRef, err = openapi3gen.NewSchemaRefForValue(route.JSONInputValue(), doc.Components.Schemas, openapi3gen.SchemaCustomizer(schemaCustomizer))
+		schemaRef, err = openapi3gen.NewSchemaRefForValue(route.JSONInputValue(), doc.Components.Schemas, openapi3gen.SchemaCustomizer(schemaCustomizer), openapi3gen.CreateComponentSchemas(constructExportComponentSchemasOptions(route)))
 		if err != nil {
 			panic(fmt.Sprintf("invalid schema: %s", err))
 		}
@@ -236,7 +249,7 @@ func (sg *SwaggerGen) addFormInput(ctx context.Context, op *openapi3.Operation, 
 	props := openapi3.Schemas{
 		"filename.ext": &openapi3.SchemaRef{
 			Value: &openapi3.Schema{
-				Type:   "string",
+				Type:   &openapi3.Types{"string"},
 				Format: "binary",
 			},
 		},
@@ -245,7 +258,7 @@ func (sg *SwaggerGen) addFormInput(ctx context.Context, op *openapi3.Operation, 
 		props[fp.Name] = &openapi3.SchemaRef{
 			Value: &openapi3.Schema{
 				Description: i18n.Expand(ctx, i18n.APISuccessResponse),
-				Type:        "string",
+				Type:        &openapi3.Types{"string"},
 			},
 		}
 	}
@@ -253,7 +266,7 @@ func (sg *SwaggerGen) addFormInput(ctx context.Context, op *openapi3.Operation, 
 	op.RequestBody.Value.Content["multipart/form-data"] = &openapi3.MediaType{
 		Schema: &openapi3.SchemaRef{
 			Value: &openapi3.Schema{
-				Type:       "object",
+				Type:       &openapi3.Types{"object"},
 				Properties: props,
 			},
 		},
@@ -287,7 +300,7 @@ func (sg *SwaggerGen) addOutput(ctx context.Context, doc *openapi3.T, route *Rou
 	switch {
 	case route.JSONOutputSchema != nil:
 		schemaRef, err = route.JSONOutputSchema(ctx, func(obj interface{}) (*openapi3.SchemaRef, error) {
-			return openapi3gen.NewSchemaRefForValue(obj, doc.Components.Schemas, openapi3gen.SchemaCustomizer(schemaCustomizer))
+			return openapi3gen.NewSchemaRefForValue(obj, doc.Components.Schemas, openapi3gen.SchemaCustomizer(schemaCustomizer), openapi3gen.CreateComponentSchemas(constructExportComponentSchemasOptions(route)))
 		})
 		if err != nil {
 			panic(fmt.Sprintf("invalid schema: %s", err))
@@ -295,7 +308,7 @@ func (sg *SwaggerGen) addOutput(ctx context.Context, doc *openapi3.T, route *Rou
 	case route.JSONOutputValue != nil:
 		outputValue := route.JSONOutputValue()
 		if outputValue != nil {
-			schemaRef, err = openapi3gen.NewSchemaRefForValue(outputValue, doc.Components.Schemas, openapi3gen.SchemaCustomizer(schemaCustomizer))
+			schemaRef, err = openapi3gen.NewSchemaRefForValue(outputValue, doc.Components.Schemas, openapi3gen.SchemaCustomizer(schemaCustomizer), openapi3gen.CreateComponentSchemas(constructExportComponentSchemasOptions(route)))
 			if err != nil {
 				panic(fmt.Sprintf("invalid schema: %s", err))
 			}
@@ -339,15 +352,15 @@ func (sg *SwaggerGen) addParamInternal(ctx context.Context, op *openapi3.Operati
 		exampleValue = example
 	}
 	value := &openapi3.Schema{
-		Type:    "string",
+		Type:    &openapi3.Types{"string"},
 		Default: defValue,
 		Example: exampleValue,
 	}
 	if isArray {
-		value.Type = "array"
+		value.Type = &openapi3.Types{"array"}
 		value.Items = &openapi3.SchemaRef{
 			Value: &openapi3.Schema{
-				Type:    "string",
+				Type:    &openapi3.Types{"string"},
 				Default: defValue,
 				Example: exampleValue,
 			},
