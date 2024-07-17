@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -67,10 +67,13 @@ var (
 	ConfigGlobalWsWriteBufferSize        = ffc("config.global.ws.writeBufferSize", "The size in bytes of the write buffer for the WebSocket connection", ByteSizeType)
 	ConfigGlobalWsURL                    = ffc("config.global.ws.url", "URL to use for WebSocket - overrides url one level up (in the HTTP config)", StringType)
 
+	ConfigGlobalTLSCA                     = ffc("config.global.tls.ca", "The TLS certificate authority in PEM format (this option is ignored if caFile is also set)", StringType)
 	ConfigGlobalTLSCaFile                 = ffc("config.global.tls.caFile", "The path to the CA file for TLS on this API", StringType)
+	ConfigGlobalTLSCert                   = ffc("config.global.tls.cert", "The TLS certificate in PEM format (this option is ignored if certFile is also set)", StringType)
 	ConfigGlobalTLSCertFile               = ffc("config.global.tls.certFile", "The path to the certificate file for TLS on this API", StringType)
 	ConfigGlobalTLSClientAuth             = ffc("config.global.tls.clientAuth", "Enables or disables client auth for TLS on this API", StringType)
 	ConfigGlobalTLSEnabled                = ffc("config.global.tls.enabled", "Enables or disables TLS on this API", BooleanType)
+	ConfigGlobalTLSKey                    = ffc("config.global.tls.key", "The TLS certificate key in PEM format (this option is ignored if keyFile is also set)", StringType)
 	ConfigGlobalTLSKeyFile                = ffc("config.global.tls.keyFile", "The path to the private key file for TLS on this API", StringType)
 	ConfigGlobalTLSRequiredDNAttributes   = ffc("config.global.tls.requiredDNAttributes", "A set of required subject DN attributes. Each entry is a regular expression, and the subject certificate must have a matching attribute of the specified type (CN, C, O, OU, ST, L, STREET, POSTALCODE, SERIALNUMBER are valid attributes)", MapStringStringType)
 	ConfigGlobalTLSInsecureSkipHostVerify = ffc("config.global.tls.insecureSkipHostVerify", "When to true in unit test development environments to disable TLS verification. Use with extreme caution", BooleanType)
@@ -81,6 +84,8 @@ var (
 	ConfigGlobalExpectContinueTimeout     = ffc("config.global.expectContinueTimeout", "See [ExpectContinueTimeout in the Go docs](https://pkg.go.dev/net/http#Transport)", TimeDurationType)
 	ConfigGlobalHeaders                   = ffc("config.global.headers", "Adds custom headers to HTTP requests", MapStringStringType)
 	ConfigGlobalIdleTimeout               = ffc("config.global.idleTimeout", "The max duration to hold a HTTP keepalive connection between calls", TimeDurationType)
+	ConfigGlobalThrottleRPS               = ffc("config.global.throttle.requestsPerSecond", "The average rate at which requests are allowed to pass through over time.", IntType)
+	ConfigGlobalThrottleBurst             = ffc("config.global.throttle.burst", "The maximum number of requests that can be made in a short period of time before the throttling kicks in.", IntType)
 	ConfigGlobalMaxIdleConns              = ffc("config.global.maxIdleConns", "The max number of idle connections to hold pooled", IntType)
 	ConfigGlobalMaxConnsPerHost           = ffc("config.global.maxConnsPerHost", "The max number of connections, per unique hostname. Zero means no limit", IntType)
 	ConfigGlobalMethod                    = ffc("config.global.method", "The HTTP method to use when making requests to the Address Resolver", StringType)

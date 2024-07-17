@@ -19,6 +19,7 @@ package ffapi
 import (
 	"context"
 	"fmt"
+	"github.com/getkin/kin-openapi/openapi3"
 	"io"
 	"net/http"
 	"strings"
@@ -38,6 +39,7 @@ type utManager struct {
 	mockEnrichErr       error
 	calledJSONHandler   string
 	calledUploadHandler string
+	calledStreamHandler string
 }
 
 type sampleInput struct {
@@ -80,6 +82,35 @@ var utAPIRoute1 = &Route{
 	},
 }
 
+var utAPIRoute2 = &Route{
+	Name:        "utAPIRoute2",
+	Path:        "ut/utresource/{resourceid}/getit",
+	Method:      http.MethodGet,
+	Description: "random GET stream route for testing",
+	PathParams: []*PathParam{
+		{Name: "resourceid", Description: "My resource"},
+	},
+	FormParams:      nil,
+	JSONInputValue:  nil,
+	JSONOutputValue: nil,
+	JSONOutputCodes: nil,
+	CustomResponseRefs: map[string]*openapi3.ResponseRef{
+		"200": {
+			Value: &openapi3.Response{
+				Content: openapi3.Content{
+					"application/octet-stream": {},
+				},
+			},
+		},
+	},
+	Extensions: &APIServerRouteExt[*utManager]{
+		StreamHandler: func(r *APIRequest, um *utManager) (output io.ReadCloser, err error) {
+			um.calledStreamHandler = r.PP["resourceid"]
+			return io.NopCloser(strings.NewReader("a stream!")), nil
+		},
+	},
+}
+
 func initUTConfig() (config.Section, config.Section, config.Section) {
 	config.RootConfigReset()
 	apiConfig := config.RootSection("ut.api")
@@ -97,7 +128,7 @@ func newTestAPIServer(t *testing.T, start bool) (*utManager, *apiServer[*utManag
 	um := &utManager{t: t}
 	as := NewAPIServer(ctx, APIServerOptions[*utManager]{
 		MetricsRegistry: metric.NewPrometheusMetricsRegistry("ut"),
-		Routes:          []*Route{utAPIRoute1},
+		Routes:          []*Route{utAPIRoute1, utAPIRoute2},
 		EnrichRequest: func(r *APIRequest) (*utManager, error) {
 			// This could be some dynamic object based on extra processing in the request,
 			// but the most common case is you just have a "manager" that you inject into each
@@ -123,6 +154,24 @@ func newTestAPIServer(t *testing.T, start bool) (*utManager, *apiServer[*utManag
 		cancelCtx()
 		<-done
 	}
+}
+
+func TestAPIServerInvokeAPIRouteStream(t *testing.T) {
+	um, as, done := newTestAPIServer(t, true)
+	defer done()
+
+	<-as.Started()
+
+	var o sampleOutput
+	res, err := resty.New().R().
+		SetBody(nil).
+		SetResult(&o).
+		Get(fmt.Sprintf("%s/api/v1/ut/utresource/id12345/getit", as.APIPublicURL()))
+	assert.NoError(t, err)
+	assert.Equal(t, 200, res.StatusCode())
+	assert.Equal(t, "application/octet-stream", res.Header().Get("Content-Type"))
+	assert.Equal(t, "id12345", um.calledStreamHandler)
+	assert.Equal(t, "a stream!", string(res.Body()))
 }
 
 func TestAPIServerInvokeAPIRouteJSON(t *testing.T) {

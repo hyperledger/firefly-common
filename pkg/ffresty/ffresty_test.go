@@ -1,4 +1,4 @@
-// Copyright © 2021 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -41,6 +41,9 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
 	"github.com/hyperledger/firefly-common/pkg/fftls"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/hyperledger/firefly-common/pkg/metric"
+	"golang.org/x/time/rate"
+
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 )
@@ -86,6 +89,148 @@ func TestRequestOK(t *testing.T) {
 	assert.Equal(t, `{"some": "data"}`, resp.String())
 
 	assert.Equal(t, 1, httpmock.GetTotalCallCount())
+}
+
+func TestRequestWithRateLimiter(t *testing.T) {
+	rps := 5
+	expectedNumberOfRequest := 20 // should take longer than 3 seconds less than 4 seconds
+
+	customClient := &http.Client{}
+
+	resetConf()
+	utConf.Set(HTTPConfigURL, "http://localhost:12345")
+	utConf.Set(HTTPConfigHeaders, map[string]interface{}{
+		"someheader": "headervalue",
+	})
+	utConf.Set(HTTPConfigAuthUsername, "user")
+	utConf.Set(HTTPConfigAuthPassword, "pass")
+	utConf.Set(HTTPThrottleRequestsPerSecond, rps)
+	utConf.Set(HTTPConfigRetryEnabled, true)
+	utConf.Set(HTTPCustomClient, customClient)
+
+	c, err := New(context.Background(), utConf)
+	assert.Nil(t, err)
+	httpmock.ActivateNonDefault(customClient)
+	defer httpmock.DeactivateAndReset()
+
+	httpmock.RegisterResponder("GET", "http://localhost:12345/test",
+		func(req *http.Request) (*http.Response, error) {
+			assert.Equal(t, "headervalue", req.Header.Get("someheader"))
+			assert.Equal(t, "Basic dXNlcjpwYXNz", req.Header.Get("Authorization"))
+			return httpmock.NewStringResponder(200, `{"some": "data"}`)(req)
+		})
+	requestChan := make(chan bool, expectedNumberOfRequest)
+	startTime := time.Now()
+	for i := 0; i < expectedNumberOfRequest; i++ {
+		go func() {
+			resp, err := c.R().Get("/test")
+			assert.NoError(t, err)
+			assert.Equal(t, 200, resp.StatusCode())
+			assert.Equal(t, `{"some": "data"}`, resp.String())
+			requestChan <- true
+		}()
+	}
+	count := 0
+	for {
+		<-requestChan
+		count++
+		if count == expectedNumberOfRequest {
+			break
+
+		}
+	}
+
+	duration := time.Since(startTime)
+	assert.GreaterOrEqual(t, duration, 3*time.Second)
+	assert.LessOrEqual(t, duration, 4*time.Second)
+	assert.Equal(t, expectedNumberOfRequest, httpmock.GetTotalCallCount())
+}
+
+func TestRequestWithRateLimiterHighBurst(t *testing.T) {
+	expectedNumberOfRequest := 20 // should take longer than 3 seconds less than 4 seconds
+
+	customClient := &http.Client{}
+
+	resetConf()
+	utConf.Set(HTTPConfigURL, "http://localhost:12345")
+	utConf.Set(HTTPConfigHeaders, map[string]interface{}{
+		"someheader": "headervalue",
+	})
+	utConf.Set(HTTPConfigAuthUsername, "user")
+	utConf.Set(HTTPConfigAuthPassword, "pass")
+	utConf.Set(HTTPThrottleRequestsPerSecond, 0)
+	utConf.Set(HTTPThrottleBurst, expectedNumberOfRequest)
+	utConf.Set(HTTPConfigRetryEnabled, true)
+	utConf.Set(HTTPCustomClient, customClient)
+
+	c, err := New(context.Background(), utConf)
+	assert.Nil(t, err)
+	httpmock.ActivateNonDefault(customClient)
+	defer httpmock.DeactivateAndReset()
+
+	httpmock.RegisterResponder("GET", "http://localhost:12345/test",
+		func(req *http.Request) (*http.Response, error) {
+			assert.Equal(t, "headervalue", req.Header.Get("someheader"))
+			assert.Equal(t, "Basic dXNlcjpwYXNz", req.Header.Get("Authorization"))
+			return httpmock.NewStringResponder(200, `{"some": "data"}`)(req)
+		})
+	requestChan := make(chan bool, expectedNumberOfRequest)
+	startTime := time.Now()
+	for i := 0; i < expectedNumberOfRequest; i++ {
+		go func() {
+			resp, err := c.R().Get("/test")
+			assert.NoError(t, err)
+			assert.Equal(t, 200, resp.StatusCode())
+			assert.Equal(t, `{"some": "data"}`, resp.String())
+			requestChan <- true
+		}()
+	}
+	count := 0
+	for {
+		<-requestChan
+		count++
+		if count == expectedNumberOfRequest {
+			break
+
+		}
+	}
+
+	duration := time.Since(startTime)
+	assert.Less(t, duration, 1*time.Second)
+	assert.Equal(t, expectedNumberOfRequest, httpmock.GetTotalCallCount())
+}
+
+func TestRateLimiterFailure(t *testing.T) {
+	customClient := &http.Client{}
+
+	resetConf()
+	utConf.Set(HTTPConfigURL, "http://localhost:12345")
+	utConf.Set(HTTPConfigHeaders, map[string]interface{}{
+		"someheader": "headervalue",
+	})
+	utConf.Set(HTTPConfigAuthUsername, "user")
+	utConf.Set(HTTPConfigAuthPassword, "pass")
+	utConf.Set(HTTPConfigRetryEnabled, true)
+
+	utConf.Set(HTTPCustomClient, customClient)
+
+	c, err := New(context.Background(), utConf)
+	assert.Nil(t, err)
+	httpmock.ActivateNonDefault(customClient)
+	defer httpmock.DeactivateAndReset()
+
+	httpmock.RegisterResponder("GET", "http://localhost:12345/test",
+		func(req *http.Request) (*http.Response, error) {
+			assert.Equal(t, "headervalue", req.Header.Get("someheader"))
+			assert.Equal(t, "Basic dXNlcjpwYXNz", req.Header.Get("Authorization"))
+			return httpmock.NewStringResponder(200, `{"some": "data"}`)(req)
+		})
+	rateLimiter = rate.NewLimiter(rate.Limit(1), 0) // artificially create an broken rate limiter, this is not possible with our config default
+	resp, err := c.R().Get("/test")
+	assert.Error(t, err)
+	assert.Regexp(t, "exceeds", err)
+	assert.Nil(t, resp)
+	rateLimiter = nil // reset limiter
 }
 
 func TestRequestRetry(t *testing.T) {
@@ -511,4 +656,105 @@ func TestMTLSClientWithServer(t *testing.T) {
 		assert.Equal(t, "world", resBody["hello"])
 	}
 	cancelCtx()
+}
+
+func TestEnableClientMetricsError(t *testing.T) {
+	ctx := context.Background()
+	mr := metric.NewPrometheusMetricsRegistry("testerr")
+	//claim the "resty subsystem before resty can :/"
+	_, _ = mr.NewMetricsManagerForSubsystem(ctx, "resty")
+	err := EnableClientMetrics(ctx, mr)
+	assert.Error(t, err)
+}
+
+func TestEnableClientMetrics(t *testing.T) {
+
+	ctx := context.Background()
+	mr := metric.NewPrometheusMetricsRegistry("test")
+
+	err := EnableClientMetrics(ctx, mr)
+	assert.NoError(t, err)
+
+}
+
+func TestEnableClientMetricsIdempotent(t *testing.T) {
+	ctx := context.Background()
+	mr := metric.NewPrometheusMetricsRegistry("test")
+	_ = EnableClientMetrics(ctx, mr)
+	err := EnableClientMetrics(ctx, mr)
+	assert.NoError(t, err)
+}
+
+func TestHooks(t *testing.T) {
+
+	ctx := context.Background()
+	mr := metric.NewPrometheusMetricsRegistry("test")
+
+	err := EnableClientMetrics(ctx, mr)
+	assert.NoError(t, err)
+
+	onErrorCount := 0
+	onSuccessCount := 0
+
+	customOnError := func(req *resty.Request, err error) {
+		onErrorCount++
+	}
+
+	customOnSuccess := func(c *resty.Client, resp *resty.Response) {
+		onSuccessCount++
+	}
+
+	RegisterGlobalOnError(customOnError)
+	RegisterGlobalOnSuccess(customOnSuccess)
+
+	resetConf()
+	utConf.Set(HTTPConfigURL, "http://localhost:12345")
+	utConf.Set(HTTPConfigRetryEnabled, false)
+
+	c, err := New(ctx, utConf)
+	assert.Nil(t, err)
+	httpmock.ActivateNonDefault(c.GetClient())
+	defer httpmock.DeactivateAndReset()
+
+	resText := strings.Builder{}
+	for i := 0; i < 512; i++ {
+		resText.WriteByte(byte('a' + (i % 26)))
+	}
+	httpmock.RegisterResponder("GET", "http://localhost:12345/testerr",
+		httpmock.NewErrorResponder(fmt.Errorf("pop")))
+
+	httpmock.RegisterResponder("GET", "http://localhost:12345/testerrhttp",
+		func(req *http.Request) (*http.Response, error) {
+			return httpmock.NewStringResponse(502, `{"Status": "Service Not Available"}`), fmt.Errorf("Service Not Available")
+		})
+
+	httpmock.RegisterResponder("GET", "http://localhost:12345/testok",
+		func(req *http.Request) (*http.Response, error) {
+			return httpmock.NewStringResponder(200, `{"some": "data"}`)(req)
+		})
+
+	resp, err := c.R().Get("/testerr")
+	err = WrapRestErr(ctx, resp, err, i18n.MsgConfigFailed)
+	assert.Error(t, err)
+
+	assert.Equal(t, onErrorCount, 1)
+	assert.Equal(t, onSuccessCount, 0)
+
+	resp, err = c.R().Get("/testerrhttp")
+	err = WrapRestErr(ctx, resp, err, i18n.MsgConfigFailed)
+	assert.Error(t, err)
+
+	assert.Equal(t, onErrorCount, 2)
+	assert.Equal(t, onSuccessCount, 0)
+
+	resp, err = c.R().Get("/testok")
+	assert.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode())
+	assert.Equal(t, `{"some": "data"}`, resp.String())
+
+	assert.Equal(t, 3, httpmock.GetTotalCallCount())
+
+	assert.Equal(t, onErrorCount, 2)
+	assert.Equal(t, onSuccessCount, 1)
+
 }

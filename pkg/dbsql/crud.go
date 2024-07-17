@@ -19,6 +19,7 @@ package dbsql
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"reflect"
 	"strings"
@@ -50,6 +51,7 @@ const (
 	UpsertOptimizationSkip UpsertOptimization = iota
 	UpsertOptimizationNew
 	UpsertOptimizationExisting
+	UpsertOptimizationDB // only supported if the DB layer support ON CONFLICT semantics
 )
 
 type GetOption int
@@ -129,6 +131,7 @@ type CrudBase[T Resource] struct {
 	TimesDisabled    bool // no management of the time columns
 	PatchDisabled    bool // allows non-pointer fields, but prevents UpdateSparse function
 	ImmutableColumns []string
+	IDField          string                                        // override default ID field
 	NameField        string                                        // If supporting name semantics
 	QueryFactory     ffapi.QueryFactory                            // Must be set when name is set
 	DefaultSort      func() []interface{}                          // optionally override the default sort - array of *ffapi.SortField or string
@@ -144,6 +147,7 @@ type CrudBase[T Resource] struct {
 	ReadTableAlias    string
 	ReadOnlyColumns   []string
 	ReadQueryModifier QueryModifier
+	AfterLoad         func(ctx context.Context, inst T) error // perform final validation/formatting after an instance is loaded from db
 }
 
 func (c *CrudBase[T]) Scoped(scope sq.Eq) CRUD[T] {
@@ -157,6 +161,13 @@ func (c *CrudBase[T]) TableAlias() string {
 		return c.ReadTableAlias
 	}
 	return c.Table
+}
+
+func (c *CrudBase[T]) GetIDField() string {
+	if c.IDField != "" {
+		return c.IDField
+	}
+	return ColumnID
 }
 
 func (c *CrudBase[T]) GetQueryFactory() ffapi.QueryFactory {
@@ -212,7 +223,7 @@ func (c *CrudBase[T]) Validate() {
 	ptrs := map[string]interface{}{}
 	fieldMap := map[string]bool{
 		// Mandatory column checks
-		ColumnID: false,
+		c.GetIDField(): false,
 	}
 	if !c.TimesDisabled {
 		fieldMap[ColumnCreated] = false
@@ -260,24 +271,29 @@ func (c *CrudBase[T]) idFilter(id string) sq.Eq {
 		filter = sq.Eq{}
 	}
 	if c.ReadTableAlias != "" {
-		filter[fmt.Sprintf("%s.id", c.ReadTableAlias)] = id
+		filter[fmt.Sprintf("%s.%s", c.ReadTableAlias, c.GetIDField())] = id
 	} else {
 		filter["id"] = id
 	}
 	return filter
 }
 
-func (c *CrudBase[T]) buildUpdateList(_ context.Context, update sq.UpdateBuilder, inst T, includeNil bool) sq.UpdateBuilder {
-colLoop:
-	for _, col := range c.Columns {
-		for _, immutable := range append(c.ImmutableColumns, ColumnID, ColumnCreated, ColumnUpdated, c.DB.sequenceColumn) {
-			if col == immutable {
-				continue colLoop
-			}
+func (c *CrudBase[T]) isImmutable(col string) bool {
+	for _, immutable := range append(c.ImmutableColumns, c.GetIDField(), ColumnCreated, ColumnUpdated, c.DB.sequenceColumn) {
+		if col == immutable {
+			return true
 		}
-		value := c.getFieldValue(inst, col)
-		if includeNil || !isNil(value) {
-			update = update.Set(col, value)
+	}
+	return false
+}
+
+func (c *CrudBase[T]) buildUpdateList(_ context.Context, update sq.UpdateBuilder, inst T, includeNil bool) sq.UpdateBuilder {
+	for _, col := range c.Columns {
+		if !c.isImmutable(col) {
+			value := c.getFieldValue(inst, col)
+			if includeNil || !isNil(value) {
+				update = update.Set(col, value)
+			}
 		}
 	}
 	if !c.TimesDisabled {
@@ -323,9 +339,8 @@ func (c *CrudBase[T]) getFieldValue(inst T, col string) interface{} {
 	return val
 }
 
-func (c *CrudBase[T]) setInsertTimestamps(inst T) {
+func (c *CrudBase[T]) setInsertTimestamps(inst T, now *fftypes.FFTime) {
 	if !c.TimesDisabled {
-		now := fftypes.Now()
 		inst.SetCreated(now)
 		inst.SetUpdated(now)
 	}
@@ -344,7 +359,7 @@ func (c *CrudBase[T]) attemptInsert(ctx context.Context, tx *TXWrapper, inst T, 
 		}
 	}
 
-	c.setInsertTimestamps(inst)
+	c.setInsertTimestamps(inst, fftypes.Now())
 	insert := sq.Insert(c.Table).Columns(c.Columns...)
 	values := make([]interface{}, len(c.Columns))
 	for i, col := range c.Columns {
@@ -374,11 +389,18 @@ func (c *CrudBase[T]) Upsert(ctx context.Context, inst T, optimization UpsertOpt
 	// The expectation is that the optimization will hit almost all of the time,
 	// as only recovery paths require us to go down the un-optimized route.
 	optimized := false
-	if optimization == UpsertOptimizationNew {
+	switch {
+	case optimization == UpsertOptimizationDB && c.DB.features.DBOptimizedUpsertBuilder != nil:
+		optimized = true // the DB does the work here, so any failure is a straight failure
+		created, err = c.dbOptimizedUpsert(ctx, tx, inst)
+		if err != nil {
+			return false, err
+		}
+	case optimization == UpsertOptimizationNew:
 		opErr := c.attemptInsert(ctx, tx, inst, true /* we want a failure here we can progress past */)
 		optimized = opErr == nil
 		created = optimized
-	} else if optimization == UpsertOptimizationExisting {
+	default: // UpsertOptimizationExisting, or fallback if DB optimization requested
 		rowsAffected, opErr := c.updateFromInstance(ctx, tx, inst, true /* full replace */)
 		optimized = opErr == nil && rowsAffected == 1
 	}
@@ -417,6 +439,47 @@ func (c *CrudBase[T]) Upsert(ctx context.Context, inst T, optimization UpsertOpt
 	return created, c.DB.CommitTx(ctx, tx, autoCommit)
 }
 
+func (c *CrudBase[T]) dbOptimizedUpsert(ctx context.Context, tx *TXWrapper, inst T) (created bool, err error) {
+
+	// Caller responsible for checking this is available before driving this path
+	optimizedInsertBuilder := c.DB.provider.Features().DBOptimizedUpsertBuilder
+
+	if c.IDValidator != nil {
+		if err := c.IDValidator(ctx, inst.GetID()); err != nil {
+			return false, err
+		}
+	}
+	now := fftypes.Now()
+	c.setInsertTimestamps(inst, now)
+
+	values := make(map[string]driver.Value)
+	updateCols := make([]string, 0, len(c.Columns))
+	for _, col := range c.Columns {
+		values[col] = c.getFieldValue(inst, col)
+		if !c.isImmutable(col) {
+			updateCols = append(updateCols, col)
+		}
+	}
+	var rows *sql.Rows
+	query, err := optimizedInsertBuilder(ctx, c.Table, c.GetIDField(), c.Columns, updateCols, ColumnCreated, values)
+	if err == nil {
+		rows, _, err = c.DB.RunAsQueryTx(ctx, c.Table, tx, query.PlaceholderFormat(c.DB.features.PlaceholderFormat))
+	}
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		var createTime fftypes.FFTime
+		if err = rows.Scan(&createTime); err != nil {
+			return false, i18n.NewError(ctx, i18n.MsgDBReadInsertTSFailed, err)
+		}
+		created = !createTime.Time().Before(*now.Time())
+	}
+	return created, nil
+
+}
+
 func (c *CrudBase[T]) InsertMany(ctx context.Context, instances []T, allowPartialSuccess bool, hooks ...PostCompletionHook) (err error) {
 
 	ctx, tx, autoCommit, err := c.DB.BeginOrUseTx(ctx)
@@ -427,7 +490,7 @@ func (c *CrudBase[T]) InsertMany(ctx context.Context, instances []T, allowPartia
 	if c.DB.Features().MultiRowInsert {
 		insert := sq.Insert(c.Table).Columns(c.Columns...)
 		for _, inst := range instances {
-			c.setInsertTimestamps(inst)
+			c.setInsertTimestamps(inst, fftypes.Now())
 			values := make([]interface{}, len(c.Columns))
 			for i, col := range c.Columns {
 				values[i] = c.getFieldValue(inst, col)
@@ -626,6 +689,9 @@ func (c *CrudBase[T]) GetByID(ctx context.Context, id string, getOpts ...GetOpti
 	if err != nil {
 		return c.NilValue(), err
 	}
+	if c.AfterLoad != nil {
+		return inst, c.AfterLoad(ctx, inst)
+	}
 	return inst, nil
 }
 
@@ -727,6 +793,12 @@ func (c *CrudBase[T]) getManyScoped(ctx context.Context, tableFrom string, fi *f
 		inst, err := c.scanRow(ctx, cols, rows)
 		if err != nil {
 			return nil, nil, err
+		}
+		if c.AfterLoad != nil {
+			err = c.AfterLoad(ctx, inst)
+			if err != nil {
+				return nil, nil, err
+			}
 		}
 		instances = append(instances, inst)
 	}

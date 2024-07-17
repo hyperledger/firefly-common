@@ -88,6 +88,8 @@ var (
 	RESTConfigExpectHeaders                 = ffm("RESTConfig.headers", "Headers to add to the HTTP call")
 	RESTConfigHTTPPassthroughHeadersEnabled = ffm("RESTConfig.httpPassthroughHeadersEnabled", "Proxy request ID or other configured headers from an upstream microservice connection")
 	RESTConfigIdleTimeout                   = ffm("RESTConfig.idleTimeout", "Time to leave idle connections in the connection pool")
+	RESTConfigThrottleRequestsPerSecond     = ffm("RESTConfig.requestsPerSecond", "Requests per second")
+	RESTConfigThrottleBurst                 = ffm("RESTConfig.burst", "Burst")
 	RESTConfigMaxConnsPerHost               = ffm("RESTConfig.maxConnsPerHost", "Maximum connections per host")
 	RESTConfigMaxIdleConns                  = ffm("RESTConfig.maxIdleConns", "Maximum idle connections to leave in the connection pool")
 	RESTConfigMaxIdleTimeout                = ffm("RESTConfig.maxIdleTimeout", "Maximum time to leave idle connections in the connection pool")

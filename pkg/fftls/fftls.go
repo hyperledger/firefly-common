@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -48,7 +48,7 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12,
-		VerifyPeerCertificate: func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+		VerifyPeerCertificate: func(_ [][]byte, verifiedChains [][]*x509.Certificate) error {
 			if len(verifiedChains) > 0 && len(verifiedChains[0]) > 0 {
 				cert := verifiedChains[0][0]
 				log.L(ctx).Debugf("Client certificate provided Subject=%s Issuer=%s Expiry=%s", cert.Subject, cert.Issuer, cert.NotAfter)
@@ -62,8 +62,9 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 	var err error
 	// Support custom CA file
 	var rootCAs *x509.CertPool
-	if config.CAFile != "" {
-		log.L(ctx).Debugf("Loading CA file at %s", config.CAFile)
+	switch {
+	case config.CAFile != "":
+    log.L(ctx).Debugf("Loading CA file at %s", config.CAFile)
 		rootCAs = x509.NewCertPool()
 		var caBytes []byte
 		caBytes, err = os.ReadFile(config.CAFile)
@@ -73,7 +74,13 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 				err = i18n.NewError(ctx, i18n.MsgInvalidCAFile)
 			}
 		}
-	} else {
+	case config.CA != "":
+		rootCAs = x509.NewCertPool()
+		ok := rootCAs.AppendCertsFromPEM([]byte(config.CA))
+		if !ok {
+			err = i18n.NewError(ctx, i18n.MsgInvalidCAFile)
+		}
+	default:
 		rootCAs, err = x509.SystemCertPool()
 	}
 
@@ -91,7 +98,12 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, i18n.MsgInvalidKeyPairFiles)
 		}
-
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	} else if config.Cert != "" && config.Key != "" {
+		cert, err := tls.X509KeyPair([]byte(config.Cert), []byte(config.Key))
+		if err != nil {
+			return nil, i18n.WrapError(ctx, err, i18n.MsgInvalidKeyPairFiles)
+		}
 		tlsConfig.Certificates = []tls.Certificate{cert}
 	}
 
@@ -176,7 +188,7 @@ func buildDNValidator(ctx context.Context, requiredDNAttributes map[string]inter
 		}
 		validators[attr] = validator
 	}
-	return func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+	return func(_ [][]byte, verifiedChains [][]*x509.Certificate) error {
 		if len(verifiedChains) == 0 {
 			log.L(ctx).Errorf("Failed TLS DN check: Nil cert chain")
 			return i18n.NewError(ctx, i18n.MsgInvalidTLSDnChain)
