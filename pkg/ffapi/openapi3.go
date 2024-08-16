@@ -389,9 +389,6 @@ func (sg *SwaggerGen) addFilters(ctx context.Context, route *Route, op *openapi3
 func (sg *SwaggerGen) addRoute(ctx context.Context, doc *openapi3.T, route *Route) {
 	var routeDescription string
 	pi := sg.getPathItem(doc, route.Path)
-	if route.Path == "" {
-		fmt.Println("route.Path is empty")
-	}
 	if route.PreTranslatedDescription != "" {
 		routeDescription = route.PreTranslatedDescription
 	} else {
