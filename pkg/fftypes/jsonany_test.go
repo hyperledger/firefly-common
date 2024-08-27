@@ -181,6 +181,19 @@ func TestUnmarshal(t *testing.T) {
 	assert.Equal(t, "value1", myObj.Key1)
 }
 
+func TestUnmarshalHugeNumber(t *testing.T) {
+
+	var h *JSONAny
+	var myObj struct {
+		Key1 interface{} `json:"key1"`
+	}
+
+	h = JSONAnyPtr(`{"key1":123456789123456789123456789}`)
+	err := h.Unmarshal(context.Background(), &myObj)
+	assert.NoError(t, err)
+	assert.Equal(t, json.Number("123456789123456789123456789"), myObj.Key1)
+}
+
 func TestNilHash(t *testing.T) {
 	assert.Nil(t, (*JSONAny)(nil).Hash())
 }

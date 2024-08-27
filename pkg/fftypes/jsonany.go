@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -21,7 +21,7 @@ import (
 	"crypto/sha256"
 	"database/sql/driver"
 	"encoding/json"
-	"math/big"
+	"strings"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
@@ -78,37 +78,13 @@ func (h *JSONAny) Unmarshal(ctx context.Context, v interface{}) error {
 		return i18n.NewError(ctx, i18n.MsgNilOrNullObject)
 	}
 
-	err := json.Unmarshal([]byte(*h), v)
-	if err != nil {
+	d := json.NewDecoder(strings.NewReader(h.String()))
+	d.UseNumber()
+	if err := d.Decode(v); err != nil {
 		return err
 	}
 
-	// To support large numbers, check if Go unmarshalled the data to a float64 and then
-	// unmarshal it to a string instead
-	if vt, ok := v.(*interface{}); ok {
-		if _, ok := (*vt).(float64); ok {
-			// If the value has unmarshalled to a float64 we can't be sure the number
-			// didn't overflow 2^64-1 so we'll use parseFloat on the original value
-			// and return the string representation of the number.
-			i := new(big.Int)
-			f, _, err := big.ParseFloat(h.String(), 10, 256, big.ToNearestEven)
-			if err != nil {
-				return err
-			}
-			i, accuracy := f.Int(i)
-			if accuracy != big.Exact {
-				// If we weren't able to decode without losing precision, return an error
-				return i18n.NewError(ctx, i18n.MsgBigIntParseFailed)
-			}
-
-			err = json.Unmarshal([]byte("\""+i.String()+"\""), v)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return err
+	return nil
 }
 
 func (h *JSONAny) Hash() *Bytes32 {
