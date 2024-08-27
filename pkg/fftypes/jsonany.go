@@ -21,6 +21,7 @@ import (
 	"crypto/sha256"
 	"database/sql/driver"
 	"encoding/json"
+	"math/big"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
@@ -76,7 +77,38 @@ func (h *JSONAny) Unmarshal(ctx context.Context, v interface{}) error {
 	if h == nil {
 		return i18n.NewError(ctx, i18n.MsgNilOrNullObject)
 	}
-	return json.Unmarshal([]byte(*h), v)
+
+	err := json.Unmarshal([]byte(*h), v)
+	if err != nil {
+		return err
+	}
+
+	// To support large numbers, check if Go unmarshalled the data to a float64 and then
+	// unmarshal it to a string instead
+	if vt, ok := v.(*interface{}); ok {
+		if _, ok := (*vt).(float64); ok {
+			// If the value has unmarshalled to a float64 we can't be sure the number
+			// didn't overflow 2^64-1 so we'll use parseFloat on the original value
+			// and return the string representation of the number.
+			i := new(big.Int)
+			f, _, err := big.ParseFloat(h.String(), 10, 256, big.ToNearestEven)
+			if err != nil {
+				return err
+			}
+			i, accuracy := f.Int(i)
+			if accuracy != big.Exact {
+				// If we weren't able to decode without losing precision, return an error
+				return i18n.NewError(ctx, i18n.MsgBigIntParseFailed)
+			}
+
+			err = json.Unmarshal([]byte("\""+i.String()+"\""), v)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return err
 }
 
 func (h *JSONAny) Hash() *Bytes32 {
