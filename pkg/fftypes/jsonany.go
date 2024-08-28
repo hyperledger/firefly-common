@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -21,6 +21,7 @@ import (
 	"crypto/sha256"
 	"database/sql/driver"
 	"encoding/json"
+	"strings"
 
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
@@ -76,7 +77,18 @@ func (h *JSONAny) Unmarshal(ctx context.Context, v interface{}) error {
 	if h == nil {
 		return i18n.NewError(ctx, i18n.MsgNilOrNullObject)
 	}
-	return json.Unmarshal([]byte(*h), v)
+
+	if _, ok := v.(*float64); ok {
+		return i18n.NewError(ctx, i18n.MsgUnmarshalToFloat64NotSupported)
+	}
+
+	d := json.NewDecoder(strings.NewReader(h.String()))
+	d.UseNumber()
+	if err := d.Decode(v); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (h *JSONAny) Hash() *Bytes32 {

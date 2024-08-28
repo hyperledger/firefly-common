@@ -183,4 +183,5 @@ var (
 	MsgDBExecFailed                                = ffe("FF00245", "Database update failed")
 	MsgDBErrorBuildingStatement                    = ffe("FF00247", "Error building statement: %s")
 	MsgDBReadInsertTSFailed                        = ffe("FF00248", "Failed to read timestamp from database optimized upsert: %s")
+	MsgUnmarshalToFloat64NotSupported              = ffe("FF00249", "Unmarshalling to a float64 is not supported due to possible precision loss. Consider unmarshalling to an interface, json.Number or fftypes.JSONAny instead")
 )
