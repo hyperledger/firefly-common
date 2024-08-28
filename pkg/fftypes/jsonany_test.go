@@ -183,15 +183,35 @@ func TestUnmarshal(t *testing.T) {
 
 func TestUnmarshalHugeNumber(t *testing.T) {
 
+	var myInt64Variable int64
+	var myFloat64Variable float64
+	ctx := context.Background()
 	var h *JSONAny
 	var myObj struct {
 		Key1 interface{} `json:"key1"`
+		Key2 JSONAny     `json:"key2"`
+		Key3 JSONAny     `json:"key3"`
 	}
 
-	h = JSONAnyPtr(`{"key1":123456789123456789123456789}`)
-	err := h.Unmarshal(context.Background(), &myObj)
+	h = JSONAnyPtr(`{"key1":123456789123456789123456789, "key2":123456789123456789123456789, "key3":1234}`)
+	err := h.Unmarshal(ctx, &myObj)
 	assert.NoError(t, err)
 	assert.Equal(t, json.Number("123456789123456789123456789"), myObj.Key1)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "123456789123456789123456789", myObj.Key2.String())
+
+	err = myObj.Key2.Unmarshal(ctx, &myInt64Variable)
+	assert.Error(t, err)
+	assert.Regexp(t, "cannot unmarshal number 123456789123456789123456789 into Go value of type int64", err)
+
+	err = myObj.Key3.Unmarshal(ctx, &myInt64Variable)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1234), myInt64Variable)
+
+	err = myObj.Key2.Unmarshal(ctx, &myFloat64Variable)
+	assert.Error(t, err)
+	assert.Regexp(t, "FF00249", err)
 }
 
 func TestUnmarshalHugeNumberError(t *testing.T) {

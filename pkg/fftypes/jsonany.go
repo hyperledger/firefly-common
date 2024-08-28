@@ -78,6 +78,10 @@ func (h *JSONAny) Unmarshal(ctx context.Context, v interface{}) error {
 		return i18n.NewError(ctx, i18n.MsgNilOrNullObject)
 	}
 
+	if _, ok := v.(*float64); ok {
+		return i18n.NewError(ctx, i18n.MsgUnmarshalToFloat64NotSupported)
+	}
+
 	d := json.NewDecoder(strings.NewReader(h.String()))
 	d.UseNumber()
 	if err := d.Decode(v); err != nil {
