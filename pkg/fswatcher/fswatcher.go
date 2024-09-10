@@ -20,6 +20,7 @@ import (
 	"context"
 	"os"
 	"path"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
@@ -35,9 +36,19 @@ import (
 // - Only fires if the data in the file is different to the last notification
 // - Does not reload the config - that's the caller's responsibility
 func Watch(ctx context.Context, fullFilePath string, onChange, onClose func()) error {
+	return sync(ctx, fullFilePath, onChange, onClose, nil, nil)
+}
+
+// Reconcile behaves the same as Watch, except it allows for running the onSync func on a provided
+// interval. The default re-sync internal is 1m.
+func Reconcile(ctx context.Context, fullFilePath string, onChange, onClose, onSync func(), resyncInterval *time.Duration) error {
+	return sync(ctx, fullFilePath, onChange, onClose, onSync, resyncInterval)
+}
+
+func sync(ctx context.Context, fullFilePath string, onChange, onClose, onSync func(), resyncInterval *time.Duration) error {
 	filePath := path.Dir(fullFilePath)
 	fileName := path.Base(fullFilePath)
-	log.L(ctx).Debugf("Starting file listener for '%s' in directory '%s'", fileName, filePath)
+	log.L(ctx).Debugf("Starting file reconciler for '%s' in directory '%s'", fileName, filePath)
 
 	watcher, err := fsnotify.NewWatcher()
 	if err == nil {
@@ -46,7 +57,7 @@ func Watch(ctx context.Context, fullFilePath string, onChange, onClose func()) e
 			if onClose != nil {
 				onClose()
 			}
-		}, watcher.Events, watcher.Errors)
+		}, onSync, resyncInterval, watcher.Events, watcher.Errors)
 		err = watcher.Add(filePath)
 	}
 	if err != nil {
@@ -56,8 +67,17 @@ func Watch(ctx context.Context, fullFilePath string, onChange, onClose func()) e
 	return nil
 }
 
-func fsListenerLoop(ctx context.Context, fullFilePath string, onChange, onClose func(), events chan fsnotify.Event, errors chan error) {
+func fsListenerLoop(ctx context.Context, fullFilePath string, onChange, onClose, onSync func(), resyncInterval *time.Duration, events chan fsnotify.Event, errors chan error) {
 	defer onClose()
+
+	timeout := resyncInterval
+	if timeout == nil {
+		timeout = func() *time.Duration {
+			defaultTimeout := time.Minute
+			return &defaultTimeout
+		}()
+	}
+	log.L(ctx).Debugf("re-sync interval set to '%s'", *timeout)
 
 	var lastHash *fftypes.Bytes32
 	for {
@@ -81,6 +101,15 @@ func fsListenerLoop(ctx context.Context, fullFilePath string, onChange, onClose 
 						onChange()
 					}
 					lastHash = dataHash
+				}
+			}
+		case <-time.After(*timeout):
+			if onSync != nil {
+				data, err := os.ReadFile(fullFilePath)
+				if err == nil {
+					dataHash := fftypes.HashString(string(data))
+					log.L(ctx).Infof("Config file re-sync. Event=Resync Name=%s Size=%d Hash=%s", fullFilePath, len(data), dataHash)
+					onSync()
 				}
 			}
 		case err, ok := <-errors:
