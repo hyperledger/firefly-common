@@ -21,8 +21,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/stretchr/testify/require"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -31,12 +29,23 @@ import (
 	"testing"
 	"time"
 
+	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/stretchr/testify/require"
+
 	"github.com/gorilla/mux"
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/httpserver"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
+
+const largeParamLiteral = `{
+	"largeNumberParam": 10000000000000000000000000001
+}`
+
+const scientificParamLiteral = `{
+	"scientificNumberParam": 1e+24
+}`
 
 const configDir = "../../test/data/config"
 
@@ -110,6 +119,62 @@ func TestRouteServePOST201WithParams(t *testing.T) {
 	var resJSON map[string]interface{}
 	json.NewDecoder(res.Body).Decode(&resJSON)
 	assert.Equal(t, "value2", resJSON["output1"])
+}
+
+func TestRouteServePOST201WithParamsLargeNumber(t *testing.T) {
+	s, _, done := newTestServer(t, []*Route{{
+		Name:            "testRoute",
+		Path:            "/test/{something}",
+		Method:          "POST",
+		PathParams:      []*PathParam{},
+		QueryParams:     []*QueryParam{},
+		JSONInputValue:  func() interface{} { return make(map[string]interface{}) },
+		JSONOutputValue: func() interface{} { return make(map[string]interface{}) },
+		JSONOutputCodes: []int{201},
+		JSONHandler: func(r *APIRequest) (output interface{}, err error) {
+			assert.Equal(t, r.Input, map[string]interface{}{"largeNumberParam": json.Number("10000000000000000000000000001")})
+			// Echo the input back as the response
+			return r.Input, nil
+		},
+	}}, "", nil)
+	defer done()
+
+	res, err := http.Post(fmt.Sprintf("http://%s/test/stuff", s.Addr()), "application/json", bytes.NewReader([]byte(largeParamLiteral)))
+	assert.NoError(t, err)
+	assert.Equal(t, 201, res.StatusCode)
+	var resJSON map[string]interface{}
+	d := json.NewDecoder(res.Body)
+	d.UseNumber()
+	d.Decode(&resJSON)
+	assert.Equal(t, json.Number("10000000000000000000000000001"), resJSON["largeNumberParam"])
+}
+
+func TestRouteServePOST201WithParamsScientificNumber(t *testing.T) {
+	s, _, done := newTestServer(t, []*Route{{
+		Name:            "testRoute",
+		Path:            "/test/{something}",
+		Method:          "POST",
+		PathParams:      []*PathParam{},
+		QueryParams:     []*QueryParam{},
+		JSONInputValue:  func() interface{} { return make(map[string]interface{}) },
+		JSONOutputValue: func() interface{} { return make(map[string]interface{}) },
+		JSONOutputCodes: []int{201},
+		JSONHandler: func(r *APIRequest) (output interface{}, err error) {
+			assert.Equal(t, r.Input, map[string]interface{}{"scientificNumberParam": json.Number("1e+24")})
+			// Echo the input back as the response
+			return r.Input, nil
+		},
+	}}, "", nil)
+	defer done()
+
+	res, err := http.Post(fmt.Sprintf("http://%s/test/stuff", s.Addr()), "application/json", bytes.NewReader([]byte(scientificParamLiteral)))
+	assert.NoError(t, err)
+	assert.Equal(t, 201, res.StatusCode)
+	var resJSON map[string]interface{}
+	d := json.NewDecoder(res.Body)
+	d.UseNumber()
+	d.Decode(&resJSON)
+	assert.Equal(t, json.Number("1e+24"), resJSON["scientificNumberParam"])
 }
 
 func TestJSONHTTPResponseEncodeFail(t *testing.T) {
