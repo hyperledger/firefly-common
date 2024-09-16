@@ -116,7 +116,7 @@ func (sg *SwaggerGen) getPathItem(doc *openapi3.T, path string) *openapi3.PathIt
 	if doc.Paths == nil {
 		doc.Paths = &openapi3.Paths{}
 	}
-	pi := doc.Paths.Find(path)
+	pi := doc.Paths.Value(path)
 	if pi != nil {
 		return pi
 	}
@@ -394,7 +394,7 @@ func (sg *SwaggerGen) addRoute(ctx context.Context, doc *openapi3.T, route *Rout
 	} else {
 		routeDescription = i18n.Expand(ctx, route.Description)
 		if routeDescription == "" && sg.options.PanicOnMissingDescription {
-			log.Panicf(i18n.NewError(ctx, i18n.MsgRouteDescriptionMissing, route.Name).Error())
+			log.Panicf("%s", i18n.NewError(ctx, i18n.MsgRouteDescriptionMissing, route.Name).Error())
 		}
 	}
 	op := &openapi3.Operation{
