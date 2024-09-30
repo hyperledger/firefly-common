@@ -64,7 +64,7 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 	var rootCAs *x509.CertPool
 	switch {
 	case config.CAFile != "":
-    log.L(ctx).Debugf("Loading CA file at %s", config.CAFile)
+		log.L(ctx).Debugf("Loading CA file at %s", config.CAFile)
 		rootCAs = x509.NewCertPool()
 		var caBytes []byte
 		caBytes, err = os.ReadFile(config.CAFile)
