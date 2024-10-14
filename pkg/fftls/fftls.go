@@ -89,6 +89,7 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 
 	tlsConfig.RootCAs = rootCAs
 
+	var configuredCert *tls.Certificate
 	// For mTLS we need both the cert and key
 	if config.CertFile != "" && config.KeyFile != "" {
 		// Read the key pair to create certificate
@@ -96,13 +97,26 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, i18n.MsgInvalidKeyPairFiles)
 		}
-		tlsConfig.Certificates = []tls.Certificate{cert}
+		configuredCert = &cert
 	} else if config.Cert != "" && config.Key != "" {
 		cert, err := tls.X509KeyPair([]byte(config.Cert), []byte(config.Key))
 		if err != nil {
 			return nil, i18n.WrapError(ctx, err, i18n.MsgInvalidKeyPairFiles)
 		}
-		tlsConfig.Certificates = []tls.Certificate{cert}
+		configuredCert = &cert
+	}
+
+	if configuredCert != nil {
+		// Rather than letting Golang pick a certificate it thinks matches from the list of one,
+		// we directly supply it the one we have in all cases.
+		tlsConfig.GetClientCertificate = func(_ *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			log.L(ctx).Debugf("Supplying client certificate")
+			return configuredCert, nil
+		}
+		tlsConfig.GetCertificate = func(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			log.L(ctx).Debugf("Supplying server certificate")
+			return configuredCert, nil
+		}
 	}
 
 	if tlsType == ServerType {
