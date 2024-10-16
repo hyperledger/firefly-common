@@ -233,3 +233,7 @@ func (jd JSONObject) Hash(jsonDesc string) (*Bytes32, error) {
 	var b32 Bytes32 = sha256.Sum256(b)
 	return &b32, nil
 }
+
+func (jd JSONObject) DeepCopy() JSONObject {
+	return deepCopyMap(jd)
+}
