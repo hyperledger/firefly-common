@@ -181,7 +181,9 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 				fallthrough
 			case strings.HasPrefix(strings.ToLower(contentType), "application/json"):
 				if jsonInput != nil {
-					err = json.NewDecoder(req.Body).Decode(&jsonInput)
+					d := json.NewDecoder(req.Body)
+					d.UseNumber()
+					err = d.Decode(&jsonInput)
 				}
 			case strings.HasPrefix(strings.ToLower(contentType), "text/plain"):
 			default:

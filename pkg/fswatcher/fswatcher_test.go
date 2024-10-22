@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/sirupsen/logrus"
@@ -28,7 +29,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestFileListenerE2E(t *testing.T) {
+func TestFileReconcilerE2E(t *testing.T) {
 
 	logrus.SetLevel(logrus.DebugLevel)
 	tmpDir := t.TempDir()
@@ -47,14 +48,20 @@ func TestFileListenerE2E(t *testing.T) {
 	// Start listener on config file
 	fsListenerDone := make(chan struct{})
 	fsListenerFired := make(chan bool)
+	reSyncFired := make(chan bool)
+	reSyncInterval := 1 * time.Second
 	ctx, cancelCtx := context.WithCancel(context.Background())
-	err := Watch(ctx, filePath, func() {
+	err := Reconcile(ctx, filePath, func() {
 		err := viper.ReadInConfig()
 		assert.NoError(t, err)
 		fsListenerFired <- true
 	}, func() {
 		close(fsListenerDone)
-	})
+	}, func() {
+		err := viper.ReadInConfig()
+		assert.NoError(t, err)
+		reSyncFired <- true
+	}, &reSyncInterval)
 	assert.NoError(t, err)
 
 	// Delete and rename in another file
@@ -63,6 +70,7 @@ func TestFileListenerE2E(t *testing.T) {
 	os.Rename(fmt.Sprintf("%s/another.yaml", tmpDir), fmt.Sprintf("%s/test.yaml", tmpDir))
 	<-fsListenerFired
 	assert.Equal(t, "two", viper.Get("ut_conf"))
+	<-reSyncFired
 
 	defer func() {
 		cancelCtx()
@@ -74,7 +82,7 @@ func TestFileListenerE2E(t *testing.T) {
 
 }
 
-func TestFileListenerFail(t *testing.T) {
+func TestFileWatcherFail(t *testing.T) {
 
 	logrus.SetLevel(logrus.DebugLevel)
 	tmpDir := t.TempDir()
@@ -95,7 +103,7 @@ func TestFileListenerLogError(t *testing.T) {
 	defer cancelCtx()
 	errors := make(chan error)
 	fsListenerDone := make(chan struct{})
-	go fsListenerLoop(ctx, "somefile", func() {}, func() { close(fsListenerDone) }, make(chan fsnotify.Event), errors)
+	go fsListenerLoop(ctx, "somefile", func() {}, func() { close(fsListenerDone) }, nil, nil, make(chan fsnotify.Event), errors)
 
 	errors <- fmt.Errorf("pop")
 	cancelCtx()
