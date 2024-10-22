@@ -135,6 +135,7 @@ func GenerateConfig(ctx context.Context, conf config.Section) (*Config, error) {
 			HTTPRequestTimeout:            fftypes.FFDuration(conf.GetDuration(HTTPConfigRequestTimeout)),
 			HTTPIdleConnTimeout:           fftypes.FFDuration(conf.GetDuration(HTTPIdleTimeout)),
 			HTTPMaxIdleConns:              conf.GetInt(HTTPMaxIdleConns),
+			HTTPMaxConnsPerHost:           conf.GetInt(HTTPMaxConnsPerHost),
 			HTTPConnectionTimeout:         fftypes.FFDuration(conf.GetDuration(HTTPConnectionTimeout)),
 			HTTPTLSHandshakeTimeout:       fftypes.FFDuration(conf.GetDuration(HTTPTLSHandshakeTimeout)),
 			HTTPExpectContinueTimeout:     fftypes.FFDuration(conf.GetDuration(HTTPExpectContinueTimeout)),
