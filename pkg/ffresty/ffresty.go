@@ -80,6 +80,7 @@ type HTTPConfig struct {
 	RetryErrorStatusCodeRegex     string                                    `ffstruct:"RESTConfig" json:"retryErrorStatusCodeRegex,omitempty"`
 	HTTPMaxIdleConns              int                                       `ffstruct:"RESTConfig" json:"maxIdleConns,omitempty"`
 	HTTPMaxConnsPerHost           int                                       `ffstruct:"RESTConfig" json:"maxConnsPerHost,omitempty"`
+	HTTPMaxIdleConnsPerHost       int                                       `ffstruct:"RESTConfig" json:"maxIdleConnsPerHost,omitempty"`
 	HTTPPassthroughHeadersEnabled bool                                      `ffstruct:"RESTConfig" json:"httpPassthroughHeadersEnabled,omitempty"`
 	HTTPHeaders                   fftypes.JSONObject                        `ffstruct:"RESTConfig" json:"headers,omitempty"`
 	HTTPTLSHandshakeTimeout       fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"tlsHandshakeTimeout,omitempty"`
@@ -210,6 +211,7 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 			ForceAttemptHTTP2:     true,
 			MaxIdleConns:          ffrestyConfig.HTTPMaxIdleConns,
 			MaxConnsPerHost:       ffrestyConfig.HTTPMaxConnsPerHost,
+			MaxIdleConnsPerHost:   ffrestyConfig.HTTPMaxConnsPerHost,
 			IdleConnTimeout:       time.Duration(ffrestyConfig.HTTPIdleConnTimeout),
 			TLSHandshakeTimeout:   time.Duration(ffrestyConfig.HTTPTLSHandshakeTimeout),
 			ExpectContinueTimeout: time.Duration(ffrestyConfig.HTTPExpectContinueTimeout),

@@ -32,7 +32,8 @@ const (
 	defaultRequestTimeout                = "30s"
 	defaultHTTPIdleTimeout               = "475ms" // Node.js default keepAliveTimeout is 5 seconds, so we have to set a base below this
 	defaultHTTPMaxIdleConns              = 100     // match Go's default
-	defaultHTTPMaxConnsPerHost           = 0
+	defaultHTTPMaxConnsPerHost           = 0       // unlimited
+	defaultHTTPMaxIdleConnsPerHost       = 100     // avoid Go's conservative default of 2, we'd rather it be the same as the maxIdleConns so a single host can use all the connections
 	defaultHTTPConnectionTimeout         = "30s"
 	defaultHTTPTLSHandshakeTimeout       = "10s" // match Go's default
 	defaultHTTPExpectContinueTimeout     = "1s"  // match Go's default
@@ -75,8 +76,11 @@ const (
 	// HTTPThrottleBurst The maximum number of requests that can be made in a short period of time before the RPS throttling kicks in.
 	HTTPThrottleBurst = "throttle.burst"
 
-	// HTTPMaxConnsPerHost the max number of concurrent connections
+	// HTTPMaxConnsPerHost the max number of concurrent connections per host
 	HTTPMaxConnsPerHost = "maxConnsPerHost"
+	// HTTPMaxIdleConnsPerHost the max number of idle connections per host
+	HTTPMaxIdleConnsPerHost = "maxIdleConnsPerHost"
+
 	// HTTPConnectionTimeout the connection timeout for new connections
 	HTTPConnectionTimeout = "connectionTimeout"
 	// HTTPTLSHandshakeTimeout the TLS handshake connection timeout
@@ -107,6 +111,7 @@ func InitConfig(conf config.Section) {
 	conf.AddKnownKey(HTTPIdleTimeout, defaultHTTPIdleTimeout)
 	conf.AddKnownKey(HTTPMaxIdleConns, defaultHTTPMaxIdleConns)
 	conf.AddKnownKey(HTTPMaxConnsPerHost, defaultHTTPMaxConnsPerHost)
+	conf.AddKnownKey(HTTPMaxIdleConnsPerHost, defaultHTTPMaxIdleConnsPerHost)
 	conf.AddKnownKey(HTTPConnectionTimeout, defaultHTTPConnectionTimeout)
 	conf.AddKnownKey(HTTPTLSHandshakeTimeout, defaultHTTPTLSHandshakeTimeout)
 	conf.AddKnownKey(HTTPExpectContinueTimeout, defaultHTTPExpectContinueTimeout)
@@ -136,6 +141,7 @@ func GenerateConfig(ctx context.Context, conf config.Section) (*Config, error) {
 			HTTPIdleConnTimeout:           fftypes.FFDuration(conf.GetDuration(HTTPIdleTimeout)),
 			HTTPMaxIdleConns:              conf.GetInt(HTTPMaxIdleConns),
 			HTTPMaxConnsPerHost:           conf.GetInt(HTTPMaxConnsPerHost),
+			HTTPMaxIdleConnsPerHost:       conf.GetInt(HTTPMaxIdleConnsPerHost),
 			HTTPConnectionTimeout:         fftypes.FFDuration(conf.GetDuration(HTTPConnectionTimeout)),
 			HTTPTLSHandshakeTimeout:       fftypes.FFDuration(conf.GetDuration(HTTPTLSHandshakeTimeout)),
 			HTTPExpectContinueTimeout:     fftypes.FFDuration(conf.GetDuration(HTTPExpectContinueTimeout)),
