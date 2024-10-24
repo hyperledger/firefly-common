@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -58,6 +58,8 @@ type MetricsRegistry interface {
 	NewHTTPMetricsInstrumentationsForSubsystem(ctx context.Context, subsystem string, useRouteTemplate bool, reqDurationBuckets []float64, labels map[string]string) error
 	// GetHTTPMetricsInstrumentationsMiddlewareForSubsystem returns the HTTP middleware of a subsystem that used predefined HTTP metrics
 	GetHTTPMetricsInstrumentationsMiddlewareForSubsystem(ctx context.Context, subsystem string) (func(next http.Handler) http.Handler, error)
+
+	MustRegisterCollector(collector prometheus.Collector)
 }
 
 type FireflyDefaultLabels struct {
@@ -184,4 +186,8 @@ func (pmr *prometheusMetricsRegistry) GetHTTPMetricsInstrumentationsMiddlewareFo
 		return nil, i18n.NewError(ctx, i18n.MsgMetricsSubsystemHTTPInstrumentationNotFound)
 	}
 	return httpInstrumentation.Middleware, nil
+}
+
+func (pmr *prometheusMetricsRegistry) MustRegisterCollector(collector prometheus.Collector) {
+	pmr.registerer.MustRegister(collector)
 }
