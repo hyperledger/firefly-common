@@ -59,7 +59,7 @@ type MetricsRegistry interface {
 	// GetHTTPMetricsInstrumentationsMiddlewareForSubsystem returns the HTTP middleware of a subsystem that used predefined HTTP metrics
 	GetHTTPMetricsInstrumentationsMiddlewareForSubsystem(ctx context.Context, subsystem string) (func(next http.Handler) http.Handler, error)
 
-	RegisterCollector(ctx context.Context, collector prometheus.Collector)
+	MustRegisterCollector(ctx context.Context, collector prometheus.Collector)
 }
 
 type FireflyDefaultLabels struct {
@@ -188,6 +188,6 @@ func (pmr *prometheusMetricsRegistry) GetHTTPMetricsInstrumentationsMiddlewareFo
 	return httpInstrumentation.Middleware, nil
 }
 
-func (pmr *prometheusMetricsRegistry) RegisterCollector(ctx context.Context, collector prometheus.Collector) {
+func (pmr *prometheusMetricsRegistry) MustRegisterCollector(ctx context.Context, collector prometheus.Collector) {
 	pmr.registerer.MustRegister(collector)
 }
