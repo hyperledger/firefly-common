@@ -40,7 +40,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/go-openapi/jsonpointer v0.20.2 // indirect
-	github.com/go-openapi/swag v0.22.7 // indirect
+	github.com/go-openapi/swag v0.22.8 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
@@ -87,3 +87,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools/v3 v3.1.0 // indirect
 )
+
+replace github.com/getkin/kin-openapi v0.122.0 => /Users/enriquelacal/code/kin-openapi
