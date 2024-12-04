@@ -32,12 +32,12 @@ import (
 var allowedNameStringRegex = `^[a-zA-Z]+[a-zA-Z0-9_]*[a-zA-Z0-9]$`
 var ffMetricsPrefix = "ff"
 
-const compulsoryComponentLabel = fireflySystemLabelsPrefix + "component"
+const compulsoryComponentLabel = "component"
 
 /** Metrics names should follow the convention documented in https://prometheus.io/docs/practices/naming/. Below is an example breakdown of the term mapping:
-* Example metric: ff                _  api_server_rest    _ requests         _ total   {ff_component="tm"              , method       =  "Get"          ...}
-                  ff                _  token              _ mint_duration    _ seconds {ff_component=""                , status       =  "Success"      ...}
-* Mapping       : <firefly prefix>  _  <subsystem>        _ <metric target>  _ <unit>  {ff_component=<component name>  , <label name> =  <label value>  ...}
+* Example metric: ff                _  api_server_rest    _ requests         _ total   {component="tm"              , method       =  "Get"          ...}
+                  ff                _  token              _ mint_duration    _ seconds {component=""                , status       =  "Success"      ...}
+* Mapping       : <firefly prefix>  _  <subsystem>        _ <metric target>  _ <unit>  {component=<component name>  , <label name> =  <label value>  ...}
 */
 
 // MetricsRegistry contains all metrics defined in a micro-service.
@@ -90,16 +90,27 @@ type MetricsManager interface {
 	ObserveSummaryMetricWithLabels(ctx context.Context, metricName string, number float64, labels map[string]string, defaultLabels *FireflyDefaultLabels)
 }
 
-func NewPrometheusMetricsRegistry(fireflyComponentName string /*component name will be added to all metrics as a label*/) MetricsRegistry {
+type Options struct {
+	MetricsPrefix string
+}
+
+func NewPrometheusMetricsRegistry(componentName string /*component name will be added to all metrics as a label*/, opts *Options) MetricsRegistry {
 	registry := prometheus.NewRegistry()
-	registerer := prometheus.WrapRegistererWith(prometheus.Labels{compulsoryComponentLabel: fireflyComponentName}, registry)
+	registerer := prometheus.WrapRegistererWith(prometheus.Labels{compulsoryComponentLabel: componentName}, registry)
 
 	// register default cpu & go metrics by default
 	registerer.MustRegister(collectors.NewGoCollector())
 	registerer.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
+	metricsPrefix := ffMetricsPrefix
+	if opts != nil {
+		if opts.MetricsPrefix != "" {
+			metricsPrefix = opts.MetricsPrefix
+		}
+	}
+
 	return &prometheusMetricsRegistry{
-		namespace:                      ffMetricsPrefix,
+		namespace:                      metricsPrefix,
 		registry:                       registry,
 		registerer:                     registerer,
 		managerMap:                     make(map[string]MetricsManager),
