@@ -94,7 +94,11 @@ type Options struct {
 	MetricsPrefix string
 }
 
-func NewPrometheusMetricsRegistry(componentName string /*component name will be added to all metrics as a label*/, opts *Options) MetricsRegistry {
+func NewPrometheusMetricsRegistry(componentName string /*component name will be added to all metrics as a label*/) MetricsRegistry {
+	return NewPrometheusMetricsRegistryWithOptions(componentName, Options{})
+}
+
+func NewPrometheusMetricsRegistryWithOptions(componentName string /*component name will be added to all metrics as a label*/, opts Options) MetricsRegistry {
 	registry := prometheus.NewRegistry()
 	registerer := prometheus.WrapRegistererWith(prometheus.Labels{compulsoryComponentLabel: componentName}, registry)
 
@@ -103,10 +107,8 @@ func NewPrometheusMetricsRegistry(componentName string /*component name will be 
 	registerer.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
 	metricsPrefix := ffMetricsPrefix
-	if opts != nil {
-		if opts.MetricsPrefix != "" {
-			metricsPrefix = opts.MetricsPrefix
-		}
+	if opts.MetricsPrefix != "" {
+		metricsPrefix = opts.MetricsPrefix
 	}
 
 	return &prometheusMetricsRegistry{
