@@ -39,6 +39,16 @@ func TestMetricsRegistry(t *testing.T) {
 	assert.NotNil(t, httpHandler)
 }
 
+func TestMetricsRegistryWithOptions(t *testing.T) {
+	mr := NewPrometheusMetricsRegistryWithOptions("test", Options{
+		MetricsPrefix: "foobar",
+	})
+
+	reg := mr.(*prometheusMetricsRegistry)
+
+	assert.Equal(t, "foobar", reg.namespace)
+}
+
 func TestMetricsManager(t *testing.T) {
 	mr := NewPrometheusMetricsRegistry("test")
 	ctx, cancel := context.WithCancel(context.Background())
