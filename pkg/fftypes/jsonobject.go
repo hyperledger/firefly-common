@@ -110,7 +110,7 @@ func (jd JSONObject) GetStringOk(key string) (string, bool) {
 	case int64:
 		return strconv.FormatInt(vt, 10), true
 	case uint:
-		return strconv.FormatInt(int64(vt), 10), true
+		return strconv.FormatUint(uint64(vt), 10), true
 	case uint8:
 		return strconv.FormatInt(int64(vt), 10), true
 	case uint16:
@@ -118,7 +118,7 @@ func (jd JSONObject) GetStringOk(key string) (string, bool) {
 	case uint32:
 		return strconv.FormatInt(int64(vt), 10), true
 	case uint64:
-		return strconv.FormatInt(int64(vt), 10), true
+		return strconv.FormatUint(vt, 10), true
 	case nil:
 		return "", false // no need to log for nil
 	default:

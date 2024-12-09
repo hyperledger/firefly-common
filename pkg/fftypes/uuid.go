@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -93,12 +93,12 @@ func (u *UUID) UnmarshalBinary(b []byte) error {
 }
 
 func (u *UUID) HashBucket(buckets int) int {
-	if u == nil {
+	if u == nil || buckets <= 0 {
 		return 0
 	}
 	// Take the last random 4 bytes and mod it against the bucket count to generate
 	// a deterministic hash bucket allocation for the UUID V4
-	return int(binary.BigEndian.Uint64((*u)[8:]) % uint64(buckets))
+	return int(binary.BigEndian.Uint16((*u)[8:])) % buckets
 
 }
 

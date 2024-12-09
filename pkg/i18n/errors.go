@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -82,7 +82,7 @@ func ffWrap(err error, msgKey ErrorMessageKey) error {
 
 // NewError creates a new error
 func NewError(ctx context.Context, msg ErrorMessageKey, inserts ...interface{}) error {
-	return ffWrap(errors.Errorf(truncate(ExpandWithCode(ctx, MessageKey(msg), inserts...), 2048)), msg)
+	return ffWrap(errors.New(truncate(ExpandWithCode(ctx, MessageKey(msg), inserts...), 2048)), msg)
 }
 
 // WrapError wraps an error
