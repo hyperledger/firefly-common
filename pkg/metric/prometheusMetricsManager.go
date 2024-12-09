@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -50,7 +50,7 @@ func checkAndUpdateLabelNames(ctx context.Context, labelNames []string, withDefa
 	for _, labelName := range labelNames {
 		if strings.HasPrefix(labelName, fireflySystemLabelsPrefix) {
 			err := i18n.NewError(ctx, i18n.MsgMetricsInvalidLabel, labelName, fireflySystemLabelsPrefix)
-			log.L(ctx).Errorf(err.Error())
+			log.L(ctx).Error(err.Error())
 		} else {
 			validLabelNames = append(validLabelNames, labelName)
 		}

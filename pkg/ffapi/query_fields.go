@@ -22,6 +22,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/big"
 	"reflect"
 	"strconv"
@@ -110,11 +111,11 @@ func (f *stringField) Scan(src interface{}) error {
 	case int64:
 		f.s = strconv.FormatInt(tv, 10)
 	case uint:
-		f.s = strconv.FormatInt(int64(tv), 10)
+		f.s = strconv.FormatUint(uint64(tv), 10)
 	case uint32:
-		f.s = strconv.FormatInt(int64(tv), 10)
+		f.s = strconv.FormatUint(uint64(tv), 10)
 	case uint64:
-		f.s = strconv.FormatInt(int64(tv), 10)
+		f.s = strconv.FormatUint(tv, 10)
 	case *fftypes.UUID:
 		if tv != nil {
 			f.s = tv.String()
@@ -242,10 +243,16 @@ func (f *int64Field) Scan(src interface{}) (err error) {
 	case int64:
 		f.i = tv
 	case uint:
+		if tv > math.MaxInt64 {
+			return i18n.NewError(context.Background(), i18n.MsgTypeRestoreFailed, src, f.i)
+		}
 		f.i = int64(tv)
 	case uint32:
 		f.i = int64(tv)
 	case uint64:
+		if tv > math.MaxInt64 {
+			return i18n.NewError(context.Background(), i18n.MsgTypeRestoreFailed, src, f.i)
+		}
 		f.i = int64(tv)
 	case string:
 		f.i, err = strconv.ParseInt(src.(string), 10, 64)
@@ -277,10 +284,16 @@ func (f *bigIntField) Scan(src interface{}) (err error) {
 	case int64:
 		f.i = fftypes.NewFFBigInt(tv)
 	case uint:
+		if tv > math.MaxInt64 {
+			return i18n.NewError(context.Background(), i18n.MsgTypeRestoreFailed, src, f.i)
+		}
 		f.i = fftypes.NewFFBigInt(int64(tv))
 	case uint32:
 		f.i = fftypes.NewFFBigInt(int64(tv))
 	case uint64:
+		if tv > math.MaxInt64 {
+			return i18n.NewError(context.Background(), i18n.MsgTypeRestoreFailed, src, f.i)
+		}
 		f.i = fftypes.NewFFBigInt(int64(tv))
 	case fftypes.FFBigInt:
 		i := tv

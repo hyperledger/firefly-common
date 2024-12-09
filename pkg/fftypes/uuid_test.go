@@ -1,4 +1,4 @@
-// Copyright © 2021 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -93,6 +93,8 @@ func TestHashBucket(t *testing.T) {
 	assert.Equal(t, 0, u3.HashBucket(2))
 
 	assert.Equal(t, 0, ((*UUID)(nil)).HashBucket(12345))
+	assert.Equal(t, 0, u3.HashBucket(-1))
+	assert.Equal(t, 0, u3.HashBucket(0))
 
 }
 

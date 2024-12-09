@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -29,28 +29,32 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/hyperledger/firefly-common/pkg/ffresty"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
 	"github.com/hyperledger/firefly-common/pkg/retry"
+	"golang.org/x/time/rate"
 )
 
 type WSConfig struct {
-	HTTPURL                string             `json:"httpUrl,omitempty"`
-	WebSocketURL           string             `json:"wsUrl,omitempty"`
-	WSKeyPath              string             `json:"wsKeyPath,omitempty"`
-	ReadBufferSize         int                `json:"readBufferSize,omitempty"`
-	WriteBufferSize        int                `json:"writeBufferSize,omitempty"`
-	InitialDelay           time.Duration      `json:"initialDelay,omitempty"`
-	MaximumDelay           time.Duration      `json:"maximumDelay,omitempty"`
-	InitialConnectAttempts int                `json:"initialConnectAttempts,omitempty"`
-	DisableReconnect       bool               `json:"disableReconnect"`
-	AuthUsername           string             `json:"authUsername,omitempty"`
-	AuthPassword           string             `json:"authPassword,omitempty"`
-	HTTPHeaders            fftypes.JSONObject `json:"headers,omitempty"`
-	HeartbeatInterval      time.Duration      `json:"heartbeatInterval,omitempty"`
-	TLSClientConfig        *tls.Config        `json:"tlsClientConfig,omitempty"`
-	ConnectionTimeout      time.Duration      `json:"connectionTimeout,omitempty"`
+	HTTPURL                   string             `json:"httpUrl,omitempty"`
+	WebSocketURL              string             `json:"wsUrl,omitempty"`
+	WSKeyPath                 string             `json:"wsKeyPath,omitempty"`
+	ReadBufferSize            int                `json:"readBufferSize,omitempty"`
+	WriteBufferSize           int                `json:"writeBufferSize,omitempty"`
+	InitialDelay              time.Duration      `json:"initialDelay,omitempty"`
+	MaximumDelay              time.Duration      `json:"maximumDelay,omitempty"`
+	InitialConnectAttempts    int                `json:"initialConnectAttempts,omitempty"`
+	DisableReconnect          bool               `json:"disableReconnect"`
+	AuthUsername              string             `json:"authUsername,omitempty"`
+	AuthPassword              string             `json:"authPassword,omitempty"`
+	ThrottleRequestsPerSecond int                `json:"requestsPerSecond,omitempty"`
+	ThrottleBurst             int                `json:"burst,omitempty"`
+	HTTPHeaders               fftypes.JSONObject `json:"headers,omitempty"`
+	HeartbeatInterval         time.Duration      `json:"heartbeatInterval,omitempty"`
+	TLSClientConfig           *tls.Config        `json:"tlsClientConfig,omitempty"`
+	ConnectionTimeout         time.Duration      `json:"connectionTimeout,omitempty"`
 	// This one cannot be set in JSON - must be configured on the code interface
 	ReceiveExt bool
 }
@@ -109,6 +113,7 @@ type wsClient struct {
 	heartbeatMux         sync.Mutex
 	activePingSent       *time.Time
 	lastPingCompleted    time.Time
+	rateLimiter          *rate.Limiter
 }
 
 // WSPreConnectHandler will be called before every connect/reconnect. Any error returned will prevent the websocket from connecting.
@@ -146,6 +151,7 @@ func New(ctx context.Context, config *WSConfig, beforeConnect WSPreConnectHandle
 		heartbeatInterval:    config.HeartbeatInterval,
 		useReceiveExt:        config.ReceiveExt,
 		disableReconnect:     config.DisableReconnect,
+		rateLimiter:          ffresty.GetRateLimiter(config.ThrottleRequestsPerSecond, config.ThrottleBurst),
 	}
 	if w.useReceiveExt {
 		w.receiveExt = make(chan *WSPayload)
@@ -220,6 +226,13 @@ func (w *wsClient) SetHeader(header, value string) {
 }
 
 func (w *wsClient) Send(ctx context.Context, message []byte) error {
+	if w.rateLimiter != nil {
+		// Wait for permission to proceed with the request
+		err := w.rateLimiter.Wait(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	// Send
 	select {
 	case w.send <- message:

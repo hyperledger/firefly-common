@@ -278,7 +278,7 @@ func (hs *HandlerFactory) handleOutput(ctx context.Context, res http.ResponseWri
 	}
 	if marshalErr != nil {
 		err := i18n.WrapError(ctx, marshalErr, i18n.MsgResponseMarshalError)
-		log.L(ctx).Errorf(err.Error())
+		log.L(ctx).Error(err.Error())
 		return 500, err
 	}
 	return status, nil
