@@ -31,6 +31,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/time/rate"
 )
 
 func generateConfig() *WSConfig {
@@ -658,4 +659,182 @@ func TestWSClientContextClosed(t *testing.T) {
 	assert.NotNil(t, wsc)
 	err = wsc.Send(context.Background(), []byte{})
 	assert.Regexp(t, "FF00147", err)
+}
+
+func TestRequestWithRateLimiter(t *testing.T) {
+	rps := 5
+	expectedNumberOfRequest := 20 // should take longer than 3 seconds less than 4 seconds
+
+	wsMockCount := 0
+	toServer, _, url, close := NewTestWSServer(func(req *http.Request) {
+		wsMockCount++
+		assert.Equal(t, "/test/updated", req.URL.Path)
+	})
+	defer close()
+
+	beforeConnect := func(ctx context.Context, w WSClient) error {
+		return nil
+	}
+	afterConnect := func(ctx context.Context, w WSClient) error {
+		return w.Send(ctx, []byte(`after connect message`))
+	}
+
+	// Init clean config
+	wsConfig := generateConfig()
+
+	wsConfig.HTTPURL = url
+	wsConfig.WSKeyPath = "/test"
+	wsConfig.ThrottleRequestsPerSecond = rps
+
+	wsc, err := New(context.Background(), wsConfig, beforeConnect, afterConnect)
+	assert.NoError(t, err)
+
+	//  Change the settings and connect
+	wsc.SetURL(wsc.URL() + "/updated")
+	err = wsc.Connect()
+	assert.NoError(t, err)
+
+	// Receive the message automatically sent in afterConnect
+	message1 := <-toServer
+	assert.Equal(t, `after connect message`, message1)
+
+	requestChan := make(chan bool, expectedNumberOfRequest)
+	startTime := time.Now()
+	for i := 0; i < expectedNumberOfRequest; i++ {
+		go func() {
+			// Send some data back
+			err = wsc.Send(context.Background(), []byte(`some data to server`))
+			assert.NoError(t, err)
+
+			// Check the sevrer got it
+			message2 := <-toServer
+			assert.Equal(t, `some data to server`, message2)
+			requestChan <- true
+		}()
+	}
+	count := 0
+	for {
+		<-requestChan
+		count++
+		if count == expectedNumberOfRequest {
+			break
+
+		}
+	}
+
+	// check duration is between 3 and 4 seconds based on the rate limit setting
+	duration := time.Since(startTime)
+	assert.GreaterOrEqual(t, duration, 3*time.Second)
+	assert.LessOrEqual(t, duration, 4*time.Second)
+	// Close the client
+	wsc.Close()
+
+}
+
+func TestRequestWithRateLimiterHighBurst(t *testing.T) {
+	expectedNumberOfRequest := 20 // allow all requests to be processed within 1 second
+
+	wsMockCount := 0
+	toServer, _, url, close := NewTestWSServer(func(req *http.Request) {
+		wsMockCount++
+		assert.Equal(t, "/test/updated", req.URL.Path)
+	})
+	defer close()
+
+	beforeConnect := func(ctx context.Context, w WSClient) error {
+		return nil
+	}
+	afterConnect := func(ctx context.Context, w WSClient) error {
+		return w.Send(ctx, []byte(`after connect message`))
+	}
+
+	// Init clean config
+	wsConfig := generateConfig()
+
+	wsConfig.HTTPURL = url
+	wsConfig.WSKeyPath = "/test"
+	wsConfig.ThrottleBurst = expectedNumberOfRequest
+
+	wsc, err := New(context.Background(), wsConfig, beforeConnect, afterConnect)
+	assert.NoError(t, err)
+
+	//  Change the settings and connect
+	wsc.SetURL(wsc.URL() + "/updated")
+	err = wsc.Connect()
+	assert.NoError(t, err)
+
+	// Receive the message automatically sent in afterConnect
+	message1 := <-toServer
+	assert.Equal(t, `after connect message`, message1)
+
+	requestChan := make(chan bool, expectedNumberOfRequest)
+	startTime := time.Now()
+	for i := 0; i < expectedNumberOfRequest; i++ {
+		go func() {
+			// Send some data back
+			err = wsc.Send(context.Background(), []byte(`some data to server`))
+			assert.NoError(t, err)
+
+			// Check the sevrer got it
+			message2 := <-toServer
+			assert.Equal(t, `some data to server`, message2)
+			requestChan <- true
+		}()
+	}
+	count := 0
+	for {
+		<-requestChan
+		count++
+		if count == expectedNumberOfRequest {
+			break
+
+		}
+	}
+
+	duration := time.Since(startTime)
+	assert.Less(t, duration, 1*time.Second)
+	// Close the client
+	wsc.Close()
+}
+
+func TestRateLimiterFailure(t *testing.T) {
+	toServer, _, url, close := NewTestWSServer(func(req *http.Request) {
+		assert.Equal(t, "/test/updated", req.URL.Path)
+	})
+	defer close()
+
+	beforeConnect := func(ctx context.Context, w WSClient) error {
+		return nil
+	}
+	afterConnect := func(ctx context.Context, w WSClient) error {
+		return w.Send(ctx, []byte(`after connect message`))
+	}
+
+	// Init clean config
+	wsConfig := generateConfig()
+
+	wsConfig.HTTPURL = url
+	wsConfig.WSKeyPath = "/test"
+
+	wsc, err := New(context.Background(), wsConfig, beforeConnect, afterConnect)
+	assert.NoError(t, err)
+
+	//  Change the settings and connect
+	wsc.SetURL(wsc.URL() + "/updated")
+	err = wsc.Connect()
+	assert.NoError(t, err)
+
+	// Receive the message automatically sent in afterConnect
+	message1 := <-toServer
+	assert.Equal(t, `after connect message`, message1)
+
+	internalWsc := wsc.(*wsClient)
+	internalWsc.rateLimiter = rate.NewLimiter(rate.Limit(1), 0) // artificially create an broken rate limiter, this is not possible with our config default
+	// Send some data back
+	err = wsc.Send(context.Background(), []byte(`some data to server`))
+	assert.Error(t, err)
+	assert.Regexp(t, "exceeds", err)
+
+	// Close the client
+	wsc.Close()
 }
