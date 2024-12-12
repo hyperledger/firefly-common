@@ -40,6 +40,13 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const (
+	metricsHTTPResponsesTotal  = "http_responses_total"
+	metricsNetworkErrorsTotal  = "network_errors_total"
+	metricsHTTPRequestBodySize = "http_request_body_size_bytes"
+	metricsHTTPResponseTime    = "http_response_time_seconds"
+)
+
 type retryCtxKey struct{}
 
 type retryCtx struct {
@@ -98,8 +105,10 @@ func EnableClientMetrics(ctx context.Context, metricsRegistry metric.MetricsRegi
 		if err != nil {
 			return err
 		}
-		metricsManager.NewCounterMetricWithLabels(ctx, "http_response", "HTTP response", []string{"status", "error", "host", "method"}, false)
-		metricsManager.NewCounterMetricWithLabels(ctx, "network_error", "Network error", []string{"host", "method"}, false)
+		metricsManager.NewCounterMetricWithLabels(ctx, metricsHTTPResponsesTotal, "HTTP response", []string{"status", "error", "host", "method"}, false)
+		metricsManager.NewCounterMetricWithLabels(ctx, metricsNetworkErrorsTotal, "Network error", []string{"host", "method"}, false)
+		metricsManager.NewSummaryMetricWithLabels(ctx, metricsHTTPRequestBodySize, "HTTP request body size", []string{"host", "method"}, false)
+		metricsManager.NewSummaryMetricWithLabels(ctx, metricsHTTPResponseTime, "HTTP response time", []string{"status", "host", "method"}, false)
 	}
 
 	// create hooks
@@ -109,7 +118,7 @@ func EnableClientMetrics(ctx context.Context, metricsRegistry metric.MetricsRegi
 		host := u.Host
 		// whilst there it is a possibility to get an response returned in the error here (and resty doc for OnError shows this) it seems to be a special case and the statuscode in such cases was not set.
 		// therefore we log all cases as network_error we may in future find reason to extract more detail from the error
-		metricsManager.IncCounterMetricWithLabels(ctx, "network_error", map[string]string{"host": host, "method": method}, nil)
+		metricsManager.IncCounterMetricWithLabels(ctx, metricsNetworkErrorsTotal, map[string]string{"host": host, "method": method}, nil)
 	}
 	RegisterGlobalOnError(onErrorMetricsHook)
 
@@ -118,7 +127,7 @@ func EnableClientMetrics(ctx context.Context, metricsRegistry metric.MetricsRegi
 		u, _ := url.Parse(resp.Request.URL)
 		host := u.Host
 		code := resp.RawResponse.StatusCode
-		metricsManager.IncCounterMetricWithLabels(ctx, "http_response", map[string]string{"status": fmt.Sprintf("%d", code), "error": "false", "host": host, "method": method}, nil)
+		metricsManager.IncCounterMetricWithLabels(ctx, metricsHTTPResponsesTotal, map[string]string{"status": fmt.Sprintf("%d", code), "error": "false", "host": host, "method": method}, nil)
 	}
 	RegisterGlobalOnSuccess(onSuccessMetricsHook)
 	return nil
@@ -142,13 +151,17 @@ func OnAfterResponse(c *resty.Client, resp *resty.Response) {
 	}
 	rCtx := resp.Request.Context()
 	rc := rCtx.Value(retryCtxKey{}).(*retryCtx)
-	elapsed := float64(time.Since(rc.start)) / float64(time.Millisecond)
+	elapsed := float64(time.Since(rc.start))
 	level := logrus.DebugLevel
 	status := resp.StatusCode()
 	if status >= 300 {
 		level = logrus.ErrorLevel
 	}
-	log.L(rCtx).Logf(level, "<== %s %s [%d] (%.2fms)", resp.Request.Method, resp.Request.URL, status, elapsed)
+	log.L(rCtx).Logf(level, "<== %s %s [%d] (%.2fms)", resp.Request.Method, resp.Request.URL, status, elapsed/float64(time.Millisecond))
+	if metricsManager != nil {
+		metricsManager.ObserveSummaryMetricWithLabels(rCtx, metricsHTTPResponseTime, elapsed/float64(time.Second), map[string]string{"status": fmt.Sprintf("%d", status), "host": rCtx.Value("host").(string), "method": resp.Request.Method}, nil)
+	}
+	// TODO use req.TraceInfo() for richer metrics at the DNS and transport layer
 }
 
 func OnError(req *resty.Request, err error) {
@@ -232,10 +245,10 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 
 	rateLimiterMap[client] = GetRateLimiter(ffrestyConfig.ThrottleRequestsPerSecond, ffrestyConfig.ThrottleBurst)
 
-	url := strings.TrimSuffix(ffrestyConfig.URL, "/")
-	if url != "" {
-		client.SetBaseURL(url)
-		log.L(ctx).Debugf("Created REST client to %s", url)
+	_url := strings.TrimSuffix(ffrestyConfig.URL, "/")
+	if _url != "" {
+		client.SetBaseURL(_url)
+		log.L(ctx).Debugf("Created REST client to %s", _url)
 	}
 
 	if ffrestyConfig.ProxyURL != "" {
@@ -263,6 +276,10 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 			rCtx = context.WithValue(rCtx, retryCtxKey{}, r)
 			// Create a request logger from the root logger passed into the client
 			rCtx = log.WithLogField(rCtx, "breq", r.id)
+			// Record host in context to avoid redundant parses in hooks
+			u, _ := url.Parse(req.URL)
+			host := u.Host
+			rCtx = context.WithValue(rCtx, "host", host)
 			req.SetContext(rCtx)
 		}
 
@@ -289,8 +306,25 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 			}
 		}
 
-		log.L(rCtx).Debugf("==> %s %s%s", req.Method, url, req.URL)
+		log.L(rCtx).Debugf("==> %s %s%s", req.Method, _url, req.URL)
 		log.L(rCtx).Tracef("==> (body) %+v", req.Body)
+
+		// If metrics are enabled, record the request size as its sent
+		if metricsManager != nil {
+			bodyReader := req.RawRequest.Body
+			out, in := io.Pipe()
+			go func() {
+				defer in.Close()
+				var requestSize int64
+				var err error
+				if requestSize, err = io.Copy(in, bodyReader); err != nil {
+					log.L(rCtx).Warnf("Failed to copy request body: %s", err)
+				}
+				metricsManager.ObserveSummaryMetricWithLabels(rCtx, metricsHTTPRequestBodySize, float64(requestSize), map[string]string{"host": rCtx.Value("host").(string), "method": req.Method}, nil)
+			}()
+			req.SetBody(out)
+		}
+
 		return nil
 	})
 
