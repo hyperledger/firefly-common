@@ -48,6 +48,7 @@ const (
 )
 
 type retryCtxKey struct{}
+type hostCtxKey struct{}
 
 type retryCtx struct {
 	id       string
@@ -112,21 +113,14 @@ func EnableClientMetrics(ctx context.Context, metricsRegistry metric.MetricsRegi
 
 	// create hooks
 	onErrorMetricsHook := func(req *resty.Request, _ error) {
-		method := req.Method
-		u, _ := url.Parse(req.URL)
-		host := u.Host
 		// whilst there it is a possibility to get an response returned in the error here (and resty doc for OnError shows this) it seems to be a special case and the statuscode in such cases was not set.
 		// therefore we log all cases as network_error we may in future find reason to extract more detail from the error
-		metricsManager.IncCounterMetricWithLabels(ctx, metricsNetworkErrorsTotal, map[string]string{"host": host, "method": method}, nil)
+		metricsManager.IncCounterMetricWithLabels(ctx, metricsNetworkErrorsTotal, map[string]string{"host": req.Context().Value(hostCtxKey{}).(string), "method": req.Method}, nil)
 	}
 	RegisterGlobalOnError(onErrorMetricsHook)
 
 	onSuccessMetricsHook := func(_ *resty.Client, resp *resty.Response) {
-		method := resp.Request.Method
-		u, _ := url.Parse(resp.Request.URL)
-		host := u.Host
-		code := resp.RawResponse.StatusCode
-		metricsManager.IncCounterMetricWithLabels(ctx, metricsHTTPResponsesTotal, map[string]string{"status": fmt.Sprintf("%d", code), "error": "false", "host": host, "method": method}, nil)
+		metricsManager.IncCounterMetricWithLabels(ctx, metricsHTTPResponsesTotal, map[string]string{"status": fmt.Sprintf("%d", resp.RawResponse.StatusCode), "error": "false", "host": resp.Request.Context().Value(hostCtxKey{}).(string), "method": resp.Request.Method}, nil)
 	}
 	RegisterGlobalOnSuccess(onSuccessMetricsHook)
 	return nil
@@ -158,7 +152,7 @@ func OnAfterResponse(c *resty.Client, resp *resty.Response) {
 	}
 	log.L(rCtx).Logf(level, "<== %s %s [%d] (%.2fms)", resp.Request.Method, resp.Request.URL, status, elapsed/float64(time.Millisecond))
 	if metricsManager != nil {
-		metricsManager.ObserveSummaryMetricWithLabels(rCtx, metricsHTTPResponseTime, elapsed/float64(time.Second), map[string]string{"status": fmt.Sprintf("%d", status), "host": rCtx.Value("host").(string), "method": resp.Request.Method}, nil)
+		metricsManager.ObserveSummaryMetricWithLabels(rCtx, metricsHTTPResponseTime, elapsed/float64(time.Second), map[string]string{"status": fmt.Sprintf("%d", status), "host": rCtx.Value(hostCtxKey{}).(string), "method": resp.Request.Method}, nil)
 	}
 	// TODO use req.TraceInfo() for richer metrics at the DNS and transport layer
 }
@@ -278,7 +272,7 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 			// Record host in context to avoid redundant parses in hooks
 			u, _ := url.Parse(req.URL)
 			host := u.Host
-			rCtx = context.WithValue(rCtx, "host", host)
+			rCtx = context.WithValue(rCtx, hostCtxKey{}, host)
 			req.SetContext(rCtx)
 		}
 
