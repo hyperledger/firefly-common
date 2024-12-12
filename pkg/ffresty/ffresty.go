@@ -107,7 +107,6 @@ func EnableClientMetrics(ctx context.Context, metricsRegistry metric.MetricsRegi
 		}
 		metricsManager.NewCounterMetricWithLabels(ctx, metricsHTTPResponsesTotal, "HTTP response", []string{"status", "error", "host", "method"}, false)
 		metricsManager.NewCounterMetricWithLabels(ctx, metricsNetworkErrorsTotal, "Network error", []string{"host", "method"}, false)
-		metricsManager.NewSummaryMetricWithLabels(ctx, metricsHTTPRequestBodySize, "HTTP request body size", []string{"host", "method"}, false)
 		metricsManager.NewSummaryMetricWithLabels(ctx, metricsHTTPResponseTime, "HTTP response time", []string{"status", "host", "method"}, false)
 	}
 
@@ -308,22 +307,6 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 
 		log.L(rCtx).Debugf("==> %s %s%s", req.Method, _url, req.URL)
 		log.L(rCtx).Tracef("==> (body) %+v", req.Body)
-
-		// If metrics are enabled, record the request size as its sent
-		if metricsManager != nil {
-			bodyReader := req.RawRequest.Body
-			out, in := io.Pipe()
-			go func() {
-				defer in.Close()
-				var requestSize int64
-				var err error
-				if requestSize, err = io.Copy(in, bodyReader); err != nil {
-					log.L(rCtx).Warnf("Failed to copy request body: %s", err)
-				}
-				metricsManager.ObserveSummaryMetricWithLabels(rCtx, metricsHTTPRequestBodySize, float64(requestSize), map[string]string{"host": rCtx.Value("host").(string), "method": req.Method}, nil)
-			}()
-			req.SetBody(out)
-		}
 
 		return nil
 	})
