@@ -41,10 +41,9 @@ import (
 )
 
 const (
-	metricsHTTPResponsesTotal  = "http_responses_total"
-	metricsNetworkErrorsTotal  = "network_errors_total"
-	metricsHTTPRequestBodySize = "http_request_body_size_bytes"
-	metricsHTTPResponseTime    = "http_response_time_seconds"
+	metricsHTTPResponsesTotal = "http_responses_total"
+	metricsNetworkErrorsTotal = "network_errors_total"
+	metricsHTTPResponseTime   = "http_response_time_seconds"
 )
 
 type retryCtxKey struct{}
@@ -259,6 +258,10 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 			}
 		}
 		rCtx := req.Context()
+		// Record host in context to avoid redundant parses in hooks
+		u, _ := url.Parse(req.URL)
+		host := u.Host
+		rCtx = context.WithValue(rCtx, hostCtxKey{}, host)
 		rc := rCtx.Value(retryCtxKey{})
 		if rc == nil {
 			// First attempt
@@ -269,10 +272,6 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 			rCtx = context.WithValue(rCtx, retryCtxKey{}, r)
 			// Create a request logger from the root logger passed into the client
 			rCtx = log.WithLogField(rCtx, "breq", r.id)
-			// Record host in context to avoid redundant parses in hooks
-			u, _ := url.Parse(req.URL)
-			host := u.Host
-			rCtx = context.WithValue(rCtx, hostCtxKey{}, host)
 			req.SetContext(rCtx)
 		}
 
