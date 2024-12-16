@@ -681,7 +681,7 @@ func TestMTLSClientWithServer(t *testing.T) {
 	var restyConfig = config.RootSection("resty")
 	InitConfig(restyConfig)
 	clientTLSSection := restyConfig.SubSection("tls")
-	restyConfig.Set(HTTPConfigURL, ln.Addr())
+	restyConfig.Set(HTTPConfigURL, ln.Addr()) // note this does not have https:// in the URL
 	clientTLSSection.Set(fftls.HTTPConfTLSEnabled, true)
 	clientTLSSection.Set(fftls.HTTPConfTLSKeyFile, privateKeyFile.Name())
 	clientTLSSection.Set(fftls.HTTPConfTLSCertFile, publicKeyFile.Name())

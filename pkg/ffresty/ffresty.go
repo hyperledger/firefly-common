@@ -259,9 +259,22 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 		}
 		rCtx := req.Context()
 		// Record host in context to avoid redundant parses in hooks
-		u, _ := url.Parse(_url)
-		host := u.Host
-		rCtx = context.WithValue(rCtx, hostCtxKey{}, host)
+		var u *url.URL
+		if req.URL != "" {
+			u, _ = url.Parse(req.URL)
+		}
+		// The req.URL might have only set a path i.e. /home, fallbacking to the base URL of the client.
+		// So if the URL is nil, that's likely the case and we'll derive the host from the configured
+		// based instead.
+		if u == nil && _url != "" {
+			u, _ = url.Parse(_url)
+		}
+		if u != nil && u.Host != "" {
+			host := u.Host
+			rCtx = context.WithValue(rCtx, hostCtxKey{}, host)
+		} else {
+			rCtx = context.WithValue(rCtx, hostCtxKey{}, "unknown")
+		}
 		rc := rCtx.Value(retryCtxKey{})
 		if rc == nil {
 			// First attempt
