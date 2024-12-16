@@ -143,15 +143,15 @@ func OnAfterResponse(c *resty.Client, resp *resty.Response) {
 	}
 	rCtx := resp.Request.Context()
 	rc := rCtx.Value(retryCtxKey{}).(*retryCtx)
-	elapsed := float64(time.Since(rc.start))
+	elapsed := time.Since(rc.start)
 	level := logrus.DebugLevel
 	status := resp.StatusCode()
 	if status >= 300 {
 		level = logrus.ErrorLevel
 	}
-	log.L(rCtx).Logf(level, "<== %s %s [%d] (%.2fms)", resp.Request.Method, resp.Request.URL, status, elapsed/float64(time.Millisecond))
+	log.L(rCtx).Logf(level, "<== %s %s [%d] (%dms)", resp.Request.Method, resp.Request.URL, status, time.Since(rc.start).Milliseconds())
 	if metricsManager != nil {
-		metricsManager.ObserveSummaryMetricWithLabels(rCtx, metricsHTTPResponseTime, elapsed/float64(time.Second), map[string]string{"status": fmt.Sprintf("%d", status), "host": rCtx.Value(hostCtxKey{}).(string), "method": resp.Request.Method}, nil)
+		metricsManager.ObserveSummaryMetricWithLabels(rCtx, metricsHTTPResponseTime, elapsed.Seconds(), map[string]string{"status": fmt.Sprintf("%d", status), "host": rCtx.Value(hostCtxKey{}).(string), "method": resp.Request.Method}, nil)
 	}
 	// TODO use req.TraceInfo() for richer metrics at the DNS and transport layer
 }
