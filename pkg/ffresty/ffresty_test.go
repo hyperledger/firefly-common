@@ -674,7 +674,6 @@ func TestEnableClientMetrics(t *testing.T) {
 
 	err := EnableClientMetrics(ctx, mr)
 	assert.NoError(t, err)
-
 }
 
 func TestEnableClientMetricsIdempotent(t *testing.T) {
@@ -701,6 +700,7 @@ func TestHooks(t *testing.T) {
 	}
 
 	customOnSuccess := func(c *resty.Client, resp *resty.Response) {
+		assert.Equal(t, "localhost:12345", resp.Request.Context().Value(hostCtxKey{}).(string))
 		onSuccessCount++
 	}
 
