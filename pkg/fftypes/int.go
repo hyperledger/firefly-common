@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -45,7 +45,7 @@ func (i *FFuint64) UnmarshalJSON(b []byte) error {
 		if !ok {
 			return i18n.NewError(context.Background(), i18n.MsgBigIntParseFailed, b)
 		}
-		*i = FFuint64(bi.Int64())
+		*i = FFuint64(bi.Uint64())
 		return nil
 	case float64:
 		*i = FFuint64(val)

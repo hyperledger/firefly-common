@@ -195,7 +195,7 @@ func TestRequestWithRateLimiter(t *testing.T) {
 }
 
 func TestRequestWithRateLimiterHighBurst(t *testing.T) {
-	expectedNumberOfRequest := 20 // should take longer than 3 seconds less than 4 seconds
+	expectedNumberOfRequest := 20 // allow all requests to be processed within 1 second
 
 	customClient := &http.Client{}
 
@@ -273,12 +273,12 @@ func TestRateLimiterFailure(t *testing.T) {
 			assert.Equal(t, "Basic dXNlcjpwYXNz", req.Header.Get("Authorization"))
 			return httpmock.NewStringResponder(200, `{"some": "data"}`)(req)
 		})
-	rateLimiter = rate.NewLimiter(rate.Limit(1), 0) // artificially create an broken rate limiter, this is not possible with our config default
+	rateLimiterMap[c] = rate.NewLimiter(rate.Limit(1), 0) // artificially create an broken rate limiter, this is not possible with our config default
 	resp, err := c.R().Get("/test")
 	assert.Error(t, err)
 	assert.Regexp(t, "exceeds", err)
 	assert.Nil(t, resp)
-	rateLimiter = nil // reset limiter
+	rateLimiterMap = nil // reset limiter
 }
 
 func TestRequestRetry(t *testing.T) {
