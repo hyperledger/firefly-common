@@ -82,6 +82,11 @@ type MetricsManager interface {
 	// functions for emitting metrics
 	SetGaugeMetric(ctx context.Context, metricName string, number float64, defaultLabels *FireflyDefaultLabels)
 	SetGaugeMetricWithLabels(ctx context.Context, metricName string, number float64, labels map[string]string, defaultLabels *FireflyDefaultLabels)
+	IncGaugeMetric(ctx context.Context, metricName string, defaultLabels *FireflyDefaultLabels)
+	IncGaugeMetricWithLabels(ctx context.Context, metricName string, labels map[string]string, defaultLabels *FireflyDefaultLabels)
+	DecGaugeMetric(ctx context.Context, metricName string, defaultLabels *FireflyDefaultLabels)
+	DecGaugeMetricWithLabels(ctx context.Context, metricName string, labels map[string]string, defaultLabels *FireflyDefaultLabels)
+
 	IncCounterMetric(ctx context.Context, metricName string, defaultLabels *FireflyDefaultLabels)
 	IncCounterMetricWithLabels(ctx context.Context, metricName string, labels map[string]string, defaultLabels *FireflyDefaultLabels)
 	ObserveHistogramMetric(ctx context.Context, metricName string, number float64, defaultLabels *FireflyDefaultLabels)
