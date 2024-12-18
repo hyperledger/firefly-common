@@ -17,6 +17,8 @@
 package ffresty
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -27,6 +29,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math/big"
 	"net"
@@ -81,6 +84,51 @@ func TestRequestOK(t *testing.T) {
 			assert.Equal(t, "headervalue", req.Header.Get("someheader"))
 			assert.Equal(t, "Basic dXNlcjpwYXNz", req.Header.Get("Authorization"))
 			return httpmock.NewStringResponder(200, `{"some": "data"}`)(req)
+		})
+
+	resp, err := c.R().Get("/test")
+	assert.NoError(t, err)
+	assert.Equal(t, 200, resp.StatusCode())
+	assert.Equal(t, `{"some": "data"}`, resp.String())
+
+	assert.Equal(t, 1, httpmock.GetTotalCallCount())
+}
+
+func TestRequestOKForGzip(t *testing.T) {
+
+	customClient := &http.Client{}
+
+	resetConf()
+	utConf.Set(HTTPConfigURL, "http://localhost:12345")
+	utConf.Set(HTTPConfigHeaders, map[string]interface{}{
+		"someheader": "headervalue",
+	})
+	utConf.Set(HTTPConfigAuthUsername, "user")
+	utConf.Set(HTTPConfigAuthPassword, "pass")
+	utConf.Set(HTTPConfigRetryEnabled, true)
+	utConf.Set(HTTPCustomClient, customClient)
+
+	c, err := New(context.Background(), utConf)
+	assert.Nil(t, err)
+	httpmock.ActivateNonDefault(customClient)
+	defer httpmock.DeactivateAndReset()
+
+	httpmock.RegisterResponder("GET", "http://localhost:12345/test",
+		func(req *http.Request) (*http.Response, error) {
+			assert.Equal(t, "headervalue", req.Header.Get("someheader"))
+			assert.Equal(t, "Basic dXNlcjpwYXNz", req.Header.Get("Authorization"))
+			resp := httpmock.NewStringResponse(200, `{"some": "data"}`)
+			resp.Header.Set("Content-Encoding", "gzip")
+			var b bytes.Buffer
+			gz := gzip.NewWriter(&b)
+			if _, err := gz.Write([]byte(`{"some": "data"}`)); err != nil {
+				return nil, err
+			}
+			if err := gz.Close(); err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(&b)
+			return resp, nil
 		})
 
 	resp, err := c.R().Get("/test")
