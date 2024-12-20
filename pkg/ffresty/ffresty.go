@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
@@ -249,7 +250,7 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 	client.SetTimeout(time.Duration(ffrestyConfig.HTTPRequestTimeout))
 
 	client.OnBeforeRequest(func(c *resty.Client, req *resty.Request) error {
-		if rateLimiter != nil {
+		if rateLimiterMap[client] != nil {
 			// Wait for permission to proceed with the request
 			err := rateLimiterMap[client].Wait(req.Context())
 			if err != nil {
