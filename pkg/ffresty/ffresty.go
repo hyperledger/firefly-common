@@ -259,7 +259,6 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 		}
 		rCtx := req.Context()
 		// Record host in context to avoid redundant parses in hooks
-		rCtx = context.WithValue(rCtx, hostCtxKey{}, "unknown")
 		var u *url.URL
 		if req.URL != "" {
 			u, _ = url.Parse(req.URL)
@@ -276,6 +275,8 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 		if u != nil && u.Host != "" {
 			host := u.Host
 			rCtx = context.WithValue(rCtx, hostCtxKey{}, host)
+		} else {
+			rCtx = context.WithValue(rCtx, hostCtxKey{}, "unknown")
 		}
 		rc := rCtx.Value(retryCtxKey{})
 		if rc == nil {
