@@ -265,7 +265,7 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 		}
 		// The req.URL might have only set a path i.e. /home, fallbacking to the base URL of the client.
 		// So if the URL is nil, that's likely the case and we'll derive the host from the configured
-		// based instead.
+		// base instead.
 		if (u == nil || u.Host == "") && _url != "" {
 			u, _ = url.Parse(_url)
 		}
