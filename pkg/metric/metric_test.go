@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2025 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -68,12 +68,12 @@ func TestMetricsManager(t *testing.T) {
 	mm.IncCounterMetric(ctx, "tx_request", nil)
 	mm.IncCounterMetricWithLabels(ctx, "tx_process", map[string]string{"status": "success"}, nil)
 	mm.SetGaugeMetric(ctx, "tx_stalled", 2, nil)
-	mm.SetGaugeMetricWithLabels(ctx, "tx_inflight", 2, map[string]string{"stage": "singing:)"}, nil)
+	mm.SetGaugeMetricWithLabels(ctx, "tx_inflight", 2, map[string]string{"stage": "signing"}, nil)
 	mm.ObserveHistogramMetric(ctx, "tx_timeout_seconds", 2000, nil)
-	mm.ObserveHistogramMetricWithLabels(ctx, "tx_stage_seconds", 2000, map[string]string{"stage": "singing:)"}, nil)
+	mm.ObserveHistogramMetricWithLabels(ctx, "tx_stage_seconds", 2000, map[string]string{"stage": "signing"}, nil)
 	mm.ObserveHistogramMetricWithLabels(ctx, "tx_stage_seconds", 2000, map[string]string{}, nil) // no label provided
 	mm.ObserveSummaryMetric(ctx, "tx_request_bytes", 2000, nil)
-	mm.ObserveSummaryMetricWithLabels(ctx, "tx_retry_bytes", 2000, map[string]string{"stage": "singing:)"}, nil)
+	mm.ObserveSummaryMetricWithLabels(ctx, "tx_retry_bytes", 2000, map[string]string{"stage": "signing"}, nil)
 }
 
 func TestMetricsManagerWithDefaultLabels(t *testing.T) {
@@ -87,6 +87,8 @@ func TestMetricsManagerWithDefaultLabels(t *testing.T) {
 	mm.NewCounterMetricWithLabels(ctx, "tx_process", "Transaction processed", []string{"status"}, true)
 	mm.NewGaugeMetric(ctx, "tx_stalled", "Transactions that are stuck in a loop", true)
 	mm.NewGaugeMetricWithLabels(ctx, "tx_inflight", "Transactions that are in flight", []string{"stage"}, true)
+	mm.NewGaugeMetric(ctx, "tx_deadlettered", "Transactions that are put onto the deadletter queue", true)
+	mm.NewGaugeMetricWithLabels(ctx, "tx_confirming", "Transactions that are waiting to be confirmed", []string{"stage"}, true)
 	mm.NewHistogramMetric(ctx, "tx_timeout_seconds", "Duration of timed out transactions", []float64{}, true)
 	mm.NewHistogramMetricWithLabels(ctx, "tx_stage_seconds", "Duration of each transaction stage", []float64{}, []string{"stage"}, true)
 	mm.NewSummaryMetric(ctx, "tx_request_bytes", "Request size of timed out transactions", true)
@@ -96,21 +98,25 @@ func TestMetricsManagerWithDefaultLabels(t *testing.T) {
 	mm.IncCounterMetric(ctx, "tx_request", nil)
 	mm.IncCounterMetricWithLabels(ctx, "tx_process", map[string]string{"status": "success"}, nil)
 	mm.SetGaugeMetric(ctx, "tx_stalled", 2, nil)
-	mm.SetGaugeMetricWithLabels(ctx, "tx_inflight", 2, map[string]string{"stage": "singing:)"}, nil)
+	mm.SetGaugeMetricWithLabels(ctx, "tx_inflight", 2, map[string]string{"stage": "signing"}, nil)
+	mm.IncGaugeMetric(ctx, "tx_deadlettered", nil)
+	mm.IncGaugeMetricWithLabels(ctx, "tx_confirming", map[string]string{"stage": "signing"}, nil)
+	mm.DecGaugeMetric(ctx, "tx_deadlettered", nil)
+	mm.DecGaugeMetricWithLabels(ctx, "tx_confirming", map[string]string{"stage": "signing"}, nil)
 	mm.ObserveHistogramMetric(ctx, "tx_timeout_seconds", 2000, nil)
-	mm.ObserveHistogramMetricWithLabels(ctx, "tx_stage_seconds", 2000, map[string]string{"stage": "singing:)"}, nil)
+	mm.ObserveHistogramMetricWithLabels(ctx, "tx_stage_seconds", 2000, map[string]string{"stage": "signing"}, nil)
 	mm.ObserveSummaryMetric(ctx, "tx_request_bytes", 2000, nil)
-	mm.ObserveSummaryMetricWithLabels(ctx, "tx_retry_bytes", 2000, map[string]string{"stage": "singing:)"}, nil)
+	mm.ObserveSummaryMetricWithLabels(ctx, "tx_retry_bytes", 2000, map[string]string{"stage": "signing"}, nil)
 
 	mm.IncCounterMetric(ctx, "tx_request", &FireflyDefaultLabels{Namespace: "ns_1"})
 	mm.IncCounterMetricWithLabels(ctx, "tx_process", map[string]string{"status": "success"}, &FireflyDefaultLabels{Namespace: "ns_1"})
 	mm.SetGaugeMetric(ctx, "tx_stalled", 2, &FireflyDefaultLabels{Namespace: "ns_1"})
-	mm.SetGaugeMetricWithLabels(ctx, "tx_inflight", 2, map[string]string{"stage": "singing:)"}, &FireflyDefaultLabels{Namespace: "ns_1"})
+	mm.SetGaugeMetricWithLabels(ctx, "tx_inflight", 2, map[string]string{"stage": "signing"}, &FireflyDefaultLabels{Namespace: "ns_1"})
 	mm.ObserveHistogramMetric(ctx, "tx_timeout_seconds", 2000, &FireflyDefaultLabels{Namespace: "ns_1"})
-	mm.ObserveHistogramMetricWithLabels(ctx, "tx_stage_seconds", 2000, map[string]string{"stage": "singing:)"}, &FireflyDefaultLabels{Namespace: "ns_1"})
+	mm.ObserveHistogramMetricWithLabels(ctx, "tx_stage_seconds", 2000, map[string]string{"stage": "signing"}, &FireflyDefaultLabels{Namespace: "ns_1"})
 	mm.ObserveHistogramMetricWithLabels(ctx, "tx_stage_seconds", 2000, map[string]string{}, nil) // no label provided
 	mm.ObserveSummaryMetric(ctx, "tx_request_bytes", 2000, &FireflyDefaultLabels{Namespace: "ns_1"})
-	mm.ObserveSummaryMetricWithLabels(ctx, "tx_retry_bytes", 2000, map[string]string{"stage": "singing:)"}, &FireflyDefaultLabels{Namespace: "ns_1"})
+	mm.ObserveSummaryMetricWithLabels(ctx, "tx_retry_bytes", 2000, map[string]string{"stage": "signing"}, &FireflyDefaultLabels{Namespace: "ns_1"})
 
 }
 
@@ -142,12 +148,12 @@ func TestMetricsManagerErrors(t *testing.T) {
 	mm.IncCounterMetric(ctx, "tx_not_exist", nil)
 	mm.IncCounterMetricWithLabels(ctx, "tx_not_exist", map[string]string{"status": "success"}, nil)
 	mm.SetGaugeMetric(ctx, "tx_not_exist", 2, nil)
-	mm.SetGaugeMetricWithLabels(ctx, "tx_not_exist", 2, map[string]string{"stage": "singing:)"}, nil)
+	mm.SetGaugeMetricWithLabels(ctx, "tx_not_exist", 2, map[string]string{"stage": "signing"}, nil)
 	mm.ObserveHistogramMetric(ctx, "tx_not_exist", 2000, nil)
-	mm.ObserveHistogramMetricWithLabels(ctx, "tx_not_exist", 2000, map[string]string{"stage": "singing:)"}, nil)
+	mm.ObserveHistogramMetricWithLabels(ctx, "tx_not_exist", 2000, map[string]string{"stage": "signing"}, nil)
 	mm.ObserveSummaryMetric(ctx, "tx_not_exist", 2000, nil)
-	mm.ObserveSummaryMetricWithLabels(ctx, "tx_not_exist", 2000, map[string]string{"stage": "singing:)"}, nil)
-	mm.SetGaugeMetricWithLabels(ctx, "tx_inflight_invalid_labels", 2, map[string]string{"ff_stage": "singing:)"}, nil)
+	mm.ObserveSummaryMetricWithLabels(ctx, "tx_not_exist", 2000, map[string]string{"stage": "signing"}, nil)
+	mm.SetGaugeMetricWithLabels(ctx, "tx_inflight_invalid_labels", 2, map[string]string{"ff_stage": "signing"}, nil)
 }
 
 func TestHTTPMetricsInstrumentations(t *testing.T) {

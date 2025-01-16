@@ -17,7 +17,7 @@ coverage.html:
 		$(VGO) tool cover -html=coverage.txt
 coverage: test coverage.html
 lint: ${LINT}
-		GOGC=20 $(LINT) run -v --timeout 5m
+		GOGC=20 $(LINT) run -v --timeout 5m --fast --allow-parallel-runners
 ${MOCKERY}:
 		$(VGO) install github.com/vektra/mockery/v2@latest
 ${LINT}:

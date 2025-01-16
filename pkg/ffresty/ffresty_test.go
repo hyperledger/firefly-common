@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2025 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -681,7 +681,7 @@ func TestMTLSClientWithServer(t *testing.T) {
 	var restyConfig = config.RootSection("resty")
 	InitConfig(restyConfig)
 	clientTLSSection := restyConfig.SubSection("tls")
-	restyConfig.Set(HTTPConfigURL, ln.Addr())
+	restyConfig.Set(HTTPConfigURL, ln.Addr()) // note this does not have https:// in the URL
 	clientTLSSection.Set(fftls.HTTPConfTLSEnabled, true)
 	clientTLSSection.Set(fftls.HTTPConfTLSKeyFile, privateKeyFile.Name())
 	clientTLSSection.Set(fftls.HTTPConfTLSCertFile, publicKeyFile.Name())
@@ -722,7 +722,6 @@ func TestEnableClientMetrics(t *testing.T) {
 
 	err := EnableClientMetrics(ctx, mr)
 	assert.NoError(t, err)
-
 }
 
 func TestEnableClientMetricsIdempotent(t *testing.T) {
@@ -749,6 +748,7 @@ func TestHooks(t *testing.T) {
 	}
 
 	customOnSuccess := func(c *resty.Client, resp *resty.Response) {
+		assert.Equal(t, "localhost:12345", resp.Request.Context().Value(hostCtxKey{}).(string))
 		onSuccessCount++
 	}
 

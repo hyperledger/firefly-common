@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2025 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -26,7 +26,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-var supportedTypes = []string{"counterVec", "gaugeVec", "histogramVec", "summaryVec"}
+const gaugeVec = "gaugeVec"
+
+var supportedTypes = []string{"counterVec", gaugeVec, "histogramVec", "summaryVec"}
 
 const fireflySystemLabelsPrefix = "ff_"
 const namespaceLabel = fireflySystemLabelsPrefix + "namespace"
@@ -109,7 +111,7 @@ func (pmm *prometheusMetricsManager) NewGaugeMetric(ctx context.Context, metricN
 }
 func (pmm *prometheusMetricsManager) NewGaugeMetricWithLabels(ctx context.Context, metricName string, helpText string, labelNames []string, withDefaultLabels bool) {
 	pmm.registerMetrics(ctx, regInfo{
-		Type:       "gaugeVec",
+		Type:       gaugeVec,
 		Name:       metricName,
 		HelpText:   helpText,
 		LabelNames: checkAndUpdateLabelNames(ctx, labelNames, withDefaultLabels),
@@ -182,7 +184,7 @@ func (pmm *prometheusMetricsManager) registerMetrics(ctx context.Context, mr reg
 			}, mr.LabelNames),
 			LabelNames: mr.LabelNames,
 		}
-	case "gaugeVec":
+	case gaugeVec:
 		pmm.metricsMap[internalMapIndex] = &prometheusMetric{
 			Metric: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 				Namespace: pmm.namespace,
@@ -222,13 +224,45 @@ func (pmm *prometheusMetricsManager) registerMetrics(ctx context.Context, mr reg
 func (pmm *prometheusMetricsManager) SetGaugeMetric(ctx context.Context, metricName string, number float64, defaultLabels *FireflyDefaultLabels) {
 	pmm.SetGaugeMetricWithLabels(ctx, metricName, number, make(map[string]string), defaultLabels)
 }
+
+func (pmm *prometheusMetricsManager) IncGaugeMetric(ctx context.Context, metricName string, defaultLabels *FireflyDefaultLabels) {
+	pmm.IncGaugeMetricWithLabels(ctx, metricName, make(map[string]string), defaultLabels)
+}
+
+func (pmm *prometheusMetricsManager) DecGaugeMetric(ctx context.Context, metricName string, defaultLabels *FireflyDefaultLabels) {
+	pmm.DecGaugeMetricWithLabels(ctx, metricName, make(map[string]string), defaultLabels)
+}
+
 func (pmm *prometheusMetricsManager) SetGaugeMetricWithLabels(ctx context.Context, metricName string, number float64, labels map[string]string, defaultLabels *FireflyDefaultLabels) {
-	m, ok := pmm.metricsMap[metricName+"_gaugeVec"]
+	m, ok := pmm.metricsMap[metricName+"_"+gaugeVec]
 	if !ok {
-		log.L(ctx).Warnf("Transaction handler metric with name: '%s' and type: '%s' is not found", metricName, "gaugeVec")
+		log.L(ctx).Warnf("metric with name: '%s' and type: '%s' is not found", metricName, "gaugeVec")
 	} else {
 		collector := m.Metric
+
 		collector.(*prometheus.GaugeVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels)).Set(number)
+	}
+}
+
+func (pmm *prometheusMetricsManager) IncGaugeMetricWithLabels(ctx context.Context, metricName string, labels map[string]string, defaultLabels *FireflyDefaultLabels) {
+	m, ok := pmm.metricsMap[metricName+"_"+gaugeVec]
+	if !ok {
+		log.L(ctx).Warnf("metric with name: '%s' and type: '%s' is not found", metricName, "gaugeVec")
+	} else {
+		collector := m.Metric
+
+		collector.(*prometheus.GaugeVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels)).Inc()
+	}
+}
+
+func (pmm *prometheusMetricsManager) DecGaugeMetricWithLabels(ctx context.Context, metricName string, labels map[string]string, defaultLabels *FireflyDefaultLabels) {
+	m, ok := pmm.metricsMap[metricName+"_"+gaugeVec]
+	if !ok {
+		log.L(ctx).Warnf("metric with name: '%s' and type: '%s' is not found", metricName, "gaugeVec")
+	} else {
+		collector := m.Metric
+
+		collector.(*prometheus.GaugeVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels)).Dec()
 	}
 }
 
@@ -240,7 +274,7 @@ func (pmm *prometheusMetricsManager) IncCounterMetric(ctx context.Context, metri
 func (pmm *prometheusMetricsManager) IncCounterMetricWithLabels(ctx context.Context, metricName string, labels map[string]string, defaultLabels *FireflyDefaultLabels) {
 	m, ok := pmm.metricsMap[metricName+"_counterVec"]
 	if !ok {
-		log.L(ctx).Warnf("Transaction handler metric with name: '%s' and type: '%s' is not found", metricName, "counterVec")
+		log.L(ctx).Warnf("metric with name: '%s' and type: '%s' is not found", metricName, "counterVec")
 	} else {
 		collector := m.Metric
 		collector.(*prometheus.CounterVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels)).Inc()
@@ -255,7 +289,7 @@ func (pmm *prometheusMetricsManager) ObserveHistogramMetric(ctx context.Context,
 func (pmm *prometheusMetricsManager) ObserveHistogramMetricWithLabels(ctx context.Context, metricName string, number float64, labels map[string]string, defaultLabels *FireflyDefaultLabels) {
 	m, ok := pmm.metricsMap[metricName+"_histogramVec"]
 	if !ok {
-		log.L(ctx).Warnf("Transaction handler metric with name: '%s' and type: '%s' is not found", metricName, "histogramVec")
+		log.L(ctx).Warnf("metric with name: '%s' and type: '%s' is not found", metricName, "histogramVec")
 	} else {
 		collector := m.Metric
 		collector.(*prometheus.HistogramVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels)).Observe(number)
@@ -269,7 +303,7 @@ func (pmm *prometheusMetricsManager) ObserveSummaryMetric(ctx context.Context, m
 func (pmm *prometheusMetricsManager) ObserveSummaryMetricWithLabels(ctx context.Context, metricName string, number float64, labels map[string]string, defaultLabels *FireflyDefaultLabels) {
 	m, ok := pmm.metricsMap[metricName+"_summaryVec"]
 	if !ok {
-		log.L(ctx).Warnf("Transaction handler metric with name: '%s' and type: '%s' is not found", metricName, "summaryVec")
+		log.L(ctx).Warnf("metric with name: '%s' and type: '%s' is not found", metricName, "summaryVec")
 	} else {
 		collector := m.Metric
 		collector.(*prometheus.SummaryVec).With(checkAndUpdateLabels(ctx, m.LabelNames, labels, defaultLabels)).Observe(number)
