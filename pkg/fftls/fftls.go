@@ -64,6 +64,7 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 	var rootCAs *x509.CertPool
 	switch {
 	case config.CAFile != "":
+		log.L(ctx).Debugf("Loading CA file at %s", config.CAFile)
 		rootCAs = x509.NewCertPool()
 		var caBytes []byte
 		caBytes, err = os.ReadFile(config.CAFile)
@@ -92,6 +93,7 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 	var configuredCert *tls.Certificate
 	// For mTLS we need both the cert and key
 	if config.CertFile != "" && config.KeyFile != "" {
+		log.L(ctx).Debugf("Loading Cert file at %s and Key file at %s", config.CertFile, config.KeyFile)
 		// Read the key pair to create certificate
 		cert, err := tls.LoadX509KeyPair(config.CertFile, config.KeyFile)
 		if err != nil {
