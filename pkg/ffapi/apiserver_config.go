@@ -22,8 +22,8 @@ import (
 )
 
 var (
-	ConfMetricsServerEnabled = "enabled"
-	ConfMetricsServerPath    = "/metrics"
+	ConfMonitoringServerEnabled     = "enabled"
+	ConfMonitoringServerMetricsPath = "metricsPath"
 
 	ConfAPIDefaultFilterLimit     = "defaultFilterLimit"
 	ConfAPIMaxFilterLimit         = "maxFilterLimit"
@@ -34,7 +34,7 @@ var (
 	ConfAPIDynamicPublicURLHeader = "dynamicPublicURLHeader"
 )
 
-func InitAPIServerConfig(apiConfig, metricsConfig, corsConfig config.Section) {
+func InitAPIServerConfig(apiConfig, monitoringConfig, corsConfig config.Section) {
 	httpserver.InitHTTPConfig(apiConfig, 5000)
 	apiConfig.AddKnownKey(ConfAPIDefaultFilterLimit, 25)
 	apiConfig.AddKnownKey(ConfAPIMaxFilterLimit, 100)
@@ -46,7 +46,7 @@ func InitAPIServerConfig(apiConfig, metricsConfig, corsConfig config.Section) {
 
 	httpserver.InitCORSConfig(corsConfig)
 
-	httpserver.InitHTTPConfig(metricsConfig, 6000)
-	metricsConfig.AddKnownKey(ConfMetricsServerEnabled, true)
-	metricsConfig.AddKnownKey(ConfMetricsServerPath, "/metrics")
+	httpserver.InitHTTPConfig(monitoringConfig, 6000)
+	monitoringConfig.AddKnownKey(ConfMonitoringServerEnabled, true)
+	monitoringConfig.AddKnownKey(ConfMonitoringServerMetricsPath, "/metrics")
 }
