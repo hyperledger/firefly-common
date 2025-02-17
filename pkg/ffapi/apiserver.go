@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2025 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -61,9 +61,9 @@ type apiServer[T any] struct {
 	apiDynamicPublicURLHeader string
 	alwaysPaginate            bool
 	handleYAML                bool
-	metricsEnabled            bool
+	monitoringEnabled         bool
 	metricsPath               string
-	metricsPublicURL          string
+	monitoringPublicURL       string
 	mux                       *mux.Router
 
 	APIServerOptions[T]
@@ -72,10 +72,11 @@ type apiServer[T any] struct {
 type APIServerOptions[T any] struct {
 	MetricsRegistry           metric.MetricsRegistry
 	Routes                    []*Route
+	MonitoringRoutes          []*Route
 	EnrichRequest             func(r *APIRequest) (T, error)
 	Description               string
 	APIConfig                 config.Section
-	MetricsConfig             config.Section
+	MonitoringConfig          config.Section
 	CORSConfig                config.Section
 	FavIcon16                 []byte
 	FavIcon32                 []byte
@@ -99,8 +100,8 @@ func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APISe
 		maxFilterSkip:             options.APIConfig.GetUint64(ConfAPIMaxFilterSkip),
 		requestTimeout:            options.APIConfig.GetDuration(ConfAPIRequestTimeout),
 		requestMaxTimeout:         options.APIConfig.GetDuration(ConfAPIRequestMaxTimeout),
-		metricsEnabled:            options.MetricsConfig.GetBool(ConfMetricsServerEnabled),
-		metricsPath:               options.MetricsConfig.GetString(ConfMetricsServerPath),
+		monitoringEnabled:         options.MonitoringConfig.GetBool(ConfMonitoringServerEnabled),
+		metricsPath:               options.MonitoringConfig.GetString(ConfMonitoringServerMetricsPath),
 		alwaysPaginate:            options.APIConfig.GetBool(ConfAPIAlwaysPaginate),
 		handleYAML:                options.HandleYAML,
 		apiDynamicPublicURLHeader: options.APIConfig.GetString(ConfAPIDynamicPublicURLHeader),
@@ -142,7 +143,7 @@ func (as *apiServer[T]) Serve(ctx context.Context) (err error) {
 	}()
 
 	httpErrChan := make(chan error)
-	metricsErrChan := make(chan error)
+	monitoringErrChan := make(chan error)
 
 	apiHTTPServer, err := httpserver.NewHTTPServer(ctx, "api", as.MuxRouter(ctx), httpErrChan, as.APIConfig, as.CORSConfig, &httpserver.ServerOptions{
 		MaximumRequestTimeout: as.requestMaxTimeout,
@@ -153,20 +154,20 @@ func (as *apiServer[T]) Serve(ctx context.Context) (err error) {
 	as.apiPublicURL = buildPublicURL(as.APIConfig, apiHTTPServer.Addr())
 	go apiHTTPServer.ServeHTTP(ctx)
 
-	if as.metricsEnabled {
-		metricsHTTPServer, err := httpserver.NewHTTPServer(ctx, "metrics", as.createMetricsMuxRouter(ctx), metricsErrChan, as.MetricsConfig, as.CORSConfig, &httpserver.ServerOptions{
+	if as.monitoringEnabled {
+		monitoringHTTPServer, err := httpserver.NewHTTPServer(ctx, "monitoring", as.createMonitoringMuxRouter(ctx), monitoringErrChan, as.MonitoringConfig, as.CORSConfig, &httpserver.ServerOptions{
 			MaximumRequestTimeout: as.requestMaxTimeout,
 		})
 		if err != nil {
 			return err
 		}
-		as.metricsPublicURL = buildPublicURL(as.MetricsConfig, apiHTTPServer.Addr())
-		go metricsHTTPServer.ServeHTTP(ctx)
+		as.monitoringPublicURL = buildPublicURL(as.MonitoringConfig, apiHTTPServer.Addr())
+		go monitoringHTTPServer.ServeHTTP(ctx)
 	}
 
 	started = true
 	close(as.started)
-	return as.waitForServerStop(httpErrChan, metricsErrChan)
+	return as.waitForServerStop(httpErrChan, monitoringErrChan)
 }
 
 func (as *apiServer[T]) Started() <-chan struct{} {
@@ -177,11 +178,11 @@ func (as *apiServer[T]) APIPublicURL() string {
 	return as.apiPublicURL
 }
 
-func (as *apiServer[T]) waitForServerStop(httpErrChan, metricsErrChan chan error) error {
+func (as *apiServer[T]) waitForServerStop(httpErrChan, monitoringErrChan chan error) error {
 	select {
 	case err := <-httpErrChan:
 		return err
-	case err := <-metricsErrChan:
+	case err := <-monitoringErrChan:
 		return err
 	}
 }
@@ -242,7 +243,7 @@ func (as *apiServer[T]) createMuxRouter(ctx context.Context) *mux.Router {
 	r := mux.NewRouter().UseEncodedPath()
 	hf := as.handlerFactory()
 
-	if as.metricsEnabled {
+	if as.monitoringEnabled {
 		h, _ := as.MetricsRegistry.GetHTTPMetricsInstrumentationsMiddlewareForSubsystem(ctx, APIServerMetricsSubSystemName)
 		r.Use(h)
 	}
@@ -293,12 +294,20 @@ func (as *apiServer[T]) notFoundHandler(res http.ResponseWriter, req *http.Reque
 	return 404, i18n.NewError(req.Context(), i18n.Msg404NotFound)
 }
 
-func (as *apiServer[T]) createMetricsMuxRouter(ctx context.Context) *mux.Router {
-	r := mux.NewRouter()
+func (as *apiServer[T]) createMonitoringMuxRouter(ctx context.Context) *mux.Router {
+	r := mux.NewRouter().UseEncodedPath()
+	hf := as.handlerFactory() // TODO separate factory for monitoring ??
+
 	h, err := as.MetricsRegistry.HTTPHandler(ctx, promhttp.HandlerOpts{})
 	if err != nil {
 		panic(err)
 	}
 	r.Path(as.metricsPath).Handler(h)
+
+	for _, route := range as.MonitoringRoutes {
+		r.HandleFunc(route.Path, as.routeHandler(hf, route)).Methods(route.Method)
+	}
+
+	r.NotFoundHandler = hf.APIWrapper(as.notFoundHandler)
 	return r
 }
