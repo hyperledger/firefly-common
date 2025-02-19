@@ -310,12 +310,12 @@ func (as *apiServer[T]) createMonitoringMuxRouter(ctx context.Context) *mux.Rout
 		panic(err)
 	}
 	r.Path(as.metricsPath).Handler(h)
+	r.HandleFunc(as.monitoringPath, hf.APIWrapper(as.emptyJSONHandler))
 
 	for _, route := range as.MonitoringRoutes {
 		r.HandleFunc(fmt.Sprintf("/%s", route.Path), as.routeHandler(hf, route)).Methods(route.Method)
 	}
 
-	r.HandleFunc(as.monitoringPath, hf.APIWrapper(as.emptyJSONHandler))
 	r.NotFoundHandler = hf.APIWrapper(as.notFoundHandler)
 	return r
 }
