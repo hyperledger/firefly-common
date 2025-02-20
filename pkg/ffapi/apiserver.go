@@ -63,6 +63,7 @@ type apiServer[T any] struct {
 	handleYAML                bool
 	monitoringEnabled         bool
 	metricsPath               string
+	livenessPath              string
 	monitoringPublicURL       string
 	mux                       *mux.Router
 
@@ -102,6 +103,7 @@ func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APISe
 		requestMaxTimeout:         options.APIConfig.GetDuration(ConfAPIRequestMaxTimeout),
 		monitoringEnabled:         options.MonitoringConfig.GetBool(ConfMonitoringServerEnabled),
 		metricsPath:               options.MonitoringConfig.GetString(ConfMonitoringServerMetricsPath),
+		livenessPath:              options.MonitoringConfig.GetString(ConfMonitoringServerLivenessPath),
 		alwaysPaginate:            options.APIConfig.GetBool(ConfAPIAlwaysPaginate),
 		handleYAML:                options.HandleYAML,
 		apiDynamicPublicURLHeader: options.APIConfig.GetString(ConfAPIDynamicPublicURLHeader),
@@ -294,6 +296,11 @@ func (as *apiServer[T]) notFoundHandler(res http.ResponseWriter, req *http.Reque
 	return 404, i18n.NewError(req.Context(), i18n.Msg404NotFound)
 }
 
+func (as *apiServer[T]) emptyJSONHandler(res http.ResponseWriter, _ *http.Request) (status int, err error) {
+	res.Header().Add("Content-Type", "application/json")
+	return 200, nil
+}
+
 func (as *apiServer[T]) createMonitoringMuxRouter(ctx context.Context) *mux.Router {
 	r := mux.NewRouter().UseEncodedPath()
 	hf := as.handlerFactory() // TODO separate factory for monitoring ??
@@ -303,9 +310,10 @@ func (as *apiServer[T]) createMonitoringMuxRouter(ctx context.Context) *mux.Rout
 		panic(err)
 	}
 	r.Path(as.metricsPath).Handler(h)
+	r.HandleFunc(as.livenessPath, hf.APIWrapper(as.emptyJSONHandler))
 
 	for _, route := range as.MonitoringRoutes {
-		r.HandleFunc(route.Path, as.routeHandler(hf, route)).Methods(route.Method)
+		r.HandleFunc(fmt.Sprintf("/%s", route.Path), as.routeHandler(hf, route)).Methods(route.Method)
 	}
 
 	r.NotFoundHandler = hf.APIWrapper(as.notFoundHandler)
