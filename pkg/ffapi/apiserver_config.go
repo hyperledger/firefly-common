@@ -22,9 +22,9 @@ import (
 )
 
 var (
-	ConfMonitoringServerEnabled        = "enabled"
-	ConfMonitoringServerMetricsPath    = "metricsPath"
-	ConfMonitoringServerMonitoringPath = "monitoringPath"
+	ConfMonitoringServerEnabled      = "enabled"
+	ConfMonitoringServerMetricsPath  = "metricsPath"
+	ConfMonitoringServerLivenessPath = "livenessPath"
 
 	ConfAPIDefaultFilterLimit     = "defaultFilterLimit"
 	ConfAPIMaxFilterLimit         = "maxFilterLimit"
@@ -50,5 +50,5 @@ func InitAPIServerConfig(apiConfig, monitoringConfig, corsConfig config.Section)
 	httpserver.InitHTTPConfig(monitoringConfig, 6000)
 	monitoringConfig.AddKnownKey(ConfMonitoringServerEnabled, true)
 	monitoringConfig.AddKnownKey(ConfMonitoringServerMetricsPath, "/metrics")
-	monitoringConfig.AddKnownKey(ConfMonitoringServerMonitoringPath, "/health")
+	monitoringConfig.AddKnownKey(ConfMonitoringServerLivenessPath, "/healthz")
 }

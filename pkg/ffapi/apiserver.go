@@ -63,7 +63,7 @@ type apiServer[T any] struct {
 	handleYAML                bool
 	monitoringEnabled         bool
 	metricsPath               string
-	monitoringPath            string
+	livenessPath              string
 	monitoringPublicURL       string
 	mux                       *mux.Router
 
@@ -103,7 +103,7 @@ func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APISe
 		requestMaxTimeout:         options.APIConfig.GetDuration(ConfAPIRequestMaxTimeout),
 		monitoringEnabled:         options.MonitoringConfig.GetBool(ConfMonitoringServerEnabled),
 		metricsPath:               options.MonitoringConfig.GetString(ConfMonitoringServerMetricsPath),
-		monitoringPath:            options.MonitoringConfig.GetString(ConfMonitoringServerMonitoringPath),
+		livenessPath:              options.MonitoringConfig.GetString(ConfMonitoringServerLivenessPath),
 		alwaysPaginate:            options.APIConfig.GetBool(ConfAPIAlwaysPaginate),
 		handleYAML:                options.HandleYAML,
 		apiDynamicPublicURLHeader: options.APIConfig.GetString(ConfAPIDynamicPublicURLHeader),
@@ -310,7 +310,7 @@ func (as *apiServer[T]) createMonitoringMuxRouter(ctx context.Context) *mux.Rout
 		panic(err)
 	}
 	r.Path(as.metricsPath).Handler(h)
-	r.HandleFunc(as.monitoringPath, hf.APIWrapper(as.emptyJSONHandler))
+	r.HandleFunc(as.livenessPath, hf.APIWrapper(as.emptyJSONHandler))
 
 	for _, route := range as.MonitoringRoutes {
 		r.HandleFunc(fmt.Sprintf("/%s", route.Path), as.routeHandler(hf, route)).Methods(route.Method)
