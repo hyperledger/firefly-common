@@ -71,6 +71,7 @@ type apiServer[T any] struct {
 
 type APIServerOptions[T any] struct {
 	MetricsRegistry           metric.MetricsRegistry
+	MetricsSubsystemName      string
 	Routes                    []*Route
 	MonitoringRoutes          []*Route
 	EnrichRequest             func(r *APIRequest) (T, error)
@@ -114,9 +115,15 @@ func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APISe
 	if as.FavIcon32 == nil {
 		as.FavIcon32 = ffLogo16
 	}
+
+	metricsSubsystemName := APIServerMetricsSubSystemName
+	if options.MetricsSubsystemName != "" {
+		metricsSubsystemName = options.MetricsSubsystemName
+	}
+
 	_ = as.MetricsRegistry.NewHTTPMetricsInstrumentationsForSubsystem(
 		ctx,
-		APIServerMetricsSubSystemName,
+		metricsSubsystemName,
 		true,
 		prometheus.DefBuckets,
 		map[string]string{},
