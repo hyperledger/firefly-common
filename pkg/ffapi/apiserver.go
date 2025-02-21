@@ -22,6 +22,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -313,7 +314,11 @@ func (as *apiServer[T]) createMonitoringMuxRouter(ctx context.Context) *mux.Rout
 	r.HandleFunc(as.livenessPath, hf.APIWrapper(as.emptyJSONHandler))
 
 	for _, route := range as.MonitoringRoutes {
-		r.HandleFunc(fmt.Sprintf("/%s", route.Path), as.routeHandler(hf, route)).Methods(route.Method)
+		path := route.Path
+		if !strings.HasPrefix(route.Path, "/") {
+			path = fmt.Sprintf("/%s", route.Path)
+		}
+		r.HandleFunc(path, as.routeHandler(hf, route)).Methods(route.Method)
 	}
 
 	r.NotFoundHandler = hf.APIWrapper(as.notFoundHandler)
