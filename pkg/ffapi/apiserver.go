@@ -119,19 +119,22 @@ func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APISe
 		as.FavIcon32 = ffLogo16
 	}
 
-	metricsSubsystemName := APIServerMetricsSubSystemName
-	if options.MetricsSubsystemName != "" {
-		metricsSubsystemName = options.MetricsSubsystemName
-	}
-
 	_ = as.MetricsRegistry.NewHTTPMetricsInstrumentationsForSubsystem(
 		ctx,
-		metricsSubsystemName,
+		as.metricsSubsystemName(),
 		true,
 		prometheus.DefBuckets,
 		map[string]string{},
 	)
 	return as
+}
+
+func (as *apiServer[T]) metricsSubsystemName() string {
+	metricsSubsystemName := APIServerMetricsSubSystemName
+	if as.MetricsSubsystemName != "" {
+		metricsSubsystemName = as.MetricsSubsystemName
+	}
+	return metricsSubsystemName
 }
 
 // Can be called before Serve, but MUST use the background context if so
@@ -254,7 +257,7 @@ func (as *apiServer[T]) createMuxRouter(ctx context.Context) *mux.Router {
 	hf := as.handlerFactory()
 
 	if as.monitoringEnabled {
-		h, _ := as.MetricsRegistry.GetHTTPMetricsInstrumentationsMiddlewareForSubsystem(ctx, APIServerMetricsSubSystemName)
+		h, _ := as.MetricsRegistry.GetHTTPMetricsInstrumentationsMiddlewareForSubsystem(ctx, as.metricsSubsystemName())
 		r.Use(h)
 	}
 
