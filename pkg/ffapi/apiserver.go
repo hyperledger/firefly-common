@@ -19,6 +19,7 @@ package ffapi
 import (
 	"context"
 	"fmt"
+	"github.com/hyperledger/firefly-common/pkg/log"
 	"io"
 	"net"
 	"net/http"
@@ -67,6 +68,7 @@ type apiServer[T any] struct {
 	livenessPath              string
 	monitoringPublicURL       string
 	mux                       *mux.Router
+	oah                       *OpenAPIHandlerFactory
 
 	APIServerOptions[T]
 }
@@ -165,6 +167,7 @@ func (as *apiServer[T]) Serve(ctx context.Context) (err error) {
 		return err
 	}
 	as.apiPublicURL = buildPublicURL(as.APIConfig, apiHTTPServer.Addr())
+	as.oah.StaticPublicURL = as.apiPublicURL
 	go apiHTTPServer.ServeHTTP(ctx)
 
 	if as.monitoringEnabled {
@@ -276,12 +279,16 @@ func (as *apiServer[T]) createMuxRouter(ctx context.Context) *mux.Router {
 			}
 		}
 		if ce.JSONHandler != nil || ce.UploadHandler != nil || ce.StreamHandler != nil {
+			if strings.HasPrefix(route.Path, "/") {
+				log.L(ctx).Errorf("API route path must not start with '/', ignoring route handler: '%s'", route.Path)
+				continue
+			}
 			r.HandleFunc(fmt.Sprintf("/api/v1/%s", route.Path), as.routeHandler(hf, route)).
 				Methods(route.Method)
 		}
 	}
 
-	oah := &OpenAPIHandlerFactory{
+	as.oah = &OpenAPIHandlerFactory{
 		BaseSwaggerGenOptions: SwaggerGenOptions{
 			Title:                     as.Description,
 			Version:                   "1.0",
@@ -289,13 +296,13 @@ func (as *apiServer[T]) createMuxRouter(ctx context.Context) *mux.Router {
 			DefaultRequestTimeout:     as.requestTimeout,
 			SupportFieldRedaction:     as.SupportFieldRedaction,
 		},
-		StaticPublicURL: as.apiPublicURL,
+		StaticPublicURL: as.apiPublicURL, // this is most likely not yet set, we'll ensure its set later on
 	}
-	r.HandleFunc(`/api/swagger.yaml`, hf.APIWrapper(oah.OpenAPIHandler(`/api/v1`, OpenAPIFormatYAML, as.Routes)))
-	r.HandleFunc(`/api/swagger.json`, hf.APIWrapper(oah.OpenAPIHandler(`/api/v1`, OpenAPIFormatJSON, as.Routes)))
-	r.HandleFunc(`/api/openapi.yaml`, hf.APIWrapper(oah.OpenAPIHandler(`/api/v1`, OpenAPIFormatYAML, as.Routes)))
-	r.HandleFunc(`/api/openapi.json`, hf.APIWrapper(oah.OpenAPIHandler(`/api/v1`, OpenAPIFormatJSON, as.Routes)))
-	r.HandleFunc(`/api`, hf.APIWrapper(oah.SwaggerUIHandler(`/api/openapi.yaml`)))
+	r.HandleFunc(`/api/swagger.yaml`, hf.APIWrapper(as.oah.OpenAPIHandler(`/api/v1`, OpenAPIFormatYAML, as.Routes)))
+	r.HandleFunc(`/api/swagger.json`, hf.APIWrapper(as.oah.OpenAPIHandler(`/api/v1`, OpenAPIFormatJSON, as.Routes)))
+	r.HandleFunc(`/api/openapi.yaml`, hf.APIWrapper(as.oah.OpenAPIHandler(`/api/v1`, OpenAPIFormatYAML, as.Routes)))
+	r.HandleFunc(`/api/openapi.json`, hf.APIWrapper(as.oah.OpenAPIHandler(`/api/v1`, OpenAPIFormatJSON, as.Routes)))
+	r.HandleFunc(`/api`, hf.APIWrapper(as.oah.SwaggerUIHandler(`/api/openapi.yaml`)))
 	r.HandleFunc(`/favicon{any:.*}.png`, favIconsHandler(as.FavIcon16, as.FavIcon32))
 
 	r.NotFoundHandler = hf.APIWrapper(as.notFoundHandler)
@@ -325,10 +332,11 @@ func (as *apiServer[T]) createMonitoringMuxRouter(ctx context.Context) *mux.Rout
 
 	for _, route := range as.MonitoringRoutes {
 		path := route.Path
-		if !strings.HasPrefix(route.Path, "/") {
-			path = fmt.Sprintf("/%s", route.Path)
+		if strings.HasPrefix(route.Path, "/") {
+			log.L(ctx).Errorf("Monitoring route path must not start with '/', ignoring route handler: '%s'", route.Path)
+			continue
 		}
-		r.HandleFunc(path, as.routeHandler(hf, route)).Methods(route.Method)
+		r.HandleFunc("/"+path, as.routeHandler(hf, route)).Methods(route.Method)
 	}
 
 	r.NotFoundHandler = hf.APIWrapper(as.notFoundHandler)
