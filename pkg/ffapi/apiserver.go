@@ -99,6 +99,14 @@ type APIServerRouteExt[T any] struct {
 // NewAPIServer makes a new server, with the specified configuration, and
 // the supplied wrapper function - which will inject
 func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APIServer {
+	if options.APIConfig == nil {
+		panic("APIConfig is required")
+	}
+
+	if options.MonitoringConfig == nil {
+		panic("MonitoringConfig is required")
+	}
+
 	as := &apiServer[T]{
 		defaultFilterLimit:        options.APIConfig.GetUint64(ConfAPIDefaultFilterLimit),
 		maxFilterLimit:            options.APIConfig.GetUint64(ConfAPIMaxFilterLimit),
