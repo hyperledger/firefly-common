@@ -104,6 +104,26 @@ func (hs *HandlerFactory) getFilePart(req *http.Request) (*multipartState, error
 	}
 }
 
+func (hs *HandlerFactory) getFormParams(req *http.Request) (map[string]string, error) {
+	if err := req.ParseForm(); err != nil {
+		return nil, i18n.WrapError(req.Context(), err, i18n.MsgParseFormError)
+	}
+	form := make(map[string]string, len(req.Form))
+	for k, v := range req.Form {
+		if len(v) < 1 {
+			continue
+		}
+
+		if len(v) > 1 {
+			form[k] = strings.Join(v, ",") // TODO is this good enough ?
+			continue
+		}
+
+		form[k] = v[0]
+	}
+	return form, nil
+}
+
 func (hs *HandlerFactory) getParams(req *http.Request, route *Route) (queryParams, pathParams map[string]string, queryArrayParams map[string][]string) {
 	queryParams = make(map[string]string)
 	pathParams = make(map[string]string)
@@ -154,7 +174,7 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 		if route.JSONInputValue != nil {
 			jsonInput = route.JSONInputValue()
 		}
-		var queryParams, pathParams map[string]string
+		var queryParams, pathParams, formParams map[string]string
 		var queryArrayParams map[string][]string
 		var multipart *multipartState
 		contentType := req.Header.Get("Content-Type")
@@ -184,6 +204,11 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 					d := json.NewDecoder(req.Body)
 					d.UseNumber()
 					err = d.Decode(&jsonInput)
+				}
+			case strings.HasPrefix(strings.ToLower(contentType), "application/x-www-form-urlencoded"):
+				formParams, err = hs.getFormParams(req)
+				if err != nil {
+					return 400, err
 				}
 			case strings.HasPrefix(strings.ToLower(contentType), "text/plain"):
 			default:
@@ -224,6 +249,9 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 				r.FP = multipart.formParams
 				r.Part = multipart.part
 				output, err = route.FormUploadHandler(r)
+			case formParams != nil:
+				r.FP = formParams
+				fallthrough
 			case route.StreamHandler != nil:
 				output, err = route.StreamHandler(r)
 			default:
