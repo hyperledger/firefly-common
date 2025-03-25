@@ -61,7 +61,6 @@ type Config struct {
 }
 
 var (
-	rateLimiterMap map[*resty.Client]*rate.Limiter
 	metricsManager metric.MetricsManager
 	onErrorHooks   []resty.ErrorHook
 	onSuccessHooks []resty.SuccessHook
@@ -182,6 +181,8 @@ func New(ctx context.Context, staticConfig config.Section) (client *resty.Client
 	return NewWithConfig(ctx, *ffrestyConfig), nil
 }
 
+var getRateLimiter = GetRateLimiter
+
 func GetRateLimiter(rps, burst int) *rate.Limiter {
 	if rps != 0 { // if rps is not set no need for a rate limiter
 		rpsLimiter := rate.Limit(rps)
@@ -231,11 +232,10 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 		}
 		client = resty.NewWithClient(httpClient)
 	}
-	if rateLimiterMap == nil {
-		rateLimiterMap = make(map[*resty.Client]*rate.Limiter)
-	}
 
-	rateLimiterMap[client] = GetRateLimiter(ffrestyConfig.ThrottleRequestsPerSecond, ffrestyConfig.ThrottleBurst)
+	// this var is held in memory for the lifetime of the client bc the OnBeforeRequest func
+	// uses it to wait for permission to proceed with the request
+	rateLimiter := getRateLimiter(ffrestyConfig.ThrottleRequestsPerSecond, ffrestyConfig.ThrottleBurst)
 
 	_url := strings.TrimSuffix(ffrestyConfig.URL, "/")
 	if _url != "" {
@@ -250,9 +250,9 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 	client.SetTimeout(time.Duration(ffrestyConfig.HTTPRequestTimeout))
 
 	client.OnBeforeRequest(func(c *resty.Client, req *resty.Request) error {
-		if rateLimiterMap[client] != nil {
+		if rateLimiter != nil {
 			// Wait for permission to proceed with the request
-			err := rateLimiterMap[client].Wait(req.Context())
+			err := rateLimiter.Wait(req.Context())
 			if err != nil {
 				return err
 			}

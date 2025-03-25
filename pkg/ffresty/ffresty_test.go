@@ -262,6 +262,10 @@ func TestRateLimiterFailure(t *testing.T) {
 
 	utConf.Set(HTTPCustomClient, customClient)
 
+	getRateLimiter = func(_, _ int) (rl *rate.Limiter) {
+		return rate.NewLimiter(rate.Limit(1), 0)
+	}
+
 	c, err := New(context.Background(), utConf)
 	assert.Nil(t, err)
 	httpmock.ActivateNonDefault(customClient)
@@ -273,12 +277,11 @@ func TestRateLimiterFailure(t *testing.T) {
 			assert.Equal(t, "Basic dXNlcjpwYXNz", req.Header.Get("Authorization"))
 			return httpmock.NewStringResponder(200, `{"some": "data"}`)(req)
 		})
-	rateLimiterMap[c] = rate.NewLimiter(rate.Limit(1), 0) // artificially create an broken rate limiter, this is not possible with our config default
 	resp, err := c.R().Get("/test")
 	assert.Error(t, err)
 	assert.Regexp(t, "exceeds", err)
 	assert.Nil(t, resp)
-	rateLimiterMap = nil // reset limiter
+	getRateLimiter = GetRateLimiter
 }
 
 func TestRequestRetry(t *testing.T) {
