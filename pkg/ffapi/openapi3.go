@@ -232,7 +232,7 @@ func (sg *SwaggerGen) addInput(ctx context.Context, doc *openapi3.T, route *Rout
 	}
 }
 
-func (sg *SwaggerGen) addFormInput(ctx context.Context, op *openapi3.Operation, formParams []*FormParam) {
+func (sg *SwaggerGen) addUploadFormInput(ctx context.Context, op *openapi3.Operation, formParams []*FormParam) {
 	props := openapi3.Schemas{
 		"filename.ext": &openapi3.SchemaRef{
 			Value: &openapi3.Schema{
@@ -251,6 +251,27 @@ func (sg *SwaggerGen) addFormInput(ctx context.Context, op *openapi3.Operation, 
 	}
 
 	op.RequestBody.Value.Content["multipart/form-data"] = &openapi3.MediaType{
+		Schema: &openapi3.SchemaRef{
+			Value: &openapi3.Schema{
+				Type:       "object",
+				Properties: props,
+			},
+		},
+	}
+}
+
+func (sg *SwaggerGen) addUrlEncodedFormInput(ctx context.Context, op *openapi3.Operation, formParams []*FormParam) {
+	props := openapi3.Schemas{}
+	for _, fp := range formParams {
+		props[fp.Name] = &openapi3.SchemaRef{
+			Value: &openapi3.Schema{
+				Description: i18n.Expand(ctx, i18n.APISuccessResponse),
+				Type:        "string",
+			},
+		}
+	}
+
+	op.RequestBody.Value.Content["application/x-www-form-urlencoded"] = &openapi3.MediaType{
 		Schema: &openapi3.SchemaRef{
 			Value: &openapi3.Schema{
 				Type:       "object",
@@ -406,9 +427,11 @@ func (sg *SwaggerGen) addRoute(ctx context.Context, doc *openapi3.T, route *Rout
 	}
 	if route.Method != http.MethodGet && route.Method != http.MethodDelete {
 		sg.initInput(op)
-		sg.addInput(ctx, doc, route, op)
+		sg.addInput(ctx, doc, route, op) // TODO should this be done only if its not a form ?
 		if route.FormUploadHandler != nil {
-			sg.addFormInput(ctx, op, route.FormParams)
+			sg.addUploadFormInput(ctx, op, route.FormParams)
+		} else if route.FormParams != nil {
+			sg.addUrlEncodedFormInput(ctx, op, route.FormParams)
 		}
 	}
 	sg.addOutput(ctx, doc, route, op)
