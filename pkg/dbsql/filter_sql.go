@@ -194,7 +194,8 @@ func (s *Database) FilterUpdate(ctx context.Context, update sq.UpdateBuilder, fi
 }
 
 func (s *Database) mapFieldName(tableName, fieldName string, tm map[string]string) string {
-	if !s.features.NoSpecialSequenceColumn && fieldName == "sequence" {
+	if (s.features.CustomSequenceColumnFilter && fieldName == s.sequenceColumn) ||
+		(!s.features.CustomSequenceColumnFilter && fieldName == "sequence") {
 		if tableName == "" {
 			return s.sequenceColumn
 		}
