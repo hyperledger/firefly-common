@@ -9,11 +9,13 @@ linters-settings:
     disabled-checks:
       - regexpMust
   goheader:
+    only-new-issues: true
     values:
       regexp:
         COMPANY: .*
+        YEAR_LAX: '202\d'
     template: |-
-      Copyright © {{ YEAR }} {{ COMPANY }}
+      Copyright © {{ YEAR_LAX }} {{ COMPANY }}
 
       SPDX-License-Identifier: Apache-2.0
 
