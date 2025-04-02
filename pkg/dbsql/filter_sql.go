@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2025 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -194,7 +194,7 @@ func (s *Database) FilterUpdate(ctx context.Context, update sq.UpdateBuilder, fi
 }
 
 func (s *Database) mapFieldName(tableName, fieldName string, tm map[string]string) string {
-	if fieldName == "sequence" {
+	if !s.features.NoSpecialSequenceColumn && fieldName == "sequence" {
 		if tableName == "" {
 			return s.sequenceColumn
 		}
