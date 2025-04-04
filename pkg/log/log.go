@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -46,6 +46,24 @@ func WithLogField(ctx context.Context, key, value string) context.Context {
 		value = value[0:61] + "..."
 	}
 	return WithLogger(ctx, loggerFromContext(ctx).WithField(key, value))
+}
+
+func WithLogFields(ctx context.Context, keyValues ...string) context.Context {
+	if len(keyValues)%2 != 0 {
+		panic("odd number of key-value entry fields provided, cannot determine key-value pairs")
+	}
+
+	entry := loggerFromContext(ctx)
+	fields := logrus.Fields{}
+	for i := 0; i < len(keyValues); i += 2 {
+		key := keyValues[i]
+		value := keyValues[i+1]
+		if len(value) > 61 {
+			value = value[0:61] + "..."
+		}
+		fields[key] = value
+	}
+	return WithLogger(ctx, entry.WithFields(fields))
 }
 
 // LoggerFromContext returns the logger for the current context, or no logger if there is no context
