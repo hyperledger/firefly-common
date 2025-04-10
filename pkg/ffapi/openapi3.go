@@ -188,21 +188,20 @@ func (sg *SwaggerGen) ffTagHandler(ctx context.Context, route *Route, name strin
 }
 
 func (sg *SwaggerGen) addCustomType(t reflect.Type, schema *openapi3.Schema) {
-	typeString := "string"
 	switch t.Name() {
 	case "UUID":
-		schema.Type = typeString
+		schema.Type = &openapi3.Types{openapi3.TypeString}
 		schema.Format = "uuid"
 	case "FFTime":
-		schema.Type = typeString
+		schema.Type = &openapi3.Types{openapi3.TypeString}
 		schema.Format = "date-time"
 	case "Bytes32":
-		schema.Type = typeString
+		schema.Type = &openapi3.Types{openapi3.TypeString}
 		schema.Format = "byte"
 	case "FFBigInt":
-		schema.Type = typeString
+		schema.Type = &openapi3.Types{openapi3.TypeString}
 	case "JSONAny":
-		schema.Type = ""
+		schema.Type = &openapi3.Types{openapi3.TypeString}
 	}
 }
 
@@ -236,7 +235,7 @@ func (sg *SwaggerGen) addFormInput(ctx context.Context, op *openapi3.Operation, 
 	props := openapi3.Schemas{
 		"filename.ext": &openapi3.SchemaRef{
 			Value: &openapi3.Schema{
-				Type:   "string",
+				Type:   &openapi3.Types{openapi3.TypeString},
 				Format: "binary",
 			},
 		},
@@ -245,7 +244,7 @@ func (sg *SwaggerGen) addFormInput(ctx context.Context, op *openapi3.Operation, 
 		props[fp.Name] = &openapi3.SchemaRef{
 			Value: &openapi3.Schema{
 				Description: i18n.Expand(ctx, i18n.APISuccessResponse),
-				Type:        "string",
+				Type:        &openapi3.Types{openapi3.TypeString},
 			},
 		}
 	}
@@ -253,7 +252,7 @@ func (sg *SwaggerGen) addFormInput(ctx context.Context, op *openapi3.Operation, 
 	op.RequestBody.Value.Content["multipart/form-data"] = &openapi3.MediaType{
 		Schema: &openapi3.SchemaRef{
 			Value: &openapi3.Schema{
-				Type:       "object",
+				Type:       &openapi3.Types{openapi3.TypeObject},
 				Properties: props,
 			},
 		},
@@ -339,15 +338,15 @@ func (sg *SwaggerGen) addParamInternal(ctx context.Context, op *openapi3.Operati
 		exampleValue = example
 	}
 	value := &openapi3.Schema{
-		Type:    "string",
+		Type:    &openapi3.Types{openapi3.TypeString},
 		Default: defValue,
 		Example: exampleValue,
 	}
 	if isArray {
-		value.Type = "array"
+		value.Type = &openapi3.Types{openapi3.TypeArray}
 		value.Items = &openapi3.SchemaRef{
 			Value: &openapi3.Schema{
-				Type:    "string",
+				Type:    &openapi3.Types{openapi3.TypeString},
 				Default: defValue,
 				Example: exampleValue,
 			},
