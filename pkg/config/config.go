@@ -162,13 +162,19 @@ func RootConfigReset(setServiceDefaults ...func()) {
 	i18n.SetLang(viper.GetString(string(Lang)))
 }
 
+var envPrefix = "firefly"
+
+func SetEnvPrefix(prefix string) {
+	envPrefix = prefix
+}
+
 // ReadConfig initializes the config
 func ReadConfig(cfgSuffix, cfgFile string) error {
 	keysMutex.Lock() // must only call viper directly here (as we already hold the lock)
 	defer keysMutex.Unlock()
 
 	// Set precedence order for reading config location
-	viper.SetEnvPrefix("firefly")
+	viper.SetEnvPrefix(envPrefix)
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 	viper.SetConfigType("yaml")

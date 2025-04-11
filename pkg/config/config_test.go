@@ -19,6 +19,7 @@ package config
 import (
 	"context"
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"os"
 	"path"
 	"strings"
@@ -490,4 +491,25 @@ func TestConfigWatchE2E(t *testing.T) {
 		<-fsListenerDone
 	}()
 
+}
+
+func TestSetEnvPrefix(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := path.Join(tmpDir, "test.yaml")
+
+	// Create the file
+	os.WriteFile(configPath, []byte(`{"conf": "one"}`), 0664)
+
+	os.Setenv("TEST_UT_CONF", "two")
+	SetEnvPrefix("test")
+
+	RootConfigReset()
+	cfg := RootSection("ut")
+	cfg.AddKnownKey("conf")
+
+	err := ReadConfig("yaml", configPath)
+	require.NoError(t, err)
+	assert.Equal(t, "test", viper.GetViper().GetEnvPrefix())
+
+	assert.Equal(t, "two", cfg.GetString("conf"))
 }

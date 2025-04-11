@@ -135,10 +135,11 @@ func newTestAPIServer(t *testing.T, start bool) (*utManager, *apiServer[*utManag
 			// request and that's the "T" on the APIServer
 			return um, um.mockEnrichErr
 		},
-		Description:      "unit testing",
-		APIConfig:        apiConfig,
-		MonitoringConfig: monitoringConfig,
-		CORSConfig:       corsConfig,
+		Description:          "unit testing",
+		APIConfig:            apiConfig,
+		MonitoringConfig:     monitoringConfig,
+		CORSConfig:           corsConfig,
+		MetricsSubsystemName: "apiserver_ut",
 	})
 	done := make(chan struct{})
 	if start {
