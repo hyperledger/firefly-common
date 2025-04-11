@@ -268,6 +268,10 @@ func (sg *SwaggerGen) addURLEncodedFormInput(ctx context.Context, op *openapi3.O
 				Type:        &openapi3.Types{openapi3.TypeString},
 			},
 		}
+
+		if fp.Description != "" {
+			props[fp.Name].Value.Description = i18n.Expand(ctx, fp.Description)
+		}
 	}
 
 	op.RequestBody.Value.Content["application/x-www-form-urlencoded"] = &openapi3.MediaType{
@@ -426,11 +430,16 @@ func (sg *SwaggerGen) addRoute(ctx context.Context, doc *openapi3.T, route *Rout
 	}
 	if route.Method != http.MethodGet && route.Method != http.MethodDelete {
 		sg.initInput(op)
-		sg.addInput(ctx, doc, route, op) // TODO should this be done only if its not a form ?
 		if route.FormUploadHandler != nil {
+			// add a mix of JSON and upload form input (though we don't support JSON in the form)
+			sg.addInput(ctx, doc, route, op)
 			sg.addUploadFormInput(ctx, op, route.FormParams)
 		} else if route.FormParams != nil {
+			// we only want form input and not JSON input
 			sg.addURLEncodedFormInput(ctx, op, route.FormParams)
+		} else {
+			// for all other handlers/inputs just add the standard JSON input
+			sg.addInput(ctx, doc, route, op)
 		}
 	}
 	sg.addOutput(ctx, doc, route, op)
