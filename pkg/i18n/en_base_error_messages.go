@@ -184,5 +184,5 @@ var (
 	MsgDBErrorBuildingStatement                    = ffe("FF00247", "Error building statement: %s")
 	MsgDBReadInsertTSFailed                        = ffe("FF00248", "Failed to read timestamp from database optimized upsert: %s")
 	MsgUnmarshalToFloat64NotSupported              = ffe("FF00249", "Unmarshalling to a float64 is not supported due to possible precision loss. Consider unmarshalling to an interface, json.Number or fftypes.JSONAny instead")
-	MsgParseFormError                              = ffe("FF00250", "Failed to parse form: %s", http.StatusBadRequest)
+	MsgParseFormError                              = ffe("FF00250", "Failed to parse form", http.StatusBadRequest)
 )

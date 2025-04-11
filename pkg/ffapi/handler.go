@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -71,7 +72,6 @@ type multipartState struct {
 }
 
 func (hs *HandlerFactory) getFilePart(req *http.Request) (*multipartState, error) {
-
 	formParams := make(map[string]string)
 	ctx := req.Context()
 	l := log.L(ctx)
@@ -115,8 +115,7 @@ func (hs *HandlerFactory) getFormParams(req *http.Request) (map[string]string, e
 		}
 
 		if len(v) > 1 {
-			form[k] = strings.Join(v, ",") // TODO is this good enough ?
-			continue
+			return nil, i18n.WrapError(req.Context(), fmt.Errorf("multi-value form parameters for '%s' are not currently supported", k), i18n.MsgParseFormError)
 		}
 
 		form[k] = v[0]
