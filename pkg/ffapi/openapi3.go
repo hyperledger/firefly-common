@@ -259,7 +259,7 @@ func (sg *SwaggerGen) addUploadFormInput(ctx context.Context, op *openapi3.Opera
 	}
 }
 
-func (sg *SwaggerGen) addUrlEncodedFormInput(ctx context.Context, op *openapi3.Operation, formParams []*FormParam) {
+func (sg *SwaggerGen) addURLEncodedFormInput(ctx context.Context, op *openapi3.Operation, formParams []*FormParam) {
 	props := openapi3.Schemas{}
 	for _, fp := range formParams {
 		props[fp.Name] = &openapi3.SchemaRef{
@@ -430,7 +430,7 @@ func (sg *SwaggerGen) addRoute(ctx context.Context, doc *openapi3.T, route *Rout
 		if route.FormUploadHandler != nil {
 			sg.addUploadFormInput(ctx, op, route.FormParams)
 		} else if route.FormParams != nil {
-			sg.addUrlEncodedFormInput(ctx, op, route.FormParams)
+			sg.addURLEncodedFormInput(ctx, op, route.FormParams)
 		}
 	}
 	sg.addOutput(ctx, doc, route, op)
