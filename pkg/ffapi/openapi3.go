@@ -265,7 +265,7 @@ func (sg *SwaggerGen) addURLEncodedFormInput(ctx context.Context, op *openapi3.O
 		props[fp.Name] = &openapi3.SchemaRef{
 			Value: &openapi3.Schema{
 				Description: i18n.Expand(ctx, i18n.APISuccessResponse),
-				Type:        "string",
+				Type:        &openapi3.Types{openapi3.TypeString},
 			},
 		}
 	}
@@ -273,7 +273,7 @@ func (sg *SwaggerGen) addURLEncodedFormInput(ctx context.Context, op *openapi3.O
 	op.RequestBody.Value.Content["application/x-www-form-urlencoded"] = &openapi3.MediaType{
 		Schema: &openapi3.SchemaRef{
 			Value: &openapi3.Schema{
-				Type:       "object",
+				Type:       &openapi3.Types{openapi3.TypeObject},
 				Properties: props,
 			},
 		},
