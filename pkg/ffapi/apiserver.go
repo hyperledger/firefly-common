@@ -19,12 +19,13 @@ package ffapi
 import (
 	"context"
 	"fmt"
-	"github.com/hyperledger/firefly-common/pkg/log"
 	"io"
 	"net"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/hyperledger/firefly-common/pkg/log"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
