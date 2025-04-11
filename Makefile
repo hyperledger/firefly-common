@@ -11,7 +11,7 @@ GOGC=30
 .DELETE_ON_ERROR:
 
 all: build test go-mod-tidy
-test: deps
+test: deps lint
 		$(VGO) test ./pkg/... -cover -coverprofile=coverage.txt -covermode=atomic -timeout=30s
 coverage.html:
 		$(VGO) tool cover -html=coverage.txt
