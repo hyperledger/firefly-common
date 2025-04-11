@@ -430,14 +430,15 @@ func (sg *SwaggerGen) addRoute(ctx context.Context, doc *openapi3.T, route *Rout
 	}
 	if route.Method != http.MethodGet && route.Method != http.MethodDelete {
 		sg.initInput(op)
-		if route.FormUploadHandler != nil {
+		switch {
+		case route.FormUploadHandler != nil:
 			// add a mix of JSON and upload form input (though we don't support JSON in the form)
 			sg.addInput(ctx, doc, route, op)
 			sg.addUploadFormInput(ctx, op, route.FormParams)
-		} else if route.FormParams != nil {
+		case route.FormParams != nil:
 			// we only want form input and not JSON input
 			sg.addURLEncodedFormInput(ctx, op, route.FormParams)
-		} else {
+		default:
 			// for all other handlers/inputs just add the standard JSON input
 			sg.addInput(ctx, doc, route, op)
 		}
