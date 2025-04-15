@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -71,7 +72,6 @@ type multipartState struct {
 }
 
 func (hs *HandlerFactory) getFilePart(req *http.Request) (*multipartState, error) {
-
 	formParams := make(map[string]string)
 	ctx := req.Context()
 	l := log.L(ctx)
@@ -102,6 +102,25 @@ func (hs *HandlerFactory) getFilePart(req *http.Request) (*multipartState, error
 			}, nil
 		}
 	}
+}
+
+func (hs *HandlerFactory) getFormParams(req *http.Request) (map[string]string, error) {
+	if err := req.ParseForm(); err != nil {
+		return nil, i18n.WrapError(req.Context(), err, i18n.MsgParseFormError)
+	}
+	form := make(map[string]string, len(req.Form))
+	for k, v := range req.Form {
+		if len(v) < 1 {
+			continue
+		}
+
+		if len(v) > 1 {
+			return nil, i18n.WrapError(req.Context(), fmt.Errorf("multi-value form parameters for '%s' are not currently supported", k), i18n.MsgParseFormError)
+		}
+
+		form[k] = v[0]
+	}
+	return form, nil
 }
 
 func (hs *HandlerFactory) getParams(req *http.Request, route *Route) (queryParams, pathParams map[string]string, queryArrayParams map[string][]string) {
@@ -154,7 +173,7 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 		if route.JSONInputValue != nil {
 			jsonInput = route.JSONInputValue()
 		}
-		var queryParams, pathParams map[string]string
+		var queryParams, pathParams, formParams map[string]string
 		var queryArrayParams map[string][]string
 		var multipart *multipartState
 		contentType := req.Header.Get("Content-Type")
@@ -184,6 +203,11 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 					d := json.NewDecoder(req.Body)
 					d.UseNumber()
 					err = d.Decode(&jsonInput)
+				}
+			case strings.HasPrefix(strings.ToLower(contentType), "application/x-www-form-urlencoded"):
+				formParams, err = hs.getFormParams(req)
+				if err != nil {
+					return 400, err
 				}
 			case strings.HasPrefix(strings.ToLower(contentType), "text/plain"):
 			default:
@@ -226,6 +250,9 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 				output, err = route.FormUploadHandler(r)
 			case route.StreamHandler != nil:
 				output, err = route.StreamHandler(r)
+			case formParams != nil:
+				r.FP = formParams
+				fallthrough
 			default:
 				output, err = route.JSONHandler(r)
 			}

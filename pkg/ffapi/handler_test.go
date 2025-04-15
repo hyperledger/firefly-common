@@ -25,6 +25,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -649,4 +650,61 @@ func TestBasePathParameters(t *testing.T) {
 	res, err := http.Get(fmt.Sprintf("http://%s/base-path/foo/test/bar", s.Addr()))
 	assert.NoError(t, err)
 	assert.Equal(t, 201, res.StatusCode)
+}
+
+func TestPOSTFormParams(t *testing.T) {
+	s, _, done := newTestServer(t, []*Route{{
+		Name:   "testRoute",
+		Path:   "/test",
+		Method: http.MethodPost,
+		FormParams: []*FormParam{
+			{Name: "foo"},
+		},
+		JSONInputValue:  nil,
+		JSONOutputValue: func() interface{} { return make(map[string]interface{}) },
+		JSONOutputCodes: []int{201},
+		JSONHandler: func(r *APIRequest) (output interface{}, err error) {
+			assert.Equal(t, "baz", r.PP["param"])
+			assert.Equal(t, "bar", r.FP["foo"])
+			return map[string]interface{}{}, nil
+		},
+	}}, "/base-path/{param}", []*PathParam{
+		{Name: "param"},
+	})
+	defer done()
+
+	val := url.Values{
+		"foo": {"bar"},
+	}
+	res, err := http.PostForm(fmt.Sprintf("http://%s/base-path/baz/test", s.Addr()), val)
+	assert.NoError(t, err)
+	assert.Equal(t, 201, res.StatusCode)
+}
+
+func TestPOSTFormParamsMultiValueUnsupported(t *testing.T) {
+	s, _, done := newTestServer(t, []*Route{{
+		Name:   "testRoute",
+		Path:   "/test",
+		Method: http.MethodPost,
+		FormParams: []*FormParam{
+			{Name: "foo"},
+		},
+		JSONInputValue:  nil,
+		JSONOutputValue: func() interface{} { return make(map[string]interface{}) },
+		JSONOutputCodes: []int{201},
+		JSONHandler: func(r *APIRequest) (output interface{}, err error) {
+			t.Fail() // we shouldn't get here
+			return map[string]interface{}{}, nil
+		},
+	}}, "/base-path/{param}", []*PathParam{
+		{Name: "param"},
+	})
+	defer done()
+
+	val := url.Values{
+		"foo": {"bar", "foo2"},
+	}
+	res, err := http.PostForm(fmt.Sprintf("http://%s/base-path/baz/test", s.Addr()), val)
+	assert.NoError(t, err)
+	assert.Equal(t, 400, res.StatusCode)
 }
