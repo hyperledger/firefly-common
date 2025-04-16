@@ -305,7 +305,7 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 		// If an X-FireFlyRequestID was set on the context, pass that header on this request too
 		ffRequestID := rCtx.Value(ffapi.CtxFFRequestIDKey{})
 		if ffRequestID != nil {
-			req.Header.Set(ffapi.FFRequestIDHeader, ffRequestID.(string))
+			req.Header.Set(ffapi.RequestIDHeader(), ffRequestID.(string))
 		}
 
 		if ffrestyConfig.OnBeforeRequest != nil {

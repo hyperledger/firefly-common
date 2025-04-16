@@ -558,7 +558,7 @@ func TestPassthroughHeaders(t *testing.T) {
 
 	httpmock.RegisterResponder("GET", "http://localhost:12345/test",
 		func(req *http.Request) (*http.Response, error) {
-			assert.Equal(t, "customReqID", req.Header.Get(ffapi.FFRequestIDHeader))
+			assert.Equal(t, "customReqID", req.Header.Get(ffapi.RequestIDHeader()))
 			assert.Equal(t, "headervalue", req.Header.Get("someheader"))
 			assert.Equal(t, "custom value", req.Header.Get("X-Custom-Header"))
 			assert.Equal(t, "Basic dXNlcjpwYXNz", req.Header.Get("Authorization"))

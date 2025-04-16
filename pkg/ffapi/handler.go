@@ -39,7 +39,24 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const FFRequestIDHeader = "X-FireFly-Request-ID"
+const DefaultRequestIDHeader = "X-FireFly-Request-ID"
+
+var (
+	requestIDHeader = DefaultRequestIDHeader
+)
+
+// RequestIDHeader returns the header name used to pass the request ID for
+// ffapi server and ffresty client requests.
+func RequestIDHeader() string {
+	return requestIDHeader
+}
+
+// SetRequestIDHeader configures the header used to pass the request ID between
+// ffapi server and ffresty client requests. Should be set at initialization of
+// a process.
+func SetRequestIDHeader(header string) {
+	requestIDHeader = header
+}
 
 type (
 	CtxHeadersKey     struct{}
@@ -343,7 +360,7 @@ func (hs *HandlerFactory) APIWrapper(handler HandlerFunction) http.HandlerFunc {
 
 		reqTimeout := hs.getTimeout(req)
 		ctx, cancel := context.WithTimeout(req.Context(), reqTimeout)
-		httpReqID := req.Header.Get(FFRequestIDHeader)
+		httpReqID := req.Header.Get(RequestIDHeader())
 		if httpReqID == "" {
 			httpReqID = fftypes.ShortID()
 		}
