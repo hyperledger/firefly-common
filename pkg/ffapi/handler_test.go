@@ -115,6 +115,9 @@ func TestRouteServePOST201WithParams(t *testing.T) {
 	}}, "", nil)
 	defer done()
 	SetRequestIDHeader("x-unittest-req-id") // tests custom req header
+	defer func() {
+		SetRequestIDHeader(DefaultRequestIDHeader) // reverts this for other tests
+	}()
 
 	b, _ := json.Marshal(map[string]interface{}{"input1": "value1"})
 
