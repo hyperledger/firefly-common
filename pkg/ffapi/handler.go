@@ -42,7 +42,7 @@ import (
 const DefaultRequestIDHeader = "X-FireFly-Request-ID"
 
 var (
-	requestIDHeader string = DefaultRequestIDHeader
+	requestIDHeader = DefaultRequestIDHeader
 )
 
 // RequestIDHeader returns the header name used to pass the request ID for
