@@ -263,6 +263,13 @@ func (c *CrudBase[T]) Validate() {
 	}
 }
 
+func (c *CrudBase[T]) idField() string {
+	if c.IDField != "" {
+		return c.IDField
+	}
+	return ColumnID
+}
+
 func (c *CrudBase[T]) idFilter(id string) sq.Eq {
 	var filter sq.Eq
 	if c.ScopedFilter != nil {
@@ -273,7 +280,7 @@ func (c *CrudBase[T]) idFilter(id string) sq.Eq {
 	if c.ReadTableAlias != "" {
 		filter[fmt.Sprintf("%s.%s", c.ReadTableAlias, c.GetIDField())] = id
 	} else {
-		filter["id"] = id
+		filter[c.idField()] = id
 	}
 	return filter
 }
@@ -827,7 +834,7 @@ func (c *CrudBase[T]) Count(ctx context.Context, filter ffapi.Filter) (count int
 
 func (c *CrudBase[T]) Update(ctx context.Context, id string, update ffapi.Update, hooks ...PostCompletionHook) (err error) {
 	return c.attemptUpdate(ctx, func(query sq.UpdateBuilder) (sq.UpdateBuilder, error) {
-		return query.Where(sq.Eq{"id": id}), nil
+		return query.Where(sq.Eq{c.idField(): id}), nil
 	}, update, true, hooks...)
 }
 
