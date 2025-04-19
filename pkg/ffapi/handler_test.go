@@ -25,6 +25,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -107,13 +108,26 @@ func TestRouteServePOST201WithParams(t *testing.T) {
 			assert.Equal(t, "true", r.QP["param2"])
 			assert.Equal(t, "false", r.QP["param3"])
 			assert.Equal(t, []string{"x", "y"}, r.QAP["param4"])
+			assert.Equal(t, "12345", r.Req.Context().Value(CtxFFRequestIDKey{}).(string))
+			assert.Equal(t, "custom-value", r.Req.Context().Value(CtxHeadersKey{}).(http.Header).Get("X-Custom-Header"))
 			return map[string]interface{}{"output1": "value2"}, nil
 		},
 	}}, "", nil)
 	defer done()
+	SetRequestIDHeader("x-unittest-req-id") // tests custom req header
+	defer func() {
+		SetRequestIDHeader(DefaultRequestIDHeader) // reverts this for other tests
+	}()
 
 	b, _ := json.Marshal(map[string]interface{}{"input1": "value1"})
-	res, err := http.Post(fmt.Sprintf("http://%s/test/stuff?param1=thing&param2&param3=false&param4=x&param4=y", s.Addr()), "application/json", bytes.NewReader(b))
+
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s/test/stuff?param1=thing&param2&param3=false&param4=x&param4=y", s.Addr()), bytes.NewReader(b))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Custom-Header", "custom-value") // tests custom header
+	req.Header.Set("x-unittest-req-id", "12345")      // tests custom req header
+
+	res, err := http.DefaultClient.Do(req)
 	assert.NoError(t, err)
 	assert.Equal(t, 201, res.StatusCode)
 	var resJSON map[string]interface{}
@@ -133,13 +147,19 @@ func TestRouteServePOST201WithParamsLargeNumber(t *testing.T) {
 		JSONOutputCodes: []int{201},
 		JSONHandler: func(r *APIRequest) (output interface{}, err error) {
 			assert.Equal(t, r.Input, map[string]interface{}{"largeNumberParam": json.Number("10000000000000000000000000001")})
+			assert.Equal(t, "12345", r.Req.Context().Value(CtxFFRequestIDKey{}).(string))
 			// Echo the input back as the response
 			return r.Input, nil
 		},
 	}}, "", nil)
 	defer done()
 
-	res, err := http.Post(fmt.Sprintf("http://%s/test/stuff", s.Addr()), "application/json", bytes.NewReader([]byte(largeParamLiteral)))
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s/test/stuff", s.Addr()), bytes.NewReader([]byte(largeParamLiteral)))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(DefaultRequestIDHeader, "12345") // tests client setting req header
+
+	res, err := http.DefaultClient.Do(req)
 	assert.NoError(t, err)
 	assert.Equal(t, 201, res.StatusCode)
 	var resJSON map[string]interface{}
@@ -649,4 +669,61 @@ func TestBasePathParameters(t *testing.T) {
 	res, err := http.Get(fmt.Sprintf("http://%s/base-path/foo/test/bar", s.Addr()))
 	assert.NoError(t, err)
 	assert.Equal(t, 201, res.StatusCode)
+}
+
+func TestPOSTFormParams(t *testing.T) {
+	s, _, done := newTestServer(t, []*Route{{
+		Name:   "testRoute",
+		Path:   "/test",
+		Method: http.MethodPost,
+		FormParams: []*FormParam{
+			{Name: "foo"},
+		},
+		JSONInputValue:  nil,
+		JSONOutputValue: func() interface{} { return make(map[string]interface{}) },
+		JSONOutputCodes: []int{201},
+		JSONHandler: func(r *APIRequest) (output interface{}, err error) {
+			assert.Equal(t, "baz", r.PP["param"])
+			assert.Equal(t, "bar", r.FP["foo"])
+			return map[string]interface{}{}, nil
+		},
+	}}, "/base-path/{param}", []*PathParam{
+		{Name: "param"},
+	})
+	defer done()
+
+	val := url.Values{
+		"foo": {"bar"},
+	}
+	res, err := http.PostForm(fmt.Sprintf("http://%s/base-path/baz/test", s.Addr()), val)
+	assert.NoError(t, err)
+	assert.Equal(t, 201, res.StatusCode)
+}
+
+func TestPOSTFormParamsMultiValueUnsupported(t *testing.T) {
+	s, _, done := newTestServer(t, []*Route{{
+		Name:   "testRoute",
+		Path:   "/test",
+		Method: http.MethodPost,
+		FormParams: []*FormParam{
+			{Name: "foo"},
+		},
+		JSONInputValue:  nil,
+		JSONOutputValue: func() interface{} { return make(map[string]interface{}) },
+		JSONOutputCodes: []int{201},
+		JSONHandler: func(r *APIRequest) (output interface{}, err error) {
+			t.Fail() // we shouldn't get here
+			return map[string]interface{}{}, nil
+		},
+	}}, "/base-path/{param}", []*PathParam{
+		{Name: "param"},
+	})
+	defer done()
+
+	val := url.Values{
+		"foo": {"bar", "foo2"},
+	}
+	res, err := http.PostForm(fmt.Sprintf("http://%s/base-path/baz/test", s.Addr()), val)
+	assert.NoError(t, err)
+	assert.Equal(t, 400, res.StatusCode)
 }

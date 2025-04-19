@@ -188,21 +188,20 @@ func (sg *SwaggerGen) ffTagHandler(ctx context.Context, route *Route, name strin
 }
 
 func (sg *SwaggerGen) addCustomType(t reflect.Type, schema *openapi3.Schema) {
-	typeString := "string"
 	switch t.Name() {
 	case "UUID":
-		schema.Type = typeString
+		schema.Type = &openapi3.Types{openapi3.TypeString}
 		schema.Format = "uuid"
 	case "FFTime":
-		schema.Type = typeString
+		schema.Type = &openapi3.Types{openapi3.TypeString}
 		schema.Format = "date-time"
 	case "Bytes32":
-		schema.Type = typeString
+		schema.Type = &openapi3.Types{openapi3.TypeString}
 		schema.Format = "byte"
 	case "FFBigInt":
-		schema.Type = typeString
+		schema.Type = &openapi3.Types{openapi3.TypeString}
 	case "JSONAny":
-		schema.Type = ""
+		schema.Type = &openapi3.Types{openapi3.TypeString}
 	}
 }
 
@@ -232,11 +231,11 @@ func (sg *SwaggerGen) addInput(ctx context.Context, doc *openapi3.T, route *Rout
 	}
 }
 
-func (sg *SwaggerGen) addFormInput(ctx context.Context, op *openapi3.Operation, formParams []*FormParam) {
+func (sg *SwaggerGen) addUploadFormInput(ctx context.Context, op *openapi3.Operation, formParams []*FormParam) {
 	props := openapi3.Schemas{
 		"filename.ext": &openapi3.SchemaRef{
 			Value: &openapi3.Schema{
-				Type:   "string",
+				Type:   &openapi3.Types{openapi3.TypeString},
 				Format: "binary",
 			},
 		},
@@ -245,7 +244,7 @@ func (sg *SwaggerGen) addFormInput(ctx context.Context, op *openapi3.Operation, 
 		props[fp.Name] = &openapi3.SchemaRef{
 			Value: &openapi3.Schema{
 				Description: i18n.Expand(ctx, i18n.APISuccessResponse),
-				Type:        "string",
+				Type:        &openapi3.Types{openapi3.TypeString},
 			},
 		}
 	}
@@ -253,7 +252,32 @@ func (sg *SwaggerGen) addFormInput(ctx context.Context, op *openapi3.Operation, 
 	op.RequestBody.Value.Content["multipart/form-data"] = &openapi3.MediaType{
 		Schema: &openapi3.SchemaRef{
 			Value: &openapi3.Schema{
-				Type:       "object",
+				Type:       &openapi3.Types{openapi3.TypeObject},
+				Properties: props,
+			},
+		},
+	}
+}
+
+func (sg *SwaggerGen) addURLEncodedFormInput(ctx context.Context, op *openapi3.Operation, formParams []*FormParam) {
+	props := openapi3.Schemas{}
+	for _, fp := range formParams {
+		props[fp.Name] = &openapi3.SchemaRef{
+			Value: &openapi3.Schema{
+				Description: i18n.Expand(ctx, i18n.APISuccessResponse),
+				Type:        &openapi3.Types{openapi3.TypeString},
+			},
+		}
+
+		if fp.Description != "" {
+			props[fp.Name].Value.Description = i18n.Expand(ctx, fp.Description)
+		}
+	}
+
+	op.RequestBody.Value.Content["application/x-www-form-urlencoded"] = &openapi3.MediaType{
+		Schema: &openapi3.SchemaRef{
+			Value: &openapi3.Schema{
+				Type:       &openapi3.Types{openapi3.TypeObject},
 				Properties: props,
 			},
 		},
@@ -339,15 +363,15 @@ func (sg *SwaggerGen) addParamInternal(ctx context.Context, op *openapi3.Operati
 		exampleValue = example
 	}
 	value := &openapi3.Schema{
-		Type:    "string",
+		Type:    &openapi3.Types{openapi3.TypeString},
 		Default: defValue,
 		Example: exampleValue,
 	}
 	if isArray {
-		value.Type = "array"
+		value.Type = &openapi3.Types{openapi3.TypeArray}
 		value.Items = &openapi3.SchemaRef{
 			Value: &openapi3.Schema{
-				Type:    "string",
+				Type:    &openapi3.Types{openapi3.TypeString},
 				Default: defValue,
 				Example: exampleValue,
 			},
@@ -406,9 +430,17 @@ func (sg *SwaggerGen) addRoute(ctx context.Context, doc *openapi3.T, route *Rout
 	}
 	if route.Method != http.MethodGet && route.Method != http.MethodDelete {
 		sg.initInput(op)
-		sg.addInput(ctx, doc, route, op)
-		if route.FormUploadHandler != nil {
-			sg.addFormInput(ctx, op, route.FormParams)
+		switch {
+		case route.FormUploadHandler != nil:
+			// add a mix of JSON and upload form input (though we don't support JSON in the form)
+			sg.addInput(ctx, doc, route, op)
+			sg.addUploadFormInput(ctx, op, route.FormParams)
+		case route.FormParams != nil:
+			// we only want form input and not JSON input
+			sg.addURLEncodedFormInput(ctx, op, route.FormParams)
+		default:
+			// for all other handlers/inputs just add the standard JSON input
+			sg.addInput(ctx, doc, route, op)
 		}
 	}
 	sg.addOutput(ctx, doc, route, op)

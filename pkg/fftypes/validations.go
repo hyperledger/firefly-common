@@ -50,9 +50,9 @@ func ValidateFFNameFieldNoUUID(ctx context.Context, str string, fieldName string
 	return ValidateFFNameField(ctx, str, fieldName)
 }
 
-func ValidateLength(ctx context.Context, str string, fieldName string, maxVal int) error {
-	if len([]byte(str)) > maxVal {
-		return i18n.NewError(ctx, i18n.MsgFieldTooLong, fieldName, maxVal)
+func ValidateLength(ctx context.Context, str string, fieldName string, maxLen int) error {
+	if len([]byte(str)) > maxLen {
+		return i18n.NewError(ctx, i18n.MsgFieldTooLong, fieldName, maxLen)
 	}
 	return nil
 }
