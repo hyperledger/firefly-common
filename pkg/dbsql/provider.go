@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2025 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -26,10 +26,11 @@ import (
 )
 
 type SQLFeatures struct {
-	UseILIKE          bool
-	MultiRowInsert    bool
-	PlaceholderFormat sq.PlaceholderFormat
-	AcquireLock       func(lockName string) string
+	UseILIKE                   bool
+	MultiRowInsert             bool
+	PlaceholderFormat          sq.PlaceholderFormat
+	AcquireLock                func(lockName string) string
+	CustomSequenceColumnFilter bool // without this set, any use of the column "sequence" will break in filtering
 	// DB specific query builder for RDBMS-side optimized upsert, returning the requested column from the query
 	// (the CRUD layer will request the create time column to detect if the record was new or not)
 	DBOptimizedUpsertBuilder func(ctx context.Context, table string, idColumn string, insertCols, updateCols []string, returnCol string, values map[string]driver.Value) (sq.InsertBuilder, error)

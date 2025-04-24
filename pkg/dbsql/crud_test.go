@@ -189,7 +189,8 @@ func newCRUDCollection(db *Database, ns string) *TestCRUD {
 			NilValue:     func() *TestCRUDable { return nil },
 			NewInstance:  func() *TestCRUDable { return &TestCRUDable{} },
 			ScopedFilter: func() squirrel.Eq { return sq.Eq{"ns": ns} },
-			EventHandler: nil, // set below
+			EventHandler: nil,  // set below
+			IDField:      "id", // same as default
 			NameField:    "name",
 			QueryFactory: CRUDableQueryFactory,
 			IDValidator:  UUIDValidator,
