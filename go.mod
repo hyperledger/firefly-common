@@ -2,8 +2,6 @@ module github.com/hyperledger/firefly-common
 
 go 1.23.0
 
-toolchain go1.24.1
-
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/Masterminds/squirrel v1.5.4
