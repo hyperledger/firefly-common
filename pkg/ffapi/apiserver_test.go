@@ -573,7 +573,7 @@ func TestVersionedAPIInitErrors(t *testing.T) {
 
 	err := as.Serve(ctx)
 	assert.Error(t, err)
-	assert.Regexp(t, "cannot use both Routes and VersionedAPIs", err)
+	assert.Regexp(t, "FF00251", err)
 
 	as = NewAPIServer(ctx, APIServerOptions[*utManager]{
 		MetricsRegistry: metric.NewPrometheusMetricsRegistry("ut"),
@@ -588,7 +588,7 @@ func TestVersionedAPIInitErrors(t *testing.T) {
 
 	err = as.Serve(ctx)
 	assert.Error(t, err)
-	assert.Regexp(t, "no API versions found", err)
+	assert.Regexp(t, "FF00252", err)
 
 	as = NewAPIServer(ctx, APIServerOptions[*utManager]{
 		MetricsRegistry: metric.NewPrometheusMetricsRegistry("ut"),
@@ -610,7 +610,7 @@ func TestVersionedAPIInitErrors(t *testing.T) {
 
 	err = as.Serve(ctx)
 	assert.Error(t, err)
-	assert.Regexp(t, "default version must be set", err)
+	assert.Regexp(t, "FF00253", err)
 	as = NewAPIServer(ctx, APIServerOptions[*utManager]{
 		MetricsRegistry: metric.NewPrometheusMetricsRegistry("ut"),
 		VersionedAPIs: &VersionedAPIs{
@@ -631,6 +631,6 @@ func TestVersionedAPIInitErrors(t *testing.T) {
 
 	err = as.Serve(ctx)
 	assert.Error(t, err)
-	assert.Regexp(t, "default version 'unknown' does not exist", err)
+	assert.Regexp(t, "FF00254", err)
 
 }

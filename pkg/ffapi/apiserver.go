@@ -306,10 +306,10 @@ func (as *apiServer[T]) createMuxRouter(ctx context.Context) (*mux.Router, error
 	defaultAPIVersion := "v1"
 	if as.VersionedAPIs != nil {
 		if len(as.Routes) > 0 {
-			return nil, fmt.Errorf("cannot use both Routes and VersionedAPIs")
+			return nil, i18n.NewError(ctx, i18n.MsgCannotUseRouteAndVersionedAPI)
 		}
 		if len(as.VersionedAPIs.APIVersions) == 0 {
-			return nil, fmt.Errorf("no API versions found in VersionedAPIs")
+			return nil, i18n.NewError(ctx, i18n.MsgMissingVersionedAPI)
 		}
 		if len(as.VersionedAPIs.APIVersions) == 1 {
 			for apiVersion := range as.VersionedAPIs.APIVersions {
@@ -317,20 +317,20 @@ func (as *apiServer[T]) createMuxRouter(ctx context.Context) (*mux.Router, error
 			}
 		}
 		if as.VersionedAPIs.DefaultVersion == "" {
-			return nil, fmt.Errorf("default version must be set when there are more than 1 API version")
+			return nil, i18n.NewError(ctx, i18n.MsgMissingDefaultAPIVersion)
 		}
 		if as.VersionedAPIs.APIVersions[as.VersionedAPIs.DefaultVersion] == nil || len(as.VersionedAPIs.APIVersions[as.VersionedAPIs.DefaultVersion].Routes) == 0 {
-			return nil, fmt.Errorf("default version '%s' does not exist", as.VersionedAPIs.DefaultVersion)
+			return nil, i18n.NewError(ctx, i18n.MsgNonExistDefaultAPIVersion, as.VersionedAPIs.DefaultVersion)
 		}
 		defaultAPIVersionObject = as.VersionedAPIs.APIVersions[as.VersionedAPIs.DefaultVersion]
 		defaultAPIVersion = as.VersionedAPIs.DefaultVersion
 		for apiVersion, routes := range as.VersionedAPIs.APIVersions {
-			if err := as.addRoutesForVersion(r, hf, apiVersion, routes); err != nil {
+			if err := as.addRoutesForVersion(ctx, r, hf, apiVersion, routes); err != nil {
 				return nil, err
 			}
 		}
 	} else {
-		if err := as.addRoutesForVersion(r, hf, defaultAPIVersion, defaultAPIVersionObject); err != nil {
+		if err := as.addRoutesForVersion(ctx, r, hf, defaultAPIVersion, defaultAPIVersionObject); err != nil {
 			return nil, err
 		}
 	}
@@ -346,7 +346,7 @@ func (as *apiServer[T]) createMuxRouter(ctx context.Context) (*mux.Router, error
 	return r, nil
 }
 
-func (as *apiServer[T]) addRoutesForVersion(r *mux.Router, hf *HandlerFactory, apiVersion string, apiVersionObject *APIVersion) error {
+func (as *apiServer[T]) addRoutesForVersion(ctx context.Context, r *mux.Router, hf *HandlerFactory, apiVersion string, apiVersionObject *APIVersion) error {
 	for _, route := range apiVersionObject.Routes {
 		ce, ok := route.Extensions.(*APIServerRouteExt[T])
 		if !ok {
@@ -363,7 +363,7 @@ func (as *apiServer[T]) addRoutesForVersion(r *mux.Router, hf *HandlerFactory, a
 		}
 		if ce.JSONHandler != nil || ce.UploadHandler != nil || ce.StreamHandler != nil {
 			if strings.HasPrefix(route.Path, "/") {
-				return fmt.Errorf("route path '%s' must not start with '/'", route.Path)
+				return i18n.NewError(ctx, i18n.MsgRoutePathNotStartWithSlash, route.Path)
 			}
 			r.HandleFunc(fmt.Sprintf("/api/%s/%s", apiVersion, route.Path), as.routeHandler(hf, route)).
 				Methods(route.Method)
@@ -401,7 +401,7 @@ func (as *apiServer[T]) createMonitoringMuxRouter(ctx context.Context) (*mux.Rou
 	for _, route := range as.MonitoringRoutes {
 		path := route.Path
 		if strings.HasPrefix(route.Path, "/") {
-			return nil, fmt.Errorf("route path '%s' must not start with '/'", route.Path)
+			return nil, i18n.NewError(ctx, i18n.MsgRoutePathNotStartWithSlash, route.Path)
 		}
 		r.HandleFunc("/"+path, as.routeHandler(hf, route)).Methods(route.Method)
 	}
