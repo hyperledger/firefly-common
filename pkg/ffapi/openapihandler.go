@@ -33,7 +33,7 @@ const (
 )
 
 type OpenAPIHandlerFactory struct {
-	BaseSwaggerGenOptions   SwaggerGenOptions
+	BaseSwaggerGenOptions   BaseSwaggerGenOptions
 	StaticPublicURL         string
 	DynamicPublicURLHeader  string
 	DynamicPublicURLBuilder func(req *http.Request) string
@@ -106,11 +106,14 @@ func (ohf *OpenAPIHandlerFactory) getPublicURL(req *http.Request, relativePath s
 	return publicURL
 }
 
-func (ohf *OpenAPIHandlerFactory) OpenAPIHandler(apiPath string, format OpenAPIFormat, routes []*Route) HandlerFunction {
+func (ohf *OpenAPIHandlerFactory) OpenAPIHandler(apiPath string, format OpenAPIFormat, apiVersionObject *APIVersion) HandlerFunction {
 	return func(res http.ResponseWriter, req *http.Request) (int, error) {
-		options := ohf.BaseSwaggerGenOptions
-		options.BaseURL = ohf.getPublicURL(req, apiPath)
-		doc := NewSwaggerGen(&options).Generate(req.Context(), routes)
+		doc := NewSwaggerGen(&SwaggerGenOptions{
+			BaseSwaggerGenOptions: ohf.BaseSwaggerGenOptions,
+			BaseURL:               ohf.getPublicURL(req, apiPath),
+			Tags:                  apiVersionObject.Tags,
+			ExternalDocs:          apiVersionObject.ExternalDocs,
+		}).Generate(req.Context(), apiVersionObject.Routes)
 		if format == OpenAPIFormatJSON {
 			res.Header().Add("Content-Type", "application/json")
 			b, _ := json.Marshal(&doc)

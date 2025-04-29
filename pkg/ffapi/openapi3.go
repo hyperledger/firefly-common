@@ -36,18 +36,40 @@ import (
 )
 
 type SwaggerGenOptions struct {
-	BaseURL                   string
-	BaseURLVariables          map[string]BaseURLVariable
-	Title                     string
-	Version                   string
-	Description               string
+	// options to generate the base URL
+	BaseURL          string
+	BaseURLVariables map[string]BaseURLVariable
+
+	BaseSwaggerGenOptions
+
+	// options of controlling query parameters values
+
+	APIMaxFilterSkip      uint
+	APIDefaultFilterLimit string
+	APIMaxFilterLimit     uint
+
+	// a custom function to modify the generated OpenAPI spec
+	RouteCustomizations func(ctx context.Context, sg *SwaggerGen, route *Route, op *openapi3.Operation)
+
+	// OpenAPI 3.0.x specific options
+	Tags         openapi3.Tags
+	ExternalDocs *openapi3.ExternalDocs
+}
+
+type BaseSwaggerGenOptions struct { // options that applies to all API versions
+
+	// attributes of openapi3.Info
+	Title       string
+	Version     string
+	Description string
+
+	// descriptions for the route parameters are parsed from the ffstruct tags
+	// when set this flag to true, if a description is not found, the generator will panic
+	// this is useful to ensure that all fields are documented
 	PanicOnMissingDescription bool
-	DefaultRequestTimeout     time.Duration
-	APIMaxFilterSkip          uint
-	APIDefaultFilterLimit     string
-	APIMaxFilterLimit         uint
-	SupportFieldRedaction     bool
-	RouteCustomizations       func(ctx context.Context, sg *SwaggerGen, route *Route, op *openapi3.Operation)
+
+	SupportFieldRedaction bool
+	DefaultRequestTimeout time.Duration
 }
 
 type BaseURLVariable struct {
@@ -96,6 +118,8 @@ func (sg *SwaggerGen) Generate(ctx context.Context, routes []*Route) *openapi3.T
 		Components: &openapi3.Components{
 			Schemas: make(openapi3.Schemas),
 		},
+		Tags:         sg.options.Tags,
+		ExternalDocs: sg.options.ExternalDocs,
 	}
 	opIDs := make(map[string]bool)
 	for _, route := range routes {
@@ -289,7 +313,9 @@ func (sg *SwaggerGen) addURLEncodedFormInput(ctx context.Context, op *openapi3.O
 func CheckObjectDocumented(example interface{}) {
 	(&SwaggerGen{
 		options: &SwaggerGenOptions{
-			PanicOnMissingDescription: true,
+			BaseSwaggerGenOptions: BaseSwaggerGenOptions{
+				PanicOnMissingDescription: true,
+			},
 		},
 	}).Generate(context.Background(), []*Route{{
 		Name:           "doctest",
