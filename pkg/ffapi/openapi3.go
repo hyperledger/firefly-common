@@ -201,7 +201,7 @@ func (sg *SwaggerGen) addCustomType(t reflect.Type, schema *openapi3.Schema) {
 	case "FFBigInt":
 		schema.Type = &openapi3.Types{openapi3.TypeString}
 	case "JSONAny":
-		schema.Type = &openapi3.Types{openapi3.TypeString}
+		schema.Type = nil
 	}
 }
 
