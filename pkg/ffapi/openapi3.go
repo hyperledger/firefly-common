@@ -202,6 +202,8 @@ func (sg *SwaggerGen) addCustomType(t reflect.Type, schema *openapi3.Schema) {
 		schema.Type = &openapi3.Types{openapi3.TypeString}
 	case "JSONAny":
 		schema.Type = &openapi3.Types{openapi3.TypeObject}
+		True := true
+		schema.AdditionalProperties = openapi3.AdditionalProperties{Has: &True}
 	}
 }
 
