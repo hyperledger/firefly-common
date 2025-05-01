@@ -152,7 +152,8 @@ func (sg *SwaggerGen) getPathItem(doc *openapi3.T, path string) *openapi3.PathIt
 func (sg *SwaggerGen) initInput(op *openapi3.Operation) {
 	op.RequestBody = &openapi3.RequestBodyRef{
 		Value: &openapi3.RequestBody{
-			Content: openapi3.Content{},
+			Required: true,
+			Content:  openapi3.Content{},
 		},
 	}
 }
@@ -225,7 +226,13 @@ func (sg *SwaggerGen) addCustomType(t reflect.Type, schema *openapi3.Schema) {
 	case "FFBigInt":
 		schema.Type = &openapi3.Types{openapi3.TypeString}
 	case "JSONAny":
-		schema.Type = &openapi3.Types{openapi3.TypeString}
+		schema.Type = &openapi3.Types{openapi3.TypeObject}
+		True := true
+		schema.AdditionalProperties = openapi3.AdditionalProperties{Has: &True}
+	}
+
+	if schema.Items != nil && schema.Items.Value != nil {
+		schema.Items.Value.Nullable = false
 	}
 }
 
