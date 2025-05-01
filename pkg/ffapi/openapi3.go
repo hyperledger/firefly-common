@@ -206,6 +206,10 @@ func (sg *SwaggerGen) addCustomType(t reflect.Type, schema *openapi3.Schema) {
 		True := true
 		schema.AdditionalProperties = openapi3.AdditionalProperties{Has: &True}
 	}
+
+	if schema.Items != nil && schema.Items.Value != nil {
+		schema.Items.Value.Nullable = false
+	}
 }
 
 func (sg *SwaggerGen) addInput(ctx context.Context, doc *openapi3.T, route *Route, op *openapi3.Operation) {
