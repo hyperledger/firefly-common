@@ -128,7 +128,8 @@ func (sg *SwaggerGen) getPathItem(doc *openapi3.T, path string) *openapi3.PathIt
 func (sg *SwaggerGen) initInput(op *openapi3.Operation) {
 	op.RequestBody = &openapi3.RequestBodyRef{
 		Value: &openapi3.RequestBody{
-			Content: openapi3.Content{},
+			Required: true,
+			Content:  openapi3.Content{},
 		},
 	}
 }
