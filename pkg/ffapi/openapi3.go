@@ -36,27 +36,7 @@ import (
 )
 
 type SwaggerGenOptions struct {
-	// options to generate the base URL
-	BaseURL          string
-	BaseURLVariables map[string]BaseURLVariable
-
-	BaseSwaggerGenOptions
-
-	// options of controlling query parameters values
-
-	APIMaxFilterSkip      uint
-	APIDefaultFilterLimit string
-	APIMaxFilterLimit     uint
-
-	// a custom function to modify the generated OpenAPI spec
-	RouteCustomizations func(ctx context.Context, sg *SwaggerGen, route *Route, op *openapi3.Operation)
-
-	// OpenAPI 3.0.x specific options
-	Tags         openapi3.Tags
-	ExternalDocs *openapi3.ExternalDocs
-}
-
-type BaseSwaggerGenOptions struct { // options that applies to all API versions
+	// ---------- options that applies to all API versions ----------
 
 	// attributes of openapi3.Info
 	Title       string
@@ -70,6 +50,23 @@ type BaseSwaggerGenOptions struct { // options that applies to all API versions
 
 	SupportFieldRedaction bool
 	DefaultRequestTimeout time.Duration
+
+	// ----------- API version specific options ------------
+	// options to generate the base URL
+	BaseURL          string
+	BaseURLVariables map[string]BaseURLVariable
+
+	// options of controlling query parameters values
+	APIMaxFilterSkip      uint
+	APIDefaultFilterLimit string
+	APIMaxFilterLimit     uint
+
+	// a custom function to modify the generated OpenAPI spec
+	RouteCustomizations func(ctx context.Context, sg *SwaggerGen, route *Route, op *openapi3.Operation)
+
+	// OpenAPI 3.0.x specific options
+	Tags         openapi3.Tags
+	ExternalDocs *openapi3.ExternalDocs
 }
 
 type BaseURLVariable struct {
@@ -320,9 +317,7 @@ func (sg *SwaggerGen) addURLEncodedFormInput(ctx context.Context, op *openapi3.O
 func CheckObjectDocumented(example interface{}) {
 	(&SwaggerGen{
 		options: &SwaggerGenOptions{
-			BaseSwaggerGenOptions: BaseSwaggerGenOptions{
-				PanicOnMissingDescription: true,
-			},
+			PanicOnMissingDescription: true,
 		},
 	}).Generate(context.Background(), []*Route{{
 		Name:           "doctest",
