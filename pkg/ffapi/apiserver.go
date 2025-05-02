@@ -285,7 +285,7 @@ func (as *apiServer[T]) createMuxRouter(ctx context.Context) (*mux.Router, error
 	hf := as.handlerFactory()
 
 	as.oah = &OpenAPIHandlerFactory{
-		BaseSwaggerGenOptions: BaseSwaggerGenOptions{
+		BaseSwaggerGenOptions: SwaggerGenOptions{
 			Title:                     as.Description,
 			Version:                   "1.0",
 			PanicOnMissingDescription: as.PanicOnMissingDescription,
@@ -335,10 +335,10 @@ func (as *apiServer[T]) createMuxRouter(ctx context.Context) (*mux.Router, error
 		}
 	}
 
-	r.HandleFunc(`/api/swagger.yaml`, hf.APIWrapper(as.oah.OpenAPIHandler(fmt.Sprintf(`/api/%s`, defaultAPIVersion), OpenAPIFormatYAML, defaultAPIVersionObject)))
-	r.HandleFunc(`/api/swagger.json`, hf.APIWrapper(as.oah.OpenAPIHandler(fmt.Sprintf(`/api/%s`, defaultAPIVersion), OpenAPIFormatJSON, defaultAPIVersionObject)))
-	r.HandleFunc(`/api/openapi.yaml`, hf.APIWrapper(as.oah.OpenAPIHandler(fmt.Sprintf(`/api/%s`, defaultAPIVersion), OpenAPIFormatYAML, defaultAPIVersionObject)))
-	r.HandleFunc(`/api/openapi.json`, hf.APIWrapper(as.oah.OpenAPIHandler(fmt.Sprintf(`/api/%s`, defaultAPIVersion), OpenAPIFormatJSON, defaultAPIVersionObject)))
+	r.HandleFunc(`/api/swagger.yaml`, hf.APIWrapper(as.oah.OpenAPIHandlerVersioned(fmt.Sprintf(`/api/%s`, defaultAPIVersion), OpenAPIFormatYAML, defaultAPIVersionObject)))
+	r.HandleFunc(`/api/swagger.json`, hf.APIWrapper(as.oah.OpenAPIHandlerVersioned(fmt.Sprintf(`/api/%s`, defaultAPIVersion), OpenAPIFormatJSON, defaultAPIVersionObject)))
+	r.HandleFunc(`/api/openapi.yaml`, hf.APIWrapper(as.oah.OpenAPIHandlerVersioned(fmt.Sprintf(`/api/%s`, defaultAPIVersion), OpenAPIFormatYAML, defaultAPIVersionObject)))
+	r.HandleFunc(`/api/openapi.json`, hf.APIWrapper(as.oah.OpenAPIHandlerVersioned(fmt.Sprintf(`/api/%s`, defaultAPIVersion), OpenAPIFormatJSON, defaultAPIVersionObject)))
 	r.HandleFunc(`/api`, hf.APIWrapper(as.oah.SwaggerUIHandler(`/api/openapi.yaml`)))
 	r.HandleFunc(`/favicon{any:.*}.png`, favIconsHandler(as.FavIcon16, as.FavIcon32))
 
@@ -371,8 +371,8 @@ func (as *apiServer[T]) addRoutesForVersion(ctx context.Context, r *mux.Router, 
 	}
 
 	// adding open api documentation for this api version
-	r.HandleFunc(fmt.Sprintf("/api/%s/openapi.yaml", apiVersion), hf.APIWrapper(as.oah.OpenAPIHandler(fmt.Sprintf("/api/%s", apiVersion), OpenAPIFormatYAML, apiVersionObject)))
-	r.HandleFunc(fmt.Sprintf("/api/%s/openapi.json", apiVersion), hf.APIWrapper(as.oah.OpenAPIHandler(fmt.Sprintf("/api/%s", apiVersion), OpenAPIFormatJSON, apiVersionObject)))
+	r.HandleFunc(fmt.Sprintf("/api/%s/openapi.yaml", apiVersion), hf.APIWrapper(as.oah.OpenAPIHandlerVersioned(fmt.Sprintf("/api/%s", apiVersion), OpenAPIFormatYAML, apiVersionObject)))
+	r.HandleFunc(fmt.Sprintf("/api/%s/openapi.json", apiVersion), hf.APIWrapper(as.oah.OpenAPIHandlerVersioned(fmt.Sprintf("/api/%s", apiVersion), OpenAPIFormatJSON, apiVersionObject)))
 
 	return nil
 }

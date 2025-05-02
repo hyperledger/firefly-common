@@ -29,7 +29,7 @@ import (
 
 func TestOpenAPI3SwaggerUI(t *testing.T) {
 	oaf := &OpenAPIHandlerFactory{
-		BaseSwaggerGenOptions: BaseSwaggerGenOptions{},
+		BaseSwaggerGenOptions: SwaggerGenOptions{},
 		StaticPublicURL:       "http://localhost:12345/basepath",
 	}
 	testServer := httptest.NewServer(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
@@ -51,7 +51,7 @@ func TestOpenAPI3SwaggerUI(t *testing.T) {
 
 func TestOpenAPI3SwaggerUIDynamicPublicURLHeader(t *testing.T) {
 	oaf := &OpenAPIHandlerFactory{
-		BaseSwaggerGenOptions:  BaseSwaggerGenOptions{},
+		BaseSwaggerGenOptions:  SwaggerGenOptions{},
 		DynamicPublicURLHeader: "X-External-URL",
 	}
 	testServer := httptest.NewServer(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
@@ -75,7 +75,7 @@ func TestOpenAPI3SwaggerUIDynamicPublicURLHeader(t *testing.T) {
 
 func TestOpenAPI3SwaggerUIDynamicPublicURL(t *testing.T) {
 	oaf := &OpenAPIHandlerFactory{
-		BaseSwaggerGenOptions: BaseSwaggerGenOptions{},
+		BaseSwaggerGenOptions: SwaggerGenOptions{},
 		DynamicPublicURLBuilder: func(req *http.Request) string {
 			return fmt.Sprintf("https://%s/", req.Header.Get("X-Forwarded-Host"))
 		},

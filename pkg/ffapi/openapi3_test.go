@@ -196,12 +196,10 @@ type TestNonTaggedType struct {
 
 func TestOpenAPI3SwaggerGen(t *testing.T) {
 	doc := NewSwaggerGen(&SwaggerGenOptions{
-		BaseSwaggerGenOptions: BaseSwaggerGenOptions{
-			Title:                 "UnitTest",
-			Version:               "1.0",
-			SupportFieldRedaction: true,
-		},
-		BaseURL: "http://localhost:12345/api/v1",
+		Title:                 "UnitTest",
+		Version:               "1.0",
+		SupportFieldRedaction: true,
+		BaseURL:               "http://localhost:12345/api/v1",
 		RouteCustomizations: func(ctx context.Context, sg *SwaggerGen, route *Route, op *openapi3.Operation) {
 			sg.AddParam(ctx, op, "header", "x-my-param", "thing", "stuff", ExampleDesc, false)
 		},
@@ -233,10 +231,8 @@ func TestBadCustomInputSchemaFail(t *testing.T) {
 	}
 	assert.Panics(t, func() {
 		_ = NewSwaggerGen(&SwaggerGenOptions{
-			BaseSwaggerGenOptions: BaseSwaggerGenOptions{
-				Title:   "UnitTest",
-				Version: "1.0",
-			},
+			Title:   "UnitTest",
+			Version: "1.0",
 			BaseURL: "http://localhost:12345/api/v1",
 		}).Generate(context.Background(), routes)
 	})
@@ -257,10 +253,8 @@ func TestBadCustomOutputSchemaFail(t *testing.T) {
 	}
 	assert.Panics(t, func() {
 		_ = NewSwaggerGen(&SwaggerGenOptions{
-			BaseSwaggerGenOptions: BaseSwaggerGenOptions{
-				Title:   "UnitTest",
-				Version: "1.0",
-			},
+			Title:   "UnitTest",
+			Version: "1.0",
 			BaseURL: "http://localhost:12345/api/v1",
 		}).Generate(context.Background(), routes)
 	})
@@ -272,11 +266,8 @@ func TestDuplicateOperationIDCheck(t *testing.T) {
 	}
 	assert.PanicsWithValue(t, "Duplicate/invalid name (used as operation ID in swagger): op1", func() {
 		_ = NewSwaggerGen(&SwaggerGenOptions{
-			BaseSwaggerGenOptions: BaseSwaggerGenOptions{
-				Title:   "UnitTest",
-				Version: "1.0",
-			},
-			BaseURL: "http://localhost:12345/api/v1",
+			Title:   "UnitTest",
+			Version: "1.0",
 		}).Generate(context.Background(), routes)
 	})
 }
@@ -292,10 +283,10 @@ func TestWildcards(t *testing.T) {
 		},
 	}
 	swagger := NewSwaggerGen(&SwaggerGenOptions{
-		BaseSwaggerGenOptions: BaseSwaggerGenOptions{
-			Title:   "UnitTest",
-			Version: "1.0",
-		},
+
+		Title:   "UnitTest",
+		Version: "1.0",
+
 		BaseURL: "http://localhost:12345/api/v1",
 	}).Generate(context.Background(), routes)
 	assert.NotNil(t, swagger.Paths.Find("/namespaces/{ns}/example1/{id}"))
@@ -314,10 +305,8 @@ func TestFFExcludeTag(t *testing.T) {
 		},
 	}
 	swagger := NewSwaggerGen(&SwaggerGenOptions{
-		BaseSwaggerGenOptions: BaseSwaggerGenOptions{
-			Title:   "UnitTest",
-			Version: "1.0",
-		},
+		Title:   "UnitTest",
+		Version: "1.0",
 		BaseURL: "http://localhost:12345/api/v1",
 	}).Generate(context.Background(), routes)
 	assert.NotNil(t, swagger.Paths.Find("/namespaces/{ns}/example1/test").Post.RequestBody.Value)
@@ -353,10 +342,9 @@ func TestCustomResponseRefs(t *testing.T) {
 		},
 	}
 	swagger := NewSwaggerGen(&SwaggerGenOptions{
-		BaseSwaggerGenOptions: BaseSwaggerGenOptions{
-			Title:   "UnitTest",
-			Version: "1.0",
-		},
+		Title:   "UnitTest",
+		Version: "1.0",
+
 		BaseURL: "http://localhost:12345/api/v1",
 	}).Generate(context.Background(), routes)
 	assert.Nil(t, swagger.Paths.Find("/test").Get.RequestBody)
@@ -381,12 +369,10 @@ func TestPanicOnMissingDescription(t *testing.T) {
 	}
 	assert.PanicsWithValue(t, "invalid schema: FF00158: Field description missing for 'TestInOutType.conditional' on route 'PostPanicOnMissingDescription'", func() {
 		_ = NewSwaggerGen(&SwaggerGenOptions{
-			BaseSwaggerGenOptions: BaseSwaggerGenOptions{
-				Title:                     "UnitTest",
-				Version:                   "1.0",
-				PanicOnMissingDescription: true,
-			},
-			BaseURL: "http://localhost:12345/api/v1",
+			Title:                     "UnitTest",
+			Version:                   "1.0",
+			PanicOnMissingDescription: true,
+			BaseURL:                   "http://localhost:12345/api/v1",
 		}).Generate(context.Background(), routes)
 	})
 }
@@ -404,12 +390,10 @@ func TestPanicOnMissingFFStructTag(t *testing.T) {
 	}
 	assert.PanicsWithValue(t, "invalid schema: FF00160: ffstruct tag is missing for 'noFFStructTag' on route 'GetPanicOnMissingFFStructTag'", func() {
 		_ = NewSwaggerGen(&SwaggerGenOptions{
-			BaseSwaggerGenOptions: BaseSwaggerGenOptions{
-				Title:                     "UnitTest",
-				Version:                   "1.0",
-				PanicOnMissingDescription: true,
-			},
-			BaseURL: "http://localhost:12345/api/v1",
+			Title:                     "UnitTest",
+			Version:                   "1.0",
+			PanicOnMissingDescription: true,
+			BaseURL:                   "http://localhost:12345/api/v1",
 		}).Generate(context.Background(), routes)
 	})
 }
@@ -426,12 +410,10 @@ func TestPanicOnMissingRouteDescription(t *testing.T) {
 	}
 	assert.PanicsWithValue(t, "FF00159: API route description missing for route 'GetPanicOnMissingRouteDescription'", func() {
 		_ = NewSwaggerGen(&SwaggerGenOptions{
-			BaseSwaggerGenOptions: BaseSwaggerGenOptions{
-				Title:                     "UnitTest",
-				Version:                   "1.0",
-				PanicOnMissingDescription: true,
-			},
-			BaseURL: "http://localhost:12345/api/v1",
+			Title:                     "UnitTest",
+			Version:                   "1.0",
+			PanicOnMissingDescription: true,
+			BaseURL:                   "http://localhost:12345/api/v1",
 		}).Generate(context.Background(), routes)
 	})
 }
@@ -449,10 +431,8 @@ func TestPreTranslatedRouteDescription(t *testing.T) {
 		},
 	}
 	swagger := NewSwaggerGen(&SwaggerGenOptions{
-		BaseSwaggerGenOptions: BaseSwaggerGenOptions{
-			Title:   "UnitTest",
-			Version: "1.0",
-		},
+		Title:   "UnitTest",
+		Version: "1.0",
 		BaseURL: "http://localhost:12345/api/v1",
 	}).Generate(context.Background(), routes)
 	assert.NotNil(t, swagger.Paths.Find("/namespaces/{ns}/example1/test").Post.RequestBody.Value)
@@ -464,10 +444,8 @@ func TestPreTranslatedRouteDescription(t *testing.T) {
 
 func TestBaseURLVariables(t *testing.T) {
 	doc := NewSwaggerGen(&SwaggerGenOptions{
-		BaseSwaggerGenOptions: BaseSwaggerGenOptions{
-			Title:   "UnitTest",
-			Version: "1.0",
-		},
+		Title:   "UnitTest",
+		Version: "1.0",
 		BaseURL: "http://localhost:12345/api/v1/{param}",
 		BaseURLVariables: map[string]BaseURLVariable{
 			"param": {
