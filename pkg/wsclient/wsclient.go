@@ -45,6 +45,7 @@ type WSConfig struct {
 	WriteBufferSize           int                `json:"writeBufferSize,omitempty"`
 	InitialDelay              time.Duration      `json:"initialDelay,omitempty"`
 	MaximumDelay              time.Duration      `json:"maximumDelay,omitempty"`
+	DelayFactor               float64            `json:"delayFactor,omitempty"`
 	InitialConnectAttempts    int                `json:"initialConnectAttempts,omitempty"`
 	DisableReconnect          bool               `json:"disableReconnect"`
 	AuthUsername              string             `json:"authUsername,omitempty"`
@@ -150,6 +151,7 @@ func New(ctx context.Context, config *WSConfig, beforeConnect WSPreConnectHandle
 		connRetry: retry.Retry{
 			InitialDelay: config.InitialDelay,
 			MaximumDelay: config.MaximumDelay,
+			Factor:       config.DelayFactor,
 		},
 		initialRetryAttempts: config.InitialConnectAttempts,
 		headers:              make(http.Header),

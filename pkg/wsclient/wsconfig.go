@@ -30,6 +30,7 @@ const (
 	defaultBufferSize             = "16Kb"
 	defaultHeartbeatInterval      = "30s"            // up to a minute to detect a dead connection
 	defaultConnectionTimeout      = 45 * time.Second // 45 seconds - the built in default for gorilla/websocket
+	defaultRetryBackoffFactor     = 2.0
 )
 
 const (
@@ -49,6 +50,8 @@ const (
 	WSConfigKeyHeartbeatInterval = "ws.heartbeatInterval"
 	// WSConnectionTimeout is the amount of time to wait while attempting to establish a connection (or automatic reconnection)
 	WSConfigKeyConnectionTimeout = "ws.connectionTimeout"
+	// WSConfigDelayFactor the exponential backoff factor for delay
+	WSConfigDelayFactor = "retry.factor"
 )
 
 // InitConfig ensures the config is initialized for HTTP too, as WS and HTTP
@@ -62,6 +65,7 @@ func InitConfig(conf config.Section) {
 	conf.AddKnownKey(WSConfigURL)
 	conf.AddKnownKey(WSConfigKeyHeartbeatInterval, defaultHeartbeatInterval)
 	conf.AddKnownKey(WSConfigKeyConnectionTimeout, defaultConnectionTimeout)
+	conf.AddKnownKey(WSConfigDelayFactor, defaultRetryBackoffFactor)
 	InitConfigWrap(conf)
 }
 
@@ -78,6 +82,7 @@ func GenerateConfig(ctx context.Context, conf config.Section) (*WSConfig, error)
 		WriteBufferSize:        int(conf.GetByteSize(WSConfigKeyWriteBufferSize)),
 		InitialDelay:           conf.GetDuration(ffresty.HTTPConfigRetryInitDelay),
 		MaximumDelay:           conf.GetDuration(ffresty.HTTPConfigRetryMaxDelay),
+		DelayFactor:            conf.GetFloat64(WSConfigDelayFactor),
 		InitialConnectAttempts: conf.GetInt(WSConfigKeyInitialConnectAttempts),
 		HTTPHeaders:            conf.GetObject(ffresty.HTTPConfigHeaders),
 		AuthUsername:           conf.GetString(ffresty.HTTPConfigAuthUsername),
