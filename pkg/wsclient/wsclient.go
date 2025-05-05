@@ -59,6 +59,14 @@ type WSConfig struct {
 	ReceiveExt bool
 }
 
+type WSWrapConfig struct {
+	HeartbeatInterval         time.Duration `json:"heartbeatInterval,omitempty"`
+	ThrottleRequestsPerSecond int           `json:"requestsPerSecond,omitempty"`
+	ThrottleBurst             int           `json:"burst,omitempty"`
+	// This one cannot be set in JSON - must be configured on the code interface
+	ReceiveExt bool
+}
+
 // WSPayload allows API consumers of this package to stream data, and inspect the message
 // type, rather than just being passed the bytes directly.
 type WSPayload struct {
@@ -98,7 +106,7 @@ type wsClient struct {
 	initialRetryAttempts int
 	wsdialer             *websocket.Dialer
 	wsconn               *websocket.Conn
-	retry                retry.Retry
+	connRetry            retry.Retry
 	closed               bool
 	useReceiveExt        bool
 	receive              chan []byte
@@ -122,6 +130,7 @@ type WSPreConnectHandler func(ctx context.Context, w WSClient) error
 // WSPostConnectHandler will be called after every connect/reconnect. Can send data over ws, but must not block listening for data on the ws.
 type WSPostConnectHandler func(ctx context.Context, w WSClient) error
 
+// Creates a new outbound client that can be connected to a remote server
 func New(ctx context.Context, config *WSConfig, beforeConnect WSPreConnectHandler, afterConnect WSPostConnectHandler) (WSClient, error) {
 	l := log.L(ctx)
 	wsURL, err := buildWSUrl(ctx, config)
@@ -138,7 +147,7 @@ func New(ctx context.Context, config *WSConfig, beforeConnect WSPreConnectHandle
 			TLSClientConfig:  config.TLSClientConfig,
 			HandshakeTimeout: config.ConnectionTimeout,
 		},
-		retry: retry.Retry{
+		connRetry: retry.Retry{
 			InitialDelay: config.InitialDelay,
 			MaximumDelay: config.MaximumDelay,
 		},
@@ -153,11 +162,7 @@ func New(ctx context.Context, config *WSConfig, beforeConnect WSPreConnectHandle
 		disableReconnect:     config.DisableReconnect,
 		rateLimiter:          ffresty.GetRateLimiter(config.ThrottleRequestsPerSecond, config.ThrottleBurst),
 	}
-	if w.useReceiveExt {
-		w.receiveExt = make(chan *WSPayload)
-	} else {
-		w.receive = make(chan []byte)
-	}
+	w.setupReceiveChannel()
 	for k, v := range config.HTTPHeaders {
 		if vs, ok := v.(string); ok {
 			w.headers.Set(k, vs)
@@ -180,6 +185,40 @@ func New(ctx context.Context, config *WSConfig, beforeConnect WSPreConnectHandle
 	}()
 
 	return w, nil
+}
+
+// Wrap an existing connection (including an inbound server connection) with heartbeating and throttling.
+// No reconnect functions are supported when wrapping an existing connection like this, but the supplied
+// callback will be invoked when the connection closes (allowing cleanup/tracking).
+func Wrap(ctx context.Context, config WSWrapConfig, wsconn *websocket.Conn, onClose func()) WSClient {
+	w := &wsClient{
+		ctx:               ctx,
+		url:               wsconn.LocalAddr().String(),
+		wsconn:            wsconn,
+		disableReconnect:  true,
+		heartbeatInterval: config.HeartbeatInterval,
+		rateLimiter:       ffresty.GetRateLimiter(config.ThrottleRequestsPerSecond, config.ThrottleBurst),
+		useReceiveExt:     config.ReceiveExt,
+		send:              make(chan []byte),
+		closing:           make(chan struct{}),
+	}
+	w.setupReceiveChannel()
+	w.pongReceivedOrReset(false)
+	w.wsconn.SetPongHandler(w.pongHandler)
+	log.L(ctx).Infof("WS %s wrapped", w.url)
+	go func() {
+		w.receiveReconnectLoop()
+		onClose()
+	}()
+	return w
+}
+
+func (w *wsClient) setupReceiveChannel() {
+	if w.useReceiveExt {
+		w.receiveExt = make(chan *WSPayload)
+	} else {
+		w.receive = make(chan []byte)
+	}
 }
 
 func (w *wsClient) Connect() error {
@@ -291,7 +330,7 @@ func buildWSUrl(ctx context.Context, config *WSConfig) (string, error) {
 
 func (w *wsClient) connect(initial bool) error {
 	l := log.L(w.ctx)
-	return w.retry.DoCustomLog(w.ctx, func(attempt int) (retry bool, err error) {
+	return w.connRetry.DoCustomLog(w.ctx, func(attempt int) (retry bool, err error) {
 		if w.closed {
 			return false, i18n.NewError(w.ctx, i18n.MsgWSClosing)
 		}
@@ -436,6 +475,7 @@ func (w *wsClient) sendLoop(receiverDone chan struct{}) {
 				l.Errorf("WS %s closing: %s", w.url, err)
 				disconnecting = true
 			} else if wsconn != nil {
+				l.Debugf("WS %s send heartbeat ping", w.url)
 				if err := wsconn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 					l.Errorf("WS %s heartbeat send failed: %s", w.url, err)
 					disconnecting = true

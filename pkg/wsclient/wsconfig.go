@@ -62,6 +62,11 @@ func InitConfig(conf config.Section) {
 	conf.AddKnownKey(WSConfigURL)
 	conf.AddKnownKey(WSConfigKeyHeartbeatInterval, defaultHeartbeatInterval)
 	conf.AddKnownKey(WSConfigKeyConnectionTimeout, defaultConnectionTimeout)
+	InitConfigWrap(conf)
+}
+
+func InitConfigWrap(conf config.Section) {
+	conf.AddKnownKey(WSConfigKeyHeartbeatInterval, defaultHeartbeatInterval)
 }
 
 func GenerateConfig(ctx context.Context, conf config.Section) (*WSConfig, error) {
