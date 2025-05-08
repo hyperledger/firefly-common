@@ -30,7 +30,9 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 )
 
@@ -837,4 +839,52 @@ func TestRateLimiterFailure(t *testing.T) {
 
 	// Close the client
 	wsc.Close()
+}
+
+func TestWSWrap(t *testing.T) {
+	ctx := context.Background()
+	logrus.SetLevel(logrus.DebugLevel)
+
+	passWS := make(chan (*websocket.Conn))
+	svr := httptest.NewServer(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+		upgrader := &websocket.Upgrader{WriteBufferSize: 1024, ReadBufferSize: 1024}
+		ws, err := upgrader.Upgrade(res, req, http.Header{})
+		require.NoError(t, err)
+		passWS <- ws
+	}))
+	defer svr.Close()
+
+	clientDone := make(chan struct{})
+	go func() {
+		defer close(clientDone)
+
+		wsc, err := New(ctx, &WSConfig{HTTPURL: svr.URL}, nil, nil)
+		require.NoError(t, err)
+		err = wsc.Connect()
+		require.NoError(t, err)
+
+		wsc.Send(ctx, []byte(`hello`))
+		msg1 := <-wsc.Receive()
+		require.Equal(t, `hi`, string(msg1))
+
+		wsc.Close()
+
+	}()
+
+	// Get the conn
+	rawWSC := <-passWS
+
+	// Wrap it
+	serverDone := make(chan struct{})
+	wsc := Wrap(ctx, WSWrapConfig{}, rawWSC, func() {
+		close(serverDone)
+	})
+
+	msg1 := <-wsc.Receive()
+	require.Equal(t, `hello`, string(msg1))
+	err := wsc.Send(ctx, []byte(`hi`))
+	require.NoError(t, err)
+
+	<-clientDone
+	<-serverDone
 }
