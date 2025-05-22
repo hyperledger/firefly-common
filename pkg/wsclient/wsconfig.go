@@ -94,6 +94,7 @@ func GenerateConfig(ctx context.Context, conf config.Section) (*WSConfig, error)
 		MaximumDelay:           conf.GetDuration(ffresty.HTTPConfigRetryMaxDelay),
 		DelayFactor:            conf.GetFloat64(WSConfigDelayFactor),
 		InitialConnectAttempts: conf.GetInt(WSConfigKeyInitialConnectAttempts),
+		BackgroundConnect:      conf.GetBool(WSConfigKeyBackgroundConnect),
 		HTTPHeaders:            conf.GetObject(ffresty.HTTPConfigHeaders),
 		AuthUsername:           conf.GetString(ffresty.HTTPConfigAuthUsername),
 		AuthPassword:           conf.GetString(ffresty.HTTPConfigAuthPassword),

@@ -33,6 +33,8 @@ func TestWSConfigGeneration(t *testing.T) {
 	utConf.Set(WSConfigKeyWriteBufferSize, 1024)
 	utConf.Set(WSConfigKeyInitialConnectAttempts, 1)
 	utConf.Set(WSConfigKeyPath, "/websocket")
+	utConf.Set(WSConfigKeyBackgroundConnect, true)
+	utConf.Set(WSConfigKeyHeartbeatInterval, "42ms")
 
 	ctx := context.Background()
 	wsConfig, err := GenerateConfig(ctx, utConf)
@@ -48,6 +50,20 @@ func TestWSConfigGeneration(t *testing.T) {
 	assert.Equal(t, "custom value", wsConfig.HTTPHeaders.GetString("custom-header"))
 	assert.Equal(t, 1024, wsConfig.ReadBufferSize)
 	assert.Equal(t, 1024, wsConfig.WriteBufferSize)
+	assert.True(t, wsConfig.BackgroundConnect)
+	assert.Equal(t, 42*time.Millisecond, wsConfig.HeartbeatInterval)
+}
+
+func TestWSConfigGenerationDefaults(t *testing.T) {
+	resetConf()
+
+	ctx := context.Background()
+	wsConfig, err := GenerateConfig(ctx, utConf)
+	assert.NoError(t, err)
+
+	assert.Equal(t, defaultInitialConnectAttempts, wsConfig.InitialConnectAttempts)
+	assert.False(t, wsConfig.BackgroundConnect)
+	assert.Equal(t, 30*time.Second, wsConfig.HeartbeatInterval)
 }
 
 func TestWSConfigTLSGenerationFail(t *testing.T) {
