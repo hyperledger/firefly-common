@@ -89,15 +89,10 @@ type sectionParent interface {
 	AddChild(key string, defValue ...interface{})
 }
 
-type SectionArrayCommon interface {
-	KeySet
-	SubSection(name string) Section
-}
-
 // Section represents a section of the global configuration, at a nested point in the config hierarchy.
 // Note that all keys are added to a GLOBAL map, so this cannot be used for per-instance customization.
 type Section interface {
-	SectionArrayCommon
+	KeySet
 	SetDefault(key string, defValue interface{})
 	SubSection(name string) Section
 	SubArray(name string) ArraySection
