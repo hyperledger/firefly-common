@@ -42,6 +42,8 @@ const (
 	WSConfigKeyReadBufferSize = "ws.readBufferSize"
 	// WSConfigKeyInitialConnectAttempts sets how many times the websocket should attempt to connect on startup, before failing (after initial connection, retry is indefinite)
 	WSConfigKeyInitialConnectAttempts = "ws.initialConnectAttempts"
+	// WSConfigKeyBackgroundConnect is recommended instead of initialConnectAttempts for new uses of this library, and makes initial connection and reconnection identical in behavior
+	WSConfigKeyBackgroundConnect = "ws.backgroundConnect"
 	// WSConfigKeyPath if set will define the path to connect to - allows sharing of the same URL between HTTP and WebSocket connection info
 	WSConfigKeyPath = "ws.path"
 	// WSConfigURL if set will be a completely separate URL for WebSockets (must be a ws: or wss: scheme)
@@ -60,7 +62,15 @@ func InitConfig(conf config.Section) {
 	ffresty.InitConfig(conf)
 	conf.AddKnownKey(WSConfigKeyWriteBufferSize, defaultBufferSize)
 	conf.AddKnownKey(WSConfigKeyReadBufferSize, defaultBufferSize)
+
+	// Note that conf.SetDefault(WSConfigKeyBackgroundConnect, true) is recommended for implementations
+	// that embed this library, which will cause continual exponential backoff retry connection
+	// even on the initial connection.
+	conf.AddKnownKey(WSConfigKeyBackgroundConnect, false)
+
+	// Ignored if WSConfigKeyBackgroundConnect is true
 	conf.AddKnownKey(WSConfigKeyInitialConnectAttempts, defaultInitialConnectAttempts)
+
 	conf.AddKnownKey(WSConfigKeyPath)
 	conf.AddKnownKey(WSConfigURL)
 	conf.AddKnownKey(WSConfigKeyHeartbeatInterval, defaultHeartbeatInterval)

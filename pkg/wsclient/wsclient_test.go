@@ -130,7 +130,7 @@ func TestWSClientE2ETLS(t *testing.T) {
 
 }
 
-func TestWSClientE2E(t *testing.T) {
+func TestWSClientE2EBG(t *testing.T) {
 
 	toServer, fromServer, url, close := NewTestWSServer(func(req *http.Request) {
 		assert.Equal(t, "/test/updated", req.URL.Path)
@@ -155,7 +155,7 @@ func TestWSClientE2E(t *testing.T) {
 	wsConfig.HTTPURL = url
 	wsConfig.WSKeyPath = "/test"
 	wsConfig.HeartbeatInterval = 50 * time.Millisecond
-	wsConfig.InitialConnectAttempts = 2
+	wsConfig.BackgroundConnect = true
 
 	wsc, err := New(context.Background(), wsConfig, beforeConnect, afterConnect)
 	assert.NoError(t, err)
@@ -259,6 +259,21 @@ func TestWSClientE2EReceiveExt(t *testing.T) {
 	// Close the client
 	wsc.Close()
 
+}
+
+func TestWSNeverConnectBG(t *testing.T) {
+	closedSvr := httptest.NewServer(&http.ServeMux{})
+	closedSvr.Close()
+
+	wsc, err := New(context.Background(), &WSConfig{
+		HTTPURL:           closedSvr.URL,
+		BackgroundConnect: true,
+	}, nil, nil)
+	assert.NoError(t, err)
+	err = wsc.Connect()
+	assert.NoError(t, err)
+
+	wsc.Close()
 }
 
 func TestWSClientBadWSURL(t *testing.T) {
