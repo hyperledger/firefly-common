@@ -46,7 +46,8 @@ type WSConfig struct {
 	InitialDelay              time.Duration      `json:"initialDelay,omitempty"`
 	MaximumDelay              time.Duration      `json:"maximumDelay,omitempty"`
 	DelayFactor               float64            `json:"delayFactor,omitempty"`
-	InitialConnectAttempts    int                `json:"initialConnectAttempts,omitempty"`
+	BackgroundConnect         bool               `json:"backgroundConnect,omitempty"`
+	InitialConnectAttempts    int                `json:"initialConnectAttempts,omitempty"` // recommend backgroundConnect instead
 	DisableReconnect          bool               `json:"disableReconnect"`
 	AuthUsername              string             `json:"authUsername,omitempty"`
 	AuthPassword              string             `json:"authPassword,omitempty"`
@@ -104,6 +105,7 @@ type wsClient struct {
 	ctx                  context.Context
 	headers              http.Header
 	url                  string
+	backgroundConnect    bool
 	initialRetryAttempts int
 	wsdialer             *websocket.Dialer
 	wsconn               *websocket.Conn
@@ -114,6 +116,8 @@ type wsClient struct {
 	receiveExt           chan *WSPayload
 	send                 chan []byte
 	sendDone             chan []byte
+	bgConnCancelCtx      context.CancelFunc
+	bgConnDone           chan struct{}
 	closing              chan struct{}
 	beforeConnect        WSPreConnectHandler
 	afterConnect         WSPostConnectHandler
@@ -153,6 +157,7 @@ func New(ctx context.Context, config *WSConfig, beforeConnect WSPreConnectHandle
 			MaximumDelay: config.MaximumDelay,
 			Factor:       config.DelayFactor,
 		},
+		backgroundConnect:    config.BackgroundConnect,
 		initialRetryAttempts: config.InitialConnectAttempts,
 		headers:              make(http.Header),
 		send:                 make(chan []byte),
@@ -225,12 +230,28 @@ func (w *wsClient) setupReceiveChannel() {
 
 func (w *wsClient) Connect() error {
 
+	if w.backgroundConnect && w.bgConnDone == nil {
+		w.bgConnDone = make(chan struct{})
+		w.ctx, w.bgConnCancelCtx = context.WithCancel(w.ctx)
+		go func() {
+			defer close(w.bgConnDone)
+			err := w.initialConnect()
+			if err != nil {
+				// Retry means we only reach here if context closes
+				log.L(w.ctx).Errorf("Connection to WebSocket %s was never established before shutdown: %s", w.url, err)
+			}
+		}()
+		return nil
+	}
+
+	return w.initialConnect()
+}
+
+func (w *wsClient) initialConnect() error {
 	if err := w.connect(true); err != nil {
 		return err
 	}
-
 	go w.receiveReconnectLoop()
-
 	return nil
 }
 
@@ -241,6 +262,12 @@ func (w *wsClient) Close() {
 		c := w.wsconn
 		if c != nil {
 			_ = c.Close()
+		}
+		bgc := w.bgConnDone
+		if bgc != nil {
+			w.bgConnCancelCtx()
+			<-w.bgConnDone
+			w.bgConnDone = nil
 		}
 	}
 }
@@ -337,7 +364,7 @@ func (w *wsClient) connect(initial bool) error {
 			return false, i18n.NewError(w.ctx, i18n.MsgWSClosing)
 		}
 
-		retry = !initial || attempt < w.initialRetryAttempts
+		retry = w.backgroundConnect || !initial || attempt < w.initialRetryAttempts
 		if w.beforeConnect != nil {
 			if err = w.beforeConnect(w.ctx, w); err != nil {
 				l.Warnf("WS %s connect attempt %d failed in beforeConnect", w.url, attempt)
@@ -346,7 +373,7 @@ func (w *wsClient) connect(initial bool) error {
 		}
 
 		var res *http.Response
-		w.wsconn, res, err = w.wsdialer.Dial(w.url, w.headers)
+		w.wsconn, res, err = w.wsdialer.DialContext(w.ctx, w.url, w.headers)
 		if err != nil {
 			var b []byte
 			var status = -1

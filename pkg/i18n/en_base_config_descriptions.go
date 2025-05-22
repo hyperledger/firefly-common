@@ -61,6 +61,7 @@ var (
 
 	ConfigGlobalWsConnectionTimeout      = ffc("config.global.ws.connectionTimeout", "The amount of time to wait while establishing a connection (or auto-reconnection)", TimeDurationType)
 	ConfigGlobalWsHeartbeatInterval      = ffc("config.global.ws.heartbeatInterval", "The amount of time to wait between heartbeat signals on the WebSocket connection", TimeDurationType)
+	ConfigGlobalWsBackgroundConnect      = ffc("config.global.ws.backgroundConnect", "When true the connection is established in the background with infinite reconnect (makes initialConnectAttempts redundant when set)", BooleanType)
 	ConfigGlobalWsInitialConnectAttempts = ffc("config.global.ws.initialConnectAttempts", "The number of attempts FireFly will make to connect to the WebSocket when starting up, before failing", IntType)
 	ConfigGlobalWsPath                   = ffc("config.global.ws.path", "The WebSocket sever URL to which FireFly should connect", "WebSocket URL "+StringType)
 	ConfigGlobalWsReadBufferSize         = ffc("config.global.ws.readBufferSize", "The size in bytes of the read buffer for the WebSocket connection", ByteSizeType)
