@@ -184,7 +184,7 @@ func TestBuildQuerySingleNestedWithResolverOk(t *testing.T) {
 	filter, err := qf.BuildFilter(context.Background(), tqf,
 		FieldResolver(func(ctx context.Context, fieldName string) (resolvedFieldName string, err error) {
 			resolvedFieldName = fieldName + ".resolved"
-			tqf.AddField(resolvedFieldName, &StringField{})
+			tqf[resolvedFieldName] = &StringField{}
 			return
 		}),
 		ValueResolver(func(ctx context.Context, level *FilterJSON, fieldName, suppliedValue string) (driver.Value, error) {

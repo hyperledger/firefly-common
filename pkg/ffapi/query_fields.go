@@ -38,12 +38,6 @@ type QueryFactory interface {
 	NewFilter(ctx context.Context) FilterBuilder
 	NewFilterLimit(ctx context.Context, defLimit uint64) FilterBuilder
 	NewUpdate(ctx context.Context) UpdateBuilder
-	Clone() ClonedQueryFactory
-}
-
-type ClonedQueryFactory interface {
-	QueryFactory
-	AddField(n string, f Field)
 }
 
 type FieldMod int
@@ -78,11 +72,7 @@ func (qf QueryFields) NewUpdate(ctx context.Context) UpdateBuilder {
 	}
 }
 
-func (qf QueryFields) AddField(n string, f Field) {
-	qf[n] = f
-}
-
-func (qf QueryFields) Clone() ClonedQueryFactory {
+func (qf QueryFields) Clone() QueryFields {
 	qf2 := make(QueryFields, len(qf))
 	for n, f := range qf {
 		qf2[n] = f
