@@ -38,6 +38,12 @@ type QueryFactory interface {
 	NewFilter(ctx context.Context) FilterBuilder
 	NewFilterLimit(ctx context.Context, defLimit uint64) FilterBuilder
 	NewUpdate(ctx context.Context) UpdateBuilder
+	Clone() ClonedQueryFactory
+}
+
+type ClonedQueryFactory interface {
+	QueryFactory
+	AddField(n string, f Field)
 }
 
 type FieldMod int
@@ -53,23 +59,35 @@ type HasFieldMods interface {
 
 type QueryFields map[string]Field
 
-func (qf *QueryFields) NewFilterLimit(ctx context.Context, defLimit uint64) FilterBuilder {
+func (qf QueryFields) NewFilterLimit(ctx context.Context, defLimit uint64) FilterBuilder {
 	return &filterBuilder{
 		ctx:         ctx,
-		queryFields: *qf,
+		queryFields: qf,
 		limit:       defLimit,
 	}
 }
 
-func (qf *QueryFields) NewFilter(ctx context.Context) FilterBuilder {
+func (qf QueryFields) NewFilter(ctx context.Context) FilterBuilder {
 	return qf.NewFilterLimit(ctx, 0)
 }
 
-func (qf *QueryFields) NewUpdate(ctx context.Context) UpdateBuilder {
+func (qf QueryFields) NewUpdate(ctx context.Context) UpdateBuilder {
 	return &updateBuilder{
 		ctx:         ctx,
-		queryFields: *qf,
+		queryFields: qf,
 	}
+}
+
+func (qf QueryFields) AddField(n string, f Field) {
+	qf[n] = f
+}
+
+func (qf QueryFields) Clone() ClonedQueryFactory {
+	qf2 := make(QueryFields, len(qf))
+	for n, f := range qf {
+		qf2[n] = f
+	}
+	return qf2
 }
 
 // FieldSerialization - we stand on the shoulders of the well adopted SQL serialization interface here to help us define what
@@ -284,17 +302,11 @@ func (f *bigIntField) Scan(src interface{}) (err error) {
 	case int64:
 		f.i = fftypes.NewFFBigInt(tv)
 	case uint:
-		if tv > math.MaxInt64 {
-			return i18n.NewError(context.Background(), i18n.MsgTypeRestoreFailed, src, f.i)
-		}
-		f.i = fftypes.NewFFBigInt(int64(tv))
+		f.i = (*fftypes.FFBigInt)(new(big.Int).SetUint64(uint64(tv)))
 	case uint32:
 		f.i = fftypes.NewFFBigInt(int64(tv))
 	case uint64:
-		if tv > math.MaxInt64 {
-			return i18n.NewError(context.Background(), i18n.MsgTypeRestoreFailed, src, f.i)
-		}
-		f.i = fftypes.NewFFBigInt(int64(tv))
+		f.i = (*fftypes.FFBigInt)(new(big.Int).SetUint64(tv))
 	case fftypes.FFBigInt:
 		i := tv
 		f.i = &i

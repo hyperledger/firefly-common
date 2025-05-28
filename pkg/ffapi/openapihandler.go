@@ -95,10 +95,6 @@ func (ohf *OpenAPIHandlerFactory) getPublicURL(req *http.Request, relativePath s
 	if publicURL == "" {
 		publicURL = ohf.StaticPublicURL
 	}
-	if publicURL == "" {
-		// Do not recommend this fallback - StaticPublicURL and/or DynamicPublicURLHeader should be set
-		publicURL = fmt.Sprintf("https://%s", req.Host)
-	}
 	publicURL = strings.TrimSuffix(publicURL, "/")
 	if len(relativePath) > 0 {
 		publicURL = publicURL + "/" + strings.TrimPrefix(relativePath, "/")

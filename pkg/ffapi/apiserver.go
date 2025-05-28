@@ -202,7 +202,7 @@ func (as *apiServer[T]) Serve(ctx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
-		as.monitoringPublicURL = buildPublicURL(as.MonitoringConfig, apiHTTPServer.Addr())
+		as.monitoringPublicURL = buildPublicURL(as.MonitoringConfig, monitoringHTTPServer.Addr())
 		go monitoringHTTPServer.ServeHTTP(ctx)
 	}
 
@@ -217,6 +217,10 @@ func (as *apiServer[T]) Started() <-chan struct{} {
 
 func (as *apiServer[T]) APIPublicURL() string {
 	return as.apiPublicURL
+}
+
+func (as *apiServer[T]) MonitoringPublicURL() string {
+	return as.monitoringPublicURL
 }
 
 func (as *apiServer[T]) waitForServerStop(httpErrChan, monitoringErrChan chan error) error {

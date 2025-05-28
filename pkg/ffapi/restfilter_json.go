@@ -104,14 +104,18 @@ type resolveCtx struct {
 	ctx                 context.Context
 	jsonFilter          *FilterJSON
 	valueResolver       ValueResolverFn
+	fieldResolver       FieldResolverFn
 	skipFieldValidation bool
 	err                 error
 }
 
 type ValueResolverFn func(ctx context.Context, level *FilterJSON, fieldName, suppliedValue string) (driver.Value, error)
 
+type FieldResolverFn func(ctx context.Context, fieldName string) (resolvedFieldName string, err error)
+
 type JSONBuildFilterOpt struct {
 	valueResolver       ValueResolverFn
+	fieldResolver       FieldResolverFn
 	skipFieldValidation bool
 }
 
@@ -120,6 +124,14 @@ type JSONBuildFilterOpt struct {
 func ValueResolver(fn ValueResolverFn) *JSONBuildFilterOpt {
 	return &JSONBuildFilterOpt{
 		valueResolver: fn,
+	}
+}
+
+// If you want to know the full set of fields used in the field, and build a dynamic
+// map of fields that might need JOIN relationships (such as labels)
+func FieldResolver(fn FieldResolverFn) *JSONBuildFilterOpt {
+	return &JSONBuildFilterOpt{
+		fieldResolver: fn,
 	}
 }
 
@@ -174,6 +186,9 @@ func (jq *QueryJSON) BuildFilter(ctx context.Context, qf QueryFactory, options .
 func validateFilterField(ctx context.Context, fb FilterBuilder, fieldAnyCase string, rv *resolveCtx) (string, error) {
 	if rv.skipFieldValidation {
 		return fieldAnyCase, nil
+	}
+	if rv.fieldResolver != nil {
+		return rv.fieldResolver(ctx, fieldAnyCase)
 	}
 	for _, f := range fb.Fields() {
 		if strings.EqualFold(fieldAnyCase, f) {
@@ -303,6 +318,9 @@ func buildResolveCtx(ctx context.Context, jsonFilter *FilterJSON, options ...*JS
 	for _, o := range options {
 		if o.valueResolver != nil {
 			rv.valueResolver = o.valueResolver
+		}
+		if o.fieldResolver != nil {
+			rv.fieldResolver = o.fieldResolver
 		}
 		if o.skipFieldValidation {
 			rv.skipFieldValidation = true

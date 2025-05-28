@@ -180,18 +180,26 @@ func TestBuildQuerySingleNestedWithResolverOk(t *testing.T) {
 	}`), &qf)
 	assert.NoError(t, err)
 
-	filter, err := qf.BuildFilter(context.Background(), TestQueryFactory, ValueResolver(func(ctx context.Context, level *FilterJSON, fieldName, suppliedValue string) (driver.Value, error) {
-		assert.Equal(t, "tag", fieldName)
-		assert.Equal(t, "a", suppliedValue)
-		assert.Len(t, level.Equal, 1)
-		return "b", nil
-	}))
+	tqf := TestQueryFactory.Clone()
+	filter, err := qf.BuildFilter(context.Background(), tqf,
+		FieldResolver(func(ctx context.Context, fieldName string) (resolvedFieldName string, err error) {
+			resolvedFieldName = fieldName + ".resolved"
+			tqf.AddField(resolvedFieldName, &StringField{})
+			return
+		}),
+		ValueResolver(func(ctx context.Context, level *FilterJSON, fieldName, suppliedValue string) (driver.Value, error) {
+			assert.Equal(t, "tag.resolved", fieldName)
+			assert.Equal(t, "a", suppliedValue)
+			assert.Len(t, level.Equal, 1)
+			return "b", nil
+		}),
+	)
 	assert.NoError(t, err)
 
 	fi, err := filter.Finalize()
 	assert.NoError(t, err)
 
-	assert.Equal(t, "tag == 'b'", fi.String())
+	assert.Equal(t, "tag.resolved == 'b'", fi.String())
 }
 
 func TestBuildQuerySingleNestedWithResolverError(t *testing.T) {

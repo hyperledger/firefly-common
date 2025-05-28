@@ -24,7 +24,9 @@ import (
 	"testing"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestOpenAPI3SwaggerUI(t *testing.T) {
@@ -97,4 +99,29 @@ func TestOpenAPI3SwaggerUIDynamicPublicURL(t *testing.T) {
 	b, err := io.ReadAll(body)
 	assert.NoError(t, err)
 	assert.Contains(t, string(b), "https://example.host.com:12345/api/myswagger.json")
+}
+
+func TestOpenAPIHandlerNonVersioned(t *testing.T) {
+	mux := mux.NewRouter()
+	hf := HandlerFactory{}
+	oah := &OpenAPIHandlerFactory{
+		BaseSwaggerGenOptions: SwaggerGenOptions{
+			Title:                 "FireFly Transaction Manager API",
+			Version:               "1.0",
+			SupportFieldRedaction: true,
+		},
+	}
+	mux.Path("/api/spec.json").Methods(http.MethodGet).Handler(hf.APIWrapper(oah.OpenAPIHandler("", OpenAPIFormatJSON, []*Route{})))
+	mux.Path("/api/spec.yaml").Methods(http.MethodGet).Handler(hf.APIWrapper(oah.OpenAPIHandler("", OpenAPIFormatYAML, []*Route{})))
+
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	res, err := resty.New().R().Get(fmt.Sprintf("%s/api/spec.json", ts.URL))
+	require.NoError(t, err)
+	require.True(t, res.IsSuccess())
+
+	res, err = resty.New().R().Get(fmt.Sprintf("%s/api/spec.yaml", ts.URL))
+	require.NoError(t, err)
+	require.True(t, res.IsSuccess())
 }
