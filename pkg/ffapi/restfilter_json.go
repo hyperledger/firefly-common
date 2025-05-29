@@ -178,8 +178,19 @@ func (jq *QueryJSON) BuildFilter(ctx context.Context, qf QueryFactory, options .
 	if jq.Limit != nil {
 		fb = fb.Limit(*jq.Limit)
 	}
-	for _, s := range jq.Sort {
-		fb = fb.Sort(s)
+	if len(jq.Sort) > 0 {
+		rv := buildResolveCtx(ctx, &jq.FilterJSON, options...)
+		for _, field := range jq.Sort {
+			field, isDesc := strings.CutPrefix(field, "-")
+			field, err := validateFilterField(ctx, fb, field, rv)
+			if err != nil {
+				return nil, err
+			}
+			if isDesc {
+				field = "-" + field
+			}
+			fb = fb.Sort(field)
+		}
 	}
 	return (&jq.FilterJSON).BuildSubFilter(ctx, fb, options...)
 }

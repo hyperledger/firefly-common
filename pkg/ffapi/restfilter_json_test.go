@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildQueryJSONNestedAndOr(t *testing.T) {
@@ -167,6 +168,7 @@ func TestBuildQuerySingleNestedWithResolverOk(t *testing.T) {
 
 	var qf QueryJSON
 	err := json.Unmarshal([]byte(`{
+	    "sort": ["-created"],
 		"or": [
 			{
 				"equal": [
@@ -199,7 +201,7 @@ func TestBuildQuerySingleNestedWithResolverOk(t *testing.T) {
 	fi, err := filter.Finalize()
 	assert.NoError(t, err)
 
-	assert.Equal(t, "tag.resolved == 'b'", fi.String())
+	assert.Equal(t, "tag.resolved == 'b' sort=-created.resolved", fi.String())
 }
 
 func TestBuildQuerySingleNestedWithResolverError(t *testing.T) {
@@ -223,6 +225,21 @@ func TestBuildQuerySingleNestedWithResolverError(t *testing.T) {
 		assert.Equal(t, "tag", fieldName)
 		assert.Equal(t, "a", suppliedValue)
 		assert.Len(t, level.In, 1)
+		return "", fmt.Errorf("pop")
+	}))
+	assert.Regexp(t, "pop", err)
+}
+
+func TestBuildQuerySingleNestedWithFieldResolverError(t *testing.T) {
+
+	var qf QueryJSON
+	err := json.Unmarshal([]byte(`{
+		"sort": ["wrong"]
+	}`), &qf)
+	assert.NoError(t, err)
+
+	_, err = qf.BuildFilter(context.Background(), TestQueryFactory, FieldResolver(func(ctx context.Context, fieldName string) (resolvedFieldName string, err error) {
+		require.Equal(t, "wrong", fieldName)
 		return "", fmt.Errorf("pop")
 	}))
 	assert.Regexp(t, "pop", err)
