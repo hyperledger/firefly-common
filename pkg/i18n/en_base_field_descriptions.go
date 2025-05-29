@@ -27,6 +27,7 @@ var (
 	FilterJSONEq                 = ffm("FilterJSON.eq", "Shortname for equal")
 	FilterJSONNEq                = ffm("FilterJSON.neq", "Shortcut for equal with all conditions negated (the not property of all children is overridden)")
 	FilterJSONStartsWith         = ffm("FilterJSON.startsWith", "Array of field + value combinations to apply as starts-with filters - all filters must match")
+	FilterJSONEndsWith           = ffm("FilterJSON.endsWith", "Array of field + value combinations to apply as ends-with filters - all filters must match")
 	FilterJSONGreaterThan        = ffm("FilterJSON.greaterThan", "Array of field + value combinations to apply as greater-than filters - all filters must match")
 	FilterJSONGT                 = ffm("FilterJSON.gt", "Short name for greaterThan")
 	FilterJSONGreaterThanOrEqual = ffm("FilterJSON.greaterThanOrEqual", "Array of field + value combinations to apply as greater-than filters - all filters must match")

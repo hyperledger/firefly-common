@@ -77,6 +77,7 @@ type FilterJSONOps struct {
 	NEq                []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"neq,omitempty"` // negated short name
 	Contains           []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"contains,omitempty"`
 	StartsWith         []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"startsWith,omitempty"`
+	EndsWith           []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"endsWith,omitempty"`
 	LessThan           []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"lessThan,omitempty"`
 	LT                 []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"lt,omitempty"` // short name
 	LessThanOrEqual    []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"lessThanOrEqual,omitempty"`
@@ -253,6 +254,25 @@ func (jf *FilterJSON) addSimpleFilters(ctx context.Context, fb FilterBuilder, an
 				andFilter = andFilter.Condition(fb.NotStartsWith(field, rv.resolve(field, e.Value.String())))
 			} else {
 				andFilter = andFilter.Condition(fb.StartsWith(field, rv.resolve(field, e.Value.String())))
+			}
+		}
+	}
+	for _, e := range jf.EndsWith {
+		field, err := validateFilterField(ctx, fb, e.Field, rv)
+		if err != nil {
+			return nil, err
+		}
+		if e.CaseInsensitive {
+			if e.Not {
+				andFilter = andFilter.Condition(fb.NotIEndsWith(field, rv.resolve(field, e.Value.String())))
+			} else {
+				andFilter = andFilter.Condition(fb.IEndsWith(field, rv.resolve(field, e.Value.String())))
+			}
+		} else {
+			if e.Not {
+				andFilter = andFilter.Condition(fb.NotEndsWith(field, rv.resolve(field, e.Value.String())))
+			} else {
+				andFilter = andFilter.Condition(fb.EndsWith(field, rv.resolve(field, e.Value.String())))
 			}
 		}
 	}
