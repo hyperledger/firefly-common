@@ -17,11 +17,11 @@ coverage.html:
 		$(VGO) tool cover -html=coverage.txt
 coverage: test coverage.html
 lint: ${LINT}
-		GOGC=20 $(LINT) run -v --timeout 5m
+		GOGC=20 $(LINT) run -v --timeout 5m --fast --allow-parallel-runners
 ${MOCKERY}:
 		$(VGO) install github.com/vektra/mockery/v2@latest
 ${LINT}:
-		$(VGO) install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.55.2
+		$(VGO) install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
 dbmigrate:
 		$(eval DBMIGRATE_PATH := $(shell $(VGO) list -f '{{.Dir}}' github.com/golang-migrate/migrate/v4/database))
 

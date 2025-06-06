@@ -19,11 +19,12 @@ package ffapi
 import (
 	"context"
 	"fmt"
-	"github.com/getkin/kin-openapi/openapi3"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/getkin/kin-openapi/openapi3"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-common/pkg/config"
@@ -114,17 +115,17 @@ var utAPIRoute2 = &Route{
 func initUTConfig() (config.Section, config.Section, config.Section) {
 	config.RootConfigReset()
 	apiConfig := config.RootSection("ut.api")
-	metricsConfig := config.RootSection("ut.metrics")
+	monitoringConfig := config.RootSection("ut.monitoringConfig")
 	corsConfig := config.RootSection("ut.cors")
-	InitAPIServerConfig(apiConfig, metricsConfig, corsConfig)
+	InitAPIServerConfig(apiConfig, monitoringConfig, corsConfig)
 	apiConfig.Set(httpserver.HTTPConfPort, 0)
-	metricsConfig.Set(httpserver.HTTPConfPort, 0)
-	return apiConfig, metricsConfig, corsConfig
+	monitoringConfig.Set(httpserver.HTTPConfPort, 0)
+	return apiConfig, monitoringConfig, corsConfig
 }
 
 func newTestAPIServer(t *testing.T, start bool) (*utManager, *apiServer[*utManager], func()) {
 	ctx, cancelCtx := context.WithCancel(context.Background())
-	apiConfig, metricsConfig, corsConfig := initUTConfig()
+	apiConfig, monitoringConfig, corsConfig := initUTConfig()
 	um := &utManager{t: t}
 	as := NewAPIServer(ctx, APIServerOptions[*utManager]{
 		MetricsRegistry: metric.NewPrometheusMetricsRegistry("ut"),
@@ -135,10 +136,11 @@ func newTestAPIServer(t *testing.T, start bool) (*utManager, *apiServer[*utManag
 			// request and that's the "T" on the APIServer
 			return um, um.mockEnrichErr
 		},
-		Description:   "unit testing",
-		APIConfig:     apiConfig,
-		MetricsConfig: metricsConfig,
-		CORSConfig:    corsConfig,
+		Description:          "unit testing",
+		APIConfig:            apiConfig,
+		MonitoringConfig:     monitoringConfig,
+		CORSConfig:           corsConfig,
+		MetricsSubsystemName: "apiserver_ut",
 	})
 	done := make(chan struct{})
 	if start {
@@ -382,11 +384,11 @@ func TestAPIServerFailServe(t *testing.T) {
 
 }
 
-func TestAPIServerFailServeMetrics(t *testing.T) {
+func TestAPIServerFailServeMonitoring(t *testing.T) {
 	_, as, done := newTestAPIServer(t, false)
 	defer done()
 
-	as.MetricsConfig.Set(httpserver.HTTPConfAddress, "!badness")
+	as.MonitoringConfig.Set(httpserver.HTTPConfAddress, "!badness")
 	err := as.Serve(context.Background())
 	assert.Regexp(t, "FF00151", err)
 
@@ -408,15 +410,15 @@ func TestWaitForServerStop(t *testing.T) {
 }
 
 func TestBadRoute(t *testing.T) {
-	apiConfig, metricsConfig, corsConfig := initUTConfig()
+	apiConfig, monitoringConfig, corsConfig := initUTConfig()
 	as := NewAPIServer(context.Background(), APIServerOptions[*utManager]{
 		MetricsRegistry: metric.NewPrometheusMetricsRegistry("ut"),
 		Routes: []*Route{{
 			Extensions: &APIServerRouteExt[string]{}, // T does not match *utManager
 		}},
-		APIConfig:     apiConfig,
-		MetricsConfig: metricsConfig,
-		CORSConfig:    corsConfig,
+		APIConfig:        apiConfig,
+		MonitoringConfig: monitoringConfig,
+		CORSConfig:       corsConfig,
 	})
 	assert.Panics(t, func() { as.Serve(context.Background()) })
 }
@@ -425,5 +427,210 @@ func TestBadMetrics(t *testing.T) {
 	_, as, done := newTestAPIServer(t, false)
 	defer done()
 	as.MetricsRegistry = metric.NewPrometheusMetricsRegistry("wrong")
-	assert.Panics(t, func() { as.createMetricsMuxRouter(context.Background()) })
+	assert.Panics(t, func() { as.createMonitoringMuxRouter(context.Background()) })
+}
+
+func newTestVersionedAPIServer(t *testing.T, versionedAPIs *VersionedAPIs) (*utManager, *apiServer[*utManager], func()) {
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	apiConfig, monitoringConfig, corsConfig := initUTConfig()
+	um := &utManager{t: t}
+	as := NewAPIServer(ctx, APIServerOptions[*utManager]{
+		MetricsRegistry: metric.NewPrometheusMetricsRegistry("ut"),
+		VersionedAPIs:   versionedAPIs,
+		EnrichRequest: func(r *APIRequest) (*utManager, error) {
+			// This could be some dynamic object based on extra processing in the request,
+			// but the most common case is you just have a "manager" that you inject into each
+			// request and that's the "T" on the APIServer
+			return um, um.mockEnrichErr
+		},
+		Description:          "unit testing",
+		APIConfig:            apiConfig,
+		MonitoringConfig:     monitoringConfig,
+		CORSConfig:           corsConfig,
+		MetricsSubsystemName: "apiserver_ut",
+	})
+	done := make(chan struct{})
+
+	go func() {
+		err := as.Serve(ctx)
+		assert.NoError(t, err)
+		close(done)
+	}()
+	return um, as.(*apiServer[*utManager]), func() {
+		cancelCtx()
+		<-done
+	}
+}
+
+func TestVersionedAPIsWithASingleVersion(t *testing.T) {
+	um, as, done := newTestVersionedAPIServer(t, &VersionedAPIs{
+		APIVersions: map[string]*APIVersion{
+			"v2": {
+				Routes: []*Route{utAPIRoute2},
+			},
+		},
+	})
+	defer done()
+
+	<-as.Started()
+
+	var o sampleOutput
+
+	// check v2 API only supports the getit route
+	res, err := resty.New().R().
+		SetBody(nil).
+		SetResult(&o).
+		Get(fmt.Sprintf("%s/api/v2/ut/utresource/id12345/getit", as.APIPublicURL()))
+	assert.NoError(t, err)
+	assert.Equal(t, 200, res.StatusCode())
+	assert.Equal(t, "application/octet-stream", res.Header().Get("Content-Type"))
+	assert.Equal(t, "id12345", um.calledStreamHandler)
+	assert.Equal(t, "a stream!", string(res.Body()))
+}
+
+func TestAPIsWithMultipleVersions(t *testing.T) {
+	um, as, done := newTestVersionedAPIServer(t, &VersionedAPIs{
+		DefaultVersion: "v2",
+		APIVersions: map[string]*APIVersion{
+			"v1": {
+				Routes: []*Route{utAPIRoute1, utAPIRoute2},
+			},
+			"v2": {
+				Routes: []*Route{utAPIRoute2}, // v2 only supports the getit route
+			},
+		},
+	})
+	defer done()
+
+	<-as.Started()
+
+	var o sampleOutput
+
+	// check v1 API supports both routes
+	res, err := resty.New().R().
+		SetBody(nil).
+		SetResult(&o).
+		Get(fmt.Sprintf("%s/api/v1/ut/utresource/id12345/getit", as.APIPublicURL()))
+	assert.NoError(t, err)
+	assert.Equal(t, 200, res.StatusCode())
+	assert.Equal(t, "application/octet-stream", res.Header().Get("Content-Type"))
+	assert.Equal(t, "id12345", um.calledStreamHandler)
+	assert.Equal(t, "a stream!", string(res.Body()))
+
+	res, err = resty.New().R().
+		SetBody(&sampleInput{
+			Input1: "test_json_input",
+		}).
+		SetResult(&o).
+		Post(fmt.Sprintf("%s/api/v1/ut/utresource/id12345/postit", as.APIPublicURL()))
+	assert.NoError(t, err)
+	assert.Equal(t, 200, res.StatusCode())
+	assert.Equal(t, "id12345", um.calledJSONHandler)
+	assert.Equal(t, "test_json_output", o.Output1)
+
+	// check v2 API only supports the getit route
+	res, err = resty.New().R().
+		SetBody(nil).
+		SetResult(&o).
+		Get(fmt.Sprintf("%s/api/v2/ut/utresource/id12345/getit", as.APIPublicURL()))
+	assert.NoError(t, err)
+	assert.Equal(t, 200, res.StatusCode())
+	assert.Equal(t, "application/octet-stream", res.Header().Get("Content-Type"))
+	assert.Equal(t, "id12345", um.calledStreamHandler)
+	assert.Equal(t, "a stream!", string(res.Body()))
+
+	res, err = resty.New().R().
+		SetBody(&sampleInput{
+			Input1: "test_json_input",
+		}).
+		SetResult(&o).
+		Post(fmt.Sprintf("%s/api/v2/ut/utresource/id12345/postit", as.APIPublicURL()))
+	assert.NoError(t, err)
+	assert.Equal(t, 404, res.StatusCode())
+}
+
+func TestVersionedAPIInitErrors(t *testing.T) {
+	ctx := context.Background()
+	apiConfig, monitoringConfig, _ := initUTConfig()
+	as := NewAPIServer(ctx, APIServerOptions[*utManager]{
+		MetricsRegistry: metric.NewPrometheusMetricsRegistry("ut"),
+		Routes:          []*Route{utAPIRoute1, utAPIRoute2},
+		VersionedAPIs: &VersionedAPIs{
+			DefaultVersion: "v2",
+			APIVersions: map[string]*APIVersion{
+				"v1": {
+					Routes: []*Route{utAPIRoute1, utAPIRoute2},
+				},
+				"v2": {
+					Routes: []*Route{utAPIRoute2}, // v2 only supports the getit route
+				},
+			},
+		},
+		Description:      "unit testing",
+		APIConfig:        apiConfig,
+		MonitoringConfig: monitoringConfig,
+	})
+
+	err := as.Serve(ctx)
+	assert.Error(t, err)
+	assert.Regexp(t, "FF00251", err)
+
+	as = NewAPIServer(ctx, APIServerOptions[*utManager]{
+		MetricsRegistry: metric.NewPrometheusMetricsRegistry("ut"),
+		VersionedAPIs: &VersionedAPIs{
+			DefaultVersion: "",
+			APIVersions:    map[string]*APIVersion{},
+		},
+		Description:      "unit testing",
+		APIConfig:        apiConfig,
+		MonitoringConfig: monitoringConfig,
+	})
+
+	err = as.Serve(ctx)
+	assert.Error(t, err)
+	assert.Regexp(t, "FF00252", err)
+
+	as = NewAPIServer(ctx, APIServerOptions[*utManager]{
+		MetricsRegistry: metric.NewPrometheusMetricsRegistry("ut"),
+		VersionedAPIs: &VersionedAPIs{
+			DefaultVersion: "",
+			APIVersions: map[string]*APIVersion{
+				"v1": {
+					Routes: []*Route{utAPIRoute1, utAPIRoute2},
+				},
+				"v2": {
+					Routes: []*Route{utAPIRoute2}, // v2 only supports the getit route
+				},
+			},
+		},
+		Description:      "unit testing",
+		APIConfig:        apiConfig,
+		MonitoringConfig: monitoringConfig,
+	})
+
+	err = as.Serve(ctx)
+	assert.Error(t, err)
+	assert.Regexp(t, "FF00253", err)
+	as = NewAPIServer(ctx, APIServerOptions[*utManager]{
+		MetricsRegistry: metric.NewPrometheusMetricsRegistry("ut"),
+		VersionedAPIs: &VersionedAPIs{
+			DefaultVersion: "unknown",
+			APIVersions: map[string]*APIVersion{
+				"v1": {
+					Routes: []*Route{utAPIRoute1, utAPIRoute2},
+				},
+				"v2": {
+					Routes: []*Route{utAPIRoute2}, // v2 only supports the getit route
+				},
+			},
+		},
+		Description:      "unit testing",
+		APIConfig:        apiConfig,
+		MonitoringConfig: monitoringConfig,
+	})
+
+	err = as.Serve(ctx)
+	assert.Error(t, err)
+	assert.Regexp(t, "FF00254", err)
+
 }

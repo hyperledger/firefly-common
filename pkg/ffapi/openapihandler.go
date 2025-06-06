@@ -109,8 +109,35 @@ func (ohf *OpenAPIHandlerFactory) getPublicURL(req *http.Request, relativePath s
 func (ohf *OpenAPIHandlerFactory) OpenAPIHandler(apiPath string, format OpenAPIFormat, routes []*Route) HandlerFunction {
 	return func(res http.ResponseWriter, req *http.Request) (int, error) {
 		options := ohf.BaseSwaggerGenOptions
+
+		// adding/overriding non-based options
 		options.BaseURL = ohf.getPublicURL(req, apiPath)
+
 		doc := NewSwaggerGen(&options).Generate(req.Context(), routes)
+		if format == OpenAPIFormatJSON {
+			res.Header().Add("Content-Type", "application/json")
+			b, _ := json.Marshal(&doc)
+			_, _ = res.Write(b)
+		} else {
+			res.Header().Add("Content-Type", "application/x-yaml")
+			b, _ := yaml.Marshal(&doc)
+			_, _ = res.Write(b)
+		}
+		return 200, nil
+	}
+}
+
+func (ohf *OpenAPIHandlerFactory) OpenAPIHandlerVersioned(apiPath string, format OpenAPIFormat, apiVersionObject *APIVersion) HandlerFunction {
+	return func(res http.ResponseWriter, req *http.Request) (int, error) {
+		options := ohf.BaseSwaggerGenOptions
+
+		// adding/overriding non-based options
+		options.BaseURL = ohf.getPublicURL(req, apiPath)
+		// version specific options must be explicitly provided
+		options.Tags = apiVersionObject.Tags
+		options.ExternalDocs = apiVersionObject.ExternalDocs
+
+		doc := NewSwaggerGen(&options).Generate(req.Context(), apiVersionObject.Routes)
 		if format == OpenAPIFormatJSON {
 			res.Header().Add("Content-Type", "application/json")
 			b, _ := json.Marshal(&doc)

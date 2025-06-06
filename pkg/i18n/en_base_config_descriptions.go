@@ -61,6 +61,7 @@ var (
 
 	ConfigGlobalWsConnectionTimeout      = ffc("config.global.ws.connectionTimeout", "The amount of time to wait while establishing a connection (or auto-reconnection)", TimeDurationType)
 	ConfigGlobalWsHeartbeatInterval      = ffc("config.global.ws.heartbeatInterval", "The amount of time to wait between heartbeat signals on the WebSocket connection", TimeDurationType)
+	ConfigGlobalWsBackgroundConnect      = ffc("config.global.ws.backgroundConnect", "When true the connection is established in the background with infinite reconnect (makes initialConnectAttempts redundant when set)", BooleanType)
 	ConfigGlobalWsInitialConnectAttempts = ffc("config.global.ws.initialConnectAttempts", "The number of attempts FireFly will make to connect to the WebSocket when starting up, before failing", IntType)
 	ConfigGlobalWsPath                   = ffc("config.global.ws.path", "The WebSocket sever URL to which FireFly should connect", "WebSocket URL "+StringType)
 	ConfigGlobalWsReadBufferSize         = ffc("config.global.ws.readBufferSize", "The size in bytes of the read buffer for the WebSocket connection", ByteSizeType)
@@ -88,6 +89,7 @@ var (
 	ConfigGlobalThrottleBurst             = ffc("config.global.throttle.burst", "The maximum number of requests that can be made in a short period of time before the throttling kicks in.", IntType)
 	ConfigGlobalMaxIdleConns              = ffc("config.global.maxIdleConns", "The max number of idle connections to hold pooled", IntType)
 	ConfigGlobalMaxConnsPerHost           = ffc("config.global.maxConnsPerHost", "The max number of connections, per unique hostname. Zero means no limit", IntType)
+	ConfigGlobalMaxIdleConnsPerHost       = ffc("config.global.maxIdleConnsPerHost", "The max number of idle connections, per unique hostname. Zero means net/http uses the default of only 2.", IntType)
 	ConfigGlobalMethod                    = ffc("config.global.method", "The HTTP method to use when making requests to the Address Resolver", StringType)
 	ConfigGlobalAuthType                  = ffc("config.global.auth.type", "The auth plugin to use for server side authentication of requests", StringType)
 	ConfigGlobalPassthroughHeadersEnabled = ffc("config.global.passthroughHeadersEnabled", "Enable passing through the set of allowed HTTP request headers", BooleanType)

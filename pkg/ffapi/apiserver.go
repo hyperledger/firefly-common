@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2025 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -22,6 +22,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -45,7 +46,7 @@ const APIServerMetricsSubSystemName = "api_server_rest"
 type APIServer interface {
 	Serve(ctx context.Context) error
 	Started() <-chan struct{}
-	MuxRouter(ctx context.Context) *mux.Router
+	MuxRouter(ctx context.Context) (*mux.Router, error)
 	APIPublicURL() string // valid to call after server is successfully started
 }
 
@@ -61,27 +62,37 @@ type apiServer[T any] struct {
 	apiDynamicPublicURLHeader string
 	alwaysPaginate            bool
 	handleYAML                bool
-	metricsEnabled            bool
+	monitoringEnabled         bool
 	metricsPath               string
-	metricsPublicURL          string
+	livenessPath              string
+	monitoringPublicURL       string
 	mux                       *mux.Router
+	oah                       *OpenAPIHandlerFactory
 
 	APIServerOptions[T]
 }
 
 type APIServerOptions[T any] struct {
 	MetricsRegistry           metric.MetricsRegistry
-	Routes                    []*Route
+	MetricsSubsystemName      string
+	Routes                    []*Route // move to use VersionedAPIs for support of Tags and ExternalDocs
+	VersionedAPIs             *VersionedAPIs
+	MonitoringRoutes          []*Route
 	EnrichRequest             func(r *APIRequest) (T, error)
 	Description               string
 	APIConfig                 config.Section
-	MetricsConfig             config.Section
+	MonitoringConfig          config.Section
 	CORSConfig                config.Section
 	FavIcon16                 []byte
 	FavIcon32                 []byte
 	PanicOnMissingDescription bool
 	SupportFieldRedaction     bool
 	HandleYAML                bool
+}
+
+type VersionedAPIs struct {
+	DefaultVersion string                 // must be set to a version string if there are more than 1 API versions provided
+	APIVersions    map[string]*APIVersion // a list of APIVersions, with the key being the version string
 }
 
 type APIServerRouteExt[T any] struct {
@@ -93,14 +104,23 @@ type APIServerRouteExt[T any] struct {
 // NewAPIServer makes a new server, with the specified configuration, and
 // the supplied wrapper function - which will inject
 func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APIServer {
+	if options.APIConfig == nil {
+		panic("APIConfig is required")
+	}
+
+	if options.MonitoringConfig == nil {
+		panic("MonitoringConfig is required")
+	}
+
 	as := &apiServer[T]{
 		defaultFilterLimit:        options.APIConfig.GetUint64(ConfAPIDefaultFilterLimit),
 		maxFilterLimit:            options.APIConfig.GetUint64(ConfAPIMaxFilterLimit),
 		maxFilterSkip:             options.APIConfig.GetUint64(ConfAPIMaxFilterSkip),
 		requestTimeout:            options.APIConfig.GetDuration(ConfAPIRequestTimeout),
 		requestMaxTimeout:         options.APIConfig.GetDuration(ConfAPIRequestMaxTimeout),
-		metricsEnabled:            options.MetricsConfig.GetBool(ConfMetricsServerEnabled),
-		metricsPath:               options.MetricsConfig.GetString(ConfMetricsServerPath),
+		monitoringEnabled:         options.MonitoringConfig.GetBool(ConfMonitoringServerEnabled),
+		metricsPath:               options.MonitoringConfig.GetString(ConfMonitoringServerMetricsPath),
+		livenessPath:              options.MonitoringConfig.GetString(ConfMonitoringServerLivenessPath),
 		alwaysPaginate:            options.APIConfig.GetBool(ConfAPIAlwaysPaginate),
 		handleYAML:                options.HandleYAML,
 		apiDynamicPublicURLHeader: options.APIConfig.GetString(ConfAPIDynamicPublicURLHeader),
@@ -113,9 +133,10 @@ func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APISe
 	if as.FavIcon32 == nil {
 		as.FavIcon32 = ffLogo16
 	}
+
 	_ = as.MetricsRegistry.NewHTTPMetricsInstrumentationsForSubsystem(
 		ctx,
-		APIServerMetricsSubSystemName,
+		as.metricsSubsystemName(),
 		true,
 		prometheus.DefBuckets,
 		map[string]string{},
@@ -123,12 +144,24 @@ func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APISe
 	return as
 }
 
-// Can be called before Serve, but MUST use the background context if so
-func (as *apiServer[T]) MuxRouter(ctx context.Context) *mux.Router {
-	if as.mux == nil {
-		as.mux = as.createMuxRouter(ctx)
+func (as *apiServer[T]) metricsSubsystemName() string {
+	metricsSubsystemName := APIServerMetricsSubSystemName
+	if as.MetricsSubsystemName != "" {
+		metricsSubsystemName = as.MetricsSubsystemName
 	}
-	return as.mux
+	return metricsSubsystemName
+}
+
+// Can be called before Serve, but MUST use the background context if so
+func (as *apiServer[T]) MuxRouter(ctx context.Context) (*mux.Router, error) {
+	if as.mux == nil {
+		var err error
+		if as.mux, err = as.createMuxRouter(ctx); err != nil {
+			return nil, err
+		}
+
+	}
+	return as.mux, nil
 }
 
 // Serve is the main entry point for the API Server
@@ -142,31 +175,40 @@ func (as *apiServer[T]) Serve(ctx context.Context) (err error) {
 	}()
 
 	httpErrChan := make(chan error)
-	metricsErrChan := make(chan error)
+	monitoringErrChan := make(chan error)
 
-	apiHTTPServer, err := httpserver.NewHTTPServer(ctx, "api", as.MuxRouter(ctx), httpErrChan, as.APIConfig, as.CORSConfig, &httpserver.ServerOptions{
+	apiMux, err := as.MuxRouter(ctx)
+	if err != nil {
+		return err
+	}
+	apiHTTPServer, err := httpserver.NewHTTPServer(ctx, "api", apiMux, httpErrChan, as.APIConfig, as.CORSConfig, &httpserver.ServerOptions{
 		MaximumRequestTimeout: as.requestMaxTimeout,
 	})
 	if err != nil {
 		return err
 	}
 	as.apiPublicURL = buildPublicURL(as.APIConfig, apiHTTPServer.Addr())
+	as.oah.StaticPublicURL = as.apiPublicURL
 	go apiHTTPServer.ServeHTTP(ctx)
 
-	if as.metricsEnabled {
-		metricsHTTPServer, err := httpserver.NewHTTPServer(ctx, "metrics", as.createMetricsMuxRouter(ctx), metricsErrChan, as.MetricsConfig, as.CORSConfig, &httpserver.ServerOptions{
+	if as.monitoringEnabled {
+		monitoringMux, err := as.createMonitoringMuxRouter(ctx)
+		if err != nil {
+			return err
+		}
+		monitoringHTTPServer, err := httpserver.NewHTTPServer(ctx, "monitoring", monitoringMux, monitoringErrChan, as.MonitoringConfig, as.CORSConfig, &httpserver.ServerOptions{
 			MaximumRequestTimeout: as.requestMaxTimeout,
 		})
 		if err != nil {
 			return err
 		}
-		as.metricsPublicURL = buildPublicURL(as.MetricsConfig, apiHTTPServer.Addr())
-		go metricsHTTPServer.ServeHTTP(ctx)
+		as.monitoringPublicURL = buildPublicURL(as.MonitoringConfig, apiHTTPServer.Addr())
+		go monitoringHTTPServer.ServeHTTP(ctx)
 	}
 
 	started = true
 	close(as.started)
-	return as.waitForServerStop(httpErrChan, metricsErrChan)
+	return as.waitForServerStop(httpErrChan, monitoringErrChan)
 }
 
 func (as *apiServer[T]) Started() <-chan struct{} {
@@ -177,11 +219,11 @@ func (as *apiServer[T]) APIPublicURL() string {
 	return as.apiPublicURL
 }
 
-func (as *apiServer[T]) waitForServerStop(httpErrChan, metricsErrChan chan error) error {
+func (as *apiServer[T]) waitForServerStop(httpErrChan, monitoringErrChan chan error) error {
 	select {
 	case err := <-httpErrChan:
 		return err
-	case err := <-metricsErrChan:
+	case err := <-monitoringErrChan:
 		return err
 	}
 }
@@ -238,16 +280,74 @@ func (as *apiServer[T]) handlerFactory() *HandlerFactory {
 	}
 }
 
-func (as *apiServer[T]) createMuxRouter(ctx context.Context) *mux.Router {
+func (as *apiServer[T]) createMuxRouter(ctx context.Context) (*mux.Router, error) {
 	r := mux.NewRouter().UseEncodedPath()
 	hf := as.handlerFactory()
 
-	if as.metricsEnabled {
-		h, _ := as.MetricsRegistry.GetHTTPMetricsInstrumentationsMiddlewareForSubsystem(ctx, APIServerMetricsSubSystemName)
+	as.oah = &OpenAPIHandlerFactory{
+		BaseSwaggerGenOptions: SwaggerGenOptions{
+			Title:                     as.Description,
+			Version:                   "1.0",
+			PanicOnMissingDescription: as.PanicOnMissingDescription,
+			DefaultRequestTimeout:     as.requestTimeout,
+			SupportFieldRedaction:     as.SupportFieldRedaction,
+		},
+		StaticPublicURL: as.apiPublicURL, // this is most likely not yet set, we'll ensure its set later on
+	}
+
+	if as.monitoringEnabled {
+		h, _ := as.MetricsRegistry.GetHTTPMetricsInstrumentationsMiddlewareForSubsystem(ctx, as.metricsSubsystemName())
 		r.Use(h)
 	}
 
-	for _, route := range as.Routes {
+	defaultAPIVersionObject := &APIVersion{
+		Routes: as.Routes,
+	}
+	defaultAPIVersion := "v1"
+	if as.VersionedAPIs != nil {
+		if len(as.Routes) > 0 {
+			return nil, i18n.NewError(ctx, i18n.MsgCannotUseRouteAndVersionedAPI)
+		}
+		if len(as.VersionedAPIs.APIVersions) == 0 {
+			return nil, i18n.NewError(ctx, i18n.MsgMissingVersionedAPI)
+		}
+		if len(as.VersionedAPIs.APIVersions) == 1 {
+			for apiVersion := range as.VersionedAPIs.APIVersions {
+				as.VersionedAPIs.DefaultVersion = apiVersion
+			}
+		}
+		if as.VersionedAPIs.DefaultVersion == "" {
+			return nil, i18n.NewError(ctx, i18n.MsgMissingDefaultAPIVersion)
+		}
+		if as.VersionedAPIs.APIVersions[as.VersionedAPIs.DefaultVersion] == nil || len(as.VersionedAPIs.APIVersions[as.VersionedAPIs.DefaultVersion].Routes) == 0 {
+			return nil, i18n.NewError(ctx, i18n.MsgNonExistDefaultAPIVersion, as.VersionedAPIs.DefaultVersion)
+		}
+		defaultAPIVersionObject = as.VersionedAPIs.APIVersions[as.VersionedAPIs.DefaultVersion]
+		defaultAPIVersion = as.VersionedAPIs.DefaultVersion
+		for apiVersion, routes := range as.VersionedAPIs.APIVersions {
+			if err := as.addRoutesForVersion(ctx, r, hf, apiVersion, routes); err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		if err := as.addRoutesForVersion(ctx, r, hf, defaultAPIVersion, defaultAPIVersionObject); err != nil {
+			return nil, err
+		}
+	}
+
+	r.HandleFunc(`/api/swagger.yaml`, hf.APIWrapper(as.oah.OpenAPIHandlerVersioned(fmt.Sprintf(`/api/%s`, defaultAPIVersion), OpenAPIFormatYAML, defaultAPIVersionObject)))
+	r.HandleFunc(`/api/swagger.json`, hf.APIWrapper(as.oah.OpenAPIHandlerVersioned(fmt.Sprintf(`/api/%s`, defaultAPIVersion), OpenAPIFormatJSON, defaultAPIVersionObject)))
+	r.HandleFunc(`/api/openapi.yaml`, hf.APIWrapper(as.oah.OpenAPIHandlerVersioned(fmt.Sprintf(`/api/%s`, defaultAPIVersion), OpenAPIFormatYAML, defaultAPIVersionObject)))
+	r.HandleFunc(`/api/openapi.json`, hf.APIWrapper(as.oah.OpenAPIHandlerVersioned(fmt.Sprintf(`/api/%s`, defaultAPIVersion), OpenAPIFormatJSON, defaultAPIVersionObject)))
+	r.HandleFunc(`/api`, hf.APIWrapper(as.oah.SwaggerUIHandler(`/api/openapi.yaml`)))
+	r.HandleFunc(`/favicon{any:.*}.png`, favIconsHandler(as.FavIcon16, as.FavIcon32))
+
+	r.NotFoundHandler = hf.APIWrapper(as.notFoundHandler)
+	return r, nil
+}
+
+func (as *apiServer[T]) addRoutesForVersion(ctx context.Context, r *mux.Router, hf *HandlerFactory, apiVersion string, apiVersionObject *APIVersion) error {
+	for _, route := range apiVersionObject.Routes {
 		ce, ok := route.Extensions.(*APIServerRouteExt[T])
 		if !ok {
 			panic(fmt.Sprintf("invalid route extensions: %t", route.Extensions))
@@ -262,30 +362,19 @@ func (as *apiServer[T]) createMuxRouter(ctx context.Context) *mux.Router {
 			}
 		}
 		if ce.JSONHandler != nil || ce.UploadHandler != nil || ce.StreamHandler != nil {
-			r.HandleFunc(fmt.Sprintf("/api/v1/%s", route.Path), as.routeHandler(hf, route)).
+			if strings.HasPrefix(route.Path, "/") {
+				return i18n.NewError(ctx, i18n.MsgRoutePathNotStartWithSlash, route.Path)
+			}
+			r.HandleFunc(fmt.Sprintf("/api/%s/%s", apiVersion, route.Path), as.routeHandler(hf, route)).
 				Methods(route.Method)
 		}
 	}
 
-	oah := &OpenAPIHandlerFactory{
-		BaseSwaggerGenOptions: SwaggerGenOptions{
-			Title:                     as.Description,
-			Version:                   "1.0",
-			PanicOnMissingDescription: as.PanicOnMissingDescription,
-			DefaultRequestTimeout:     as.requestTimeout,
-			SupportFieldRedaction:     as.SupportFieldRedaction,
-		},
-		StaticPublicURL: as.apiPublicURL,
-	}
-	r.HandleFunc(`/api/swagger.yaml`, hf.APIWrapper(oah.OpenAPIHandler(`/api/v1`, OpenAPIFormatYAML, as.Routes)))
-	r.HandleFunc(`/api/swagger.json`, hf.APIWrapper(oah.OpenAPIHandler(`/api/v1`, OpenAPIFormatJSON, as.Routes)))
-	r.HandleFunc(`/api/openapi.yaml`, hf.APIWrapper(oah.OpenAPIHandler(`/api/v1`, OpenAPIFormatYAML, as.Routes)))
-	r.HandleFunc(`/api/openapi.json`, hf.APIWrapper(oah.OpenAPIHandler(`/api/v1`, OpenAPIFormatJSON, as.Routes)))
-	r.HandleFunc(`/api`, hf.APIWrapper(oah.SwaggerUIHandler(`/api/openapi.yaml`)))
-	r.HandleFunc(`/favicon{any:.*}.png`, favIconsHandler(as.FavIcon16, as.FavIcon32))
+	// adding open api documentation for this api version
+	r.HandleFunc(fmt.Sprintf("/api/%s/openapi.yaml", apiVersion), hf.APIWrapper(as.oah.OpenAPIHandlerVersioned(fmt.Sprintf("/api/%s", apiVersion), OpenAPIFormatYAML, apiVersionObject)))
+	r.HandleFunc(fmt.Sprintf("/api/%s/openapi.json", apiVersion), hf.APIWrapper(as.oah.OpenAPIHandlerVersioned(fmt.Sprintf("/api/%s", apiVersion), OpenAPIFormatJSON, apiVersionObject)))
 
-	r.NotFoundHandler = hf.APIWrapper(as.notFoundHandler)
-	return r
+	return nil
 }
 
 func (as *apiServer[T]) notFoundHandler(res http.ResponseWriter, req *http.Request) (status int, err error) {
@@ -293,12 +382,30 @@ func (as *apiServer[T]) notFoundHandler(res http.ResponseWriter, req *http.Reque
 	return 404, i18n.NewError(req.Context(), i18n.Msg404NotFound)
 }
 
-func (as *apiServer[T]) createMetricsMuxRouter(ctx context.Context) *mux.Router {
-	r := mux.NewRouter()
+func (as *apiServer[T]) emptyJSONHandler(res http.ResponseWriter, _ *http.Request) (status int, err error) {
+	res.Header().Add("Content-Type", "application/json")
+	return 200, nil
+}
+
+func (as *apiServer[T]) createMonitoringMuxRouter(ctx context.Context) (*mux.Router, error) {
+	r := mux.NewRouter().UseEncodedPath()
+	hf := as.handlerFactory() // TODO separate factory for monitoring ??
+
 	h, err := as.MetricsRegistry.HTTPHandler(ctx, promhttp.HandlerOpts{})
 	if err != nil {
 		panic(err)
 	}
 	r.Path(as.metricsPath).Handler(h)
-	return r
+	r.HandleFunc(as.livenessPath, hf.APIWrapper(as.emptyJSONHandler))
+
+	for _, route := range as.MonitoringRoutes {
+		path := route.Path
+		if strings.HasPrefix(route.Path, "/") {
+			return nil, i18n.NewError(ctx, i18n.MsgRoutePathNotStartWithSlash, route.Path)
+		}
+		r.HandleFunc("/"+path, as.routeHandler(hf, route)).Methods(route.Method)
+	}
+
+	r.NotFoundHandler = hf.APIWrapper(as.notFoundHandler)
+	return r, nil
 }

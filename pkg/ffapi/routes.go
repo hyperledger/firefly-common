@@ -80,6 +80,14 @@ type Route struct {
 	Extensions interface{}
 }
 
+// APIVersion defines a version of the API
+// it contains a list of routes and associated metadata for the OpenAPI spec generation
+type APIVersion struct {
+	Routes       []*Route               // the routes
+	Tags         openapi3.Tags          // (OPTIONAL) description and external documentation of tags used in the routes, all tags in this array will need to be used by at least one of routes
+	ExternalDocs *openapi3.ExternalDocs // (OPTIONAL) external documentation of this API version
+}
+
 // PathParam is a description of a path parameter
 type PathParam struct {
 	// Name is the name of the parameter, from the Gorilla path mux

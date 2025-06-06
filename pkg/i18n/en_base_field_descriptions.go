@@ -91,6 +91,7 @@ var (
 	RESTConfigThrottleRequestsPerSecond     = ffm("RESTConfig.requestsPerSecond", "Requests per second")
 	RESTConfigThrottleBurst                 = ffm("RESTConfig.burst", "Burst")
 	RESTConfigMaxConnsPerHost               = ffm("RESTConfig.maxConnsPerHost", "Maximum connections per host")
+	RESTConfigMaxIdleConnsPerHost           = ffm("RESTConfig.maxIdleConnsPerHost", "Maximum idle connections per host")
 	RESTConfigMaxIdleConns                  = ffm("RESTConfig.maxIdleConns", "Maximum idle connections to leave in the connection pool")
 	RESTConfigMaxIdleTimeout                = ffm("RESTConfig.maxIdleTimeout", "Maximum time to leave idle connections in the connection pool")
 	RESTConfigProxyURL                      = ffm("RESTConfig.proxyURL", "URL of a proxy server to use for connections")

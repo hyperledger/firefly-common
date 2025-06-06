@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -32,12 +32,12 @@ import (
 var allowedNameStringRegex = `^[a-zA-Z]+[a-zA-Z0-9_]*[a-zA-Z0-9]$`
 var ffMetricsPrefix = "ff"
 
-const compulsoryComponentLabel = fireflySystemLabelsPrefix + "component"
+const compulsoryComponentLabel = "component"
 
 /** Metrics names should follow the convention documented in https://prometheus.io/docs/practices/naming/. Below is an example breakdown of the term mapping:
-* Example metric: ff                _  api_server_rest    _ requests         _ total   {ff_component="tm"              , method       =  "Get"          ...}
-                  ff                _  token              _ mint_duration    _ seconds {ff_component=""                , status       =  "Success"      ...}
-* Mapping       : <firefly prefix>  _  <subsystem>        _ <metric target>  _ <unit>  {ff_component=<component name>  , <label name> =  <label value>  ...}
+* Example metric: ff                _  api_server_rest    _ requests         _ total   {component="tm"              , method       =  "Get"          ...}
+                  ff                _  token              _ mint_duration    _ seconds {component=""                , status       =  "Success"      ...}
+* Mapping       : <firefly prefix>  _  <subsystem>        _ <metric target>  _ <unit>  {component=<component name>  , <label name> =  <label value>  ...}
 */
 
 // MetricsRegistry contains all metrics defined in a micro-service.
@@ -58,6 +58,8 @@ type MetricsRegistry interface {
 	NewHTTPMetricsInstrumentationsForSubsystem(ctx context.Context, subsystem string, useRouteTemplate bool, reqDurationBuckets []float64, labels map[string]string) error
 	// GetHTTPMetricsInstrumentationsMiddlewareForSubsystem returns the HTTP middleware of a subsystem that used predefined HTTP metrics
 	GetHTTPMetricsInstrumentationsMiddlewareForSubsystem(ctx context.Context, subsystem string) (func(next http.Handler) http.Handler, error)
+
+	MustRegisterCollector(collector prometheus.Collector)
 }
 
 type FireflyDefaultLabels struct {
@@ -80,6 +82,11 @@ type MetricsManager interface {
 	// functions for emitting metrics
 	SetGaugeMetric(ctx context.Context, metricName string, number float64, defaultLabels *FireflyDefaultLabels)
 	SetGaugeMetricWithLabels(ctx context.Context, metricName string, number float64, labels map[string]string, defaultLabels *FireflyDefaultLabels)
+	IncGaugeMetric(ctx context.Context, metricName string, defaultLabels *FireflyDefaultLabels)
+	IncGaugeMetricWithLabels(ctx context.Context, metricName string, labels map[string]string, defaultLabels *FireflyDefaultLabels)
+	DecGaugeMetric(ctx context.Context, metricName string, defaultLabels *FireflyDefaultLabels)
+	DecGaugeMetricWithLabels(ctx context.Context, metricName string, labels map[string]string, defaultLabels *FireflyDefaultLabels)
+
 	IncCounterMetric(ctx context.Context, metricName string, defaultLabels *FireflyDefaultLabels)
 	IncCounterMetricWithLabels(ctx context.Context, metricName string, labels map[string]string, defaultLabels *FireflyDefaultLabels)
 	ObserveHistogramMetric(ctx context.Context, metricName string, number float64, defaultLabels *FireflyDefaultLabels)
@@ -88,16 +95,29 @@ type MetricsManager interface {
 	ObserveSummaryMetricWithLabels(ctx context.Context, metricName string, number float64, labels map[string]string, defaultLabels *FireflyDefaultLabels)
 }
 
-func NewPrometheusMetricsRegistry(fireflyComponentName string /*component name will be added to all metrics as a label*/) MetricsRegistry {
+type Options struct {
+	MetricsPrefix string
+}
+
+func NewPrometheusMetricsRegistry(componentName string /*component name will be added to all metrics as a label*/) MetricsRegistry {
+	return NewPrometheusMetricsRegistryWithOptions(componentName, Options{})
+}
+
+func NewPrometheusMetricsRegistryWithOptions(componentName string /*component name will be added to all metrics as a label*/, opts Options) MetricsRegistry {
 	registry := prometheus.NewRegistry()
-	registerer := prometheus.WrapRegistererWith(prometheus.Labels{compulsoryComponentLabel: fireflyComponentName}, registry)
+	registerer := prometheus.WrapRegistererWith(prometheus.Labels{compulsoryComponentLabel: componentName}, registry)
 
 	// register default cpu & go metrics by default
 	registerer.MustRegister(collectors.NewGoCollector())
 	registerer.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
+	metricsPrefix := ffMetricsPrefix
+	if opts.MetricsPrefix != "" {
+		metricsPrefix = opts.MetricsPrefix
+	}
+
 	return &prometheusMetricsRegistry{
-		namespace:                      ffMetricsPrefix,
+		namespace:                      metricsPrefix,
 		registry:                       registry,
 		registerer:                     registerer,
 		managerMap:                     make(map[string]MetricsManager),
@@ -184,4 +204,8 @@ func (pmr *prometheusMetricsRegistry) GetHTTPMetricsInstrumentationsMiddlewareFo
 		return nil, i18n.NewError(ctx, i18n.MsgMetricsSubsystemHTTPInstrumentationNotFound)
 	}
 	return httpInstrumentation.Middleware, nil
+}
+
+func (pmr *prometheusMetricsRegistry) MustRegisterCollector(collector prometheus.Collector) {
+	pmr.registerer.MustRegister(collector)
 }

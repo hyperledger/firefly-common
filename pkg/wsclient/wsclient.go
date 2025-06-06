@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2024 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -29,28 +29,42 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/hyperledger/firefly-common/pkg/ffresty"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
 	"github.com/hyperledger/firefly-common/pkg/retry"
+	"golang.org/x/time/rate"
 )
 
 type WSConfig struct {
-	HTTPURL                string             `json:"httpUrl,omitempty"`
-	WebSocketURL           string             `json:"wsUrl,omitempty"`
-	WSKeyPath              string             `json:"wsKeyPath,omitempty"`
-	ReadBufferSize         int                `json:"readBufferSize,omitempty"`
-	WriteBufferSize        int                `json:"writeBufferSize,omitempty"`
-	InitialDelay           time.Duration      `json:"initialDelay,omitempty"`
-	MaximumDelay           time.Duration      `json:"maximumDelay,omitempty"`
-	InitialConnectAttempts int                `json:"initialConnectAttempts,omitempty"`
-	DisableReconnect       bool               `json:"disableReconnect"`
-	AuthUsername           string             `json:"authUsername,omitempty"`
-	AuthPassword           string             `json:"authPassword,omitempty"`
-	HTTPHeaders            fftypes.JSONObject `json:"headers,omitempty"`
-	HeartbeatInterval      time.Duration      `json:"heartbeatInterval,omitempty"`
-	TLSClientConfig        *tls.Config        `json:"tlsClientConfig,omitempty"`
-	ConnectionTimeout      time.Duration      `json:"connectionTimeout,omitempty"`
+	HTTPURL                   string             `json:"httpUrl,omitempty"`
+	WebSocketURL              string             `json:"wsUrl,omitempty"`
+	WSKeyPath                 string             `json:"wsKeyPath,omitempty"`
+	ReadBufferSize            int                `json:"readBufferSize,omitempty"`
+	WriteBufferSize           int                `json:"writeBufferSize,omitempty"`
+	InitialDelay              time.Duration      `json:"initialDelay,omitempty"`
+	MaximumDelay              time.Duration      `json:"maximumDelay,omitempty"`
+	DelayFactor               float64            `json:"delayFactor,omitempty"`
+	BackgroundConnect         bool               `json:"backgroundConnect,omitempty"`
+	InitialConnectAttempts    int                `json:"initialConnectAttempts,omitempty"` // recommend backgroundConnect instead
+	DisableReconnect          bool               `json:"disableReconnect"`
+	AuthUsername              string             `json:"authUsername,omitempty"`
+	AuthPassword              string             `json:"authPassword,omitempty"`
+	ThrottleRequestsPerSecond int                `json:"requestsPerSecond,omitempty"`
+	ThrottleBurst             int                `json:"burst,omitempty"`
+	HTTPHeaders               fftypes.JSONObject `json:"headers,omitempty"`
+	HeartbeatInterval         time.Duration      `json:"heartbeatInterval,omitempty"`
+	TLSClientConfig           *tls.Config        `json:"tlsClientConfig,omitempty"`
+	ConnectionTimeout         time.Duration      `json:"connectionTimeout,omitempty"`
+	// This one cannot be set in JSON - must be configured on the code interface
+	ReceiveExt bool
+}
+
+type WSWrapConfig struct {
+	HeartbeatInterval         time.Duration `json:"heartbeatInterval,omitempty"`
+	ThrottleRequestsPerSecond int           `json:"requestsPerSecond,omitempty"`
+	ThrottleBurst             int           `json:"burst,omitempty"`
 	// This one cannot be set in JSON - must be configured on the code interface
 	ReceiveExt bool
 }
@@ -91,16 +105,19 @@ type wsClient struct {
 	ctx                  context.Context
 	headers              http.Header
 	url                  string
+	backgroundConnect    bool
 	initialRetryAttempts int
 	wsdialer             *websocket.Dialer
 	wsconn               *websocket.Conn
-	retry                retry.Retry
+	connRetry            retry.Retry
 	closed               bool
 	useReceiveExt        bool
 	receive              chan []byte
 	receiveExt           chan *WSPayload
 	send                 chan []byte
 	sendDone             chan []byte
+	bgConnCancelCtx      context.CancelFunc
+	bgConnDone           chan struct{}
 	closing              chan struct{}
 	beforeConnect        WSPreConnectHandler
 	afterConnect         WSPostConnectHandler
@@ -109,6 +126,7 @@ type wsClient struct {
 	heartbeatMux         sync.Mutex
 	activePingSent       *time.Time
 	lastPingCompleted    time.Time
+	rateLimiter          *rate.Limiter
 }
 
 // WSPreConnectHandler will be called before every connect/reconnect. Any error returned will prevent the websocket from connecting.
@@ -117,6 +135,7 @@ type WSPreConnectHandler func(ctx context.Context, w WSClient) error
 // WSPostConnectHandler will be called after every connect/reconnect. Can send data over ws, but must not block listening for data on the ws.
 type WSPostConnectHandler func(ctx context.Context, w WSClient) error
 
+// Creates a new outbound client that can be connected to a remote server
 func New(ctx context.Context, config *WSConfig, beforeConnect WSPreConnectHandler, afterConnect WSPostConnectHandler) (WSClient, error) {
 	l := log.L(ctx)
 	wsURL, err := buildWSUrl(ctx, config)
@@ -133,10 +152,12 @@ func New(ctx context.Context, config *WSConfig, beforeConnect WSPreConnectHandle
 			TLSClientConfig:  config.TLSClientConfig,
 			HandshakeTimeout: config.ConnectionTimeout,
 		},
-		retry: retry.Retry{
+		connRetry: retry.Retry{
 			InitialDelay: config.InitialDelay,
 			MaximumDelay: config.MaximumDelay,
+			Factor:       config.DelayFactor,
 		},
+		backgroundConnect:    config.BackgroundConnect,
 		initialRetryAttempts: config.InitialConnectAttempts,
 		headers:              make(http.Header),
 		send:                 make(chan []byte),
@@ -146,12 +167,9 @@ func New(ctx context.Context, config *WSConfig, beforeConnect WSPreConnectHandle
 		heartbeatInterval:    config.HeartbeatInterval,
 		useReceiveExt:        config.ReceiveExt,
 		disableReconnect:     config.DisableReconnect,
+		rateLimiter:          ffresty.GetRateLimiter(config.ThrottleRequestsPerSecond, config.ThrottleBurst),
 	}
-	if w.useReceiveExt {
-		w.receiveExt = make(chan *WSPayload)
-	} else {
-		w.receive = make(chan []byte)
-	}
+	w.setupReceiveChannel()
 	for k, v := range config.HTTPHeaders {
 		if vs, ok := v.(string); ok {
 			w.headers.Set(k, vs)
@@ -176,14 +194,64 @@ func New(ctx context.Context, config *WSConfig, beforeConnect WSPreConnectHandle
 	return w, nil
 }
 
+// Wrap an existing connection (including an inbound server connection) with heartbeating and throttling.
+// No reconnect functions are supported when wrapping an existing connection like this, but the supplied
+// callback will be invoked when the connection closes (allowing cleanup/tracking).
+func Wrap(ctx context.Context, config WSWrapConfig, wsconn *websocket.Conn, onClose func()) WSClient {
+	w := &wsClient{
+		ctx:               ctx,
+		url:               wsconn.LocalAddr().String(),
+		wsconn:            wsconn,
+		disableReconnect:  true,
+		heartbeatInterval: config.HeartbeatInterval,
+		rateLimiter:       ffresty.GetRateLimiter(config.ThrottleRequestsPerSecond, config.ThrottleBurst),
+		useReceiveExt:     config.ReceiveExt,
+		send:              make(chan []byte),
+		closing:           make(chan struct{}),
+	}
+	w.setupReceiveChannel()
+	w.pongReceivedOrReset(false)
+	w.wsconn.SetPongHandler(w.pongHandler)
+	log.L(ctx).Infof("WS %s wrapped", w.url)
+	go func() {
+		w.receiveReconnectLoop()
+		onClose()
+	}()
+	return w
+}
+
+func (w *wsClient) setupReceiveChannel() {
+	if w.useReceiveExt {
+		w.receiveExt = make(chan *WSPayload)
+	} else {
+		w.receive = make(chan []byte)
+	}
+}
+
 func (w *wsClient) Connect() error {
 
+	if w.backgroundConnect && w.bgConnDone == nil {
+		w.bgConnDone = make(chan struct{})
+		w.ctx, w.bgConnCancelCtx = context.WithCancel(w.ctx)
+		go func() {
+			defer close(w.bgConnDone)
+			err := w.initialConnect()
+			if err != nil {
+				// Retry means we only reach here if context closes
+				log.L(w.ctx).Errorf("Connection to WebSocket %s was never established before shutdown: %s", w.url, err)
+			}
+		}()
+		return nil
+	}
+
+	return w.initialConnect()
+}
+
+func (w *wsClient) initialConnect() error {
 	if err := w.connect(true); err != nil {
 		return err
 	}
-
 	go w.receiveReconnectLoop()
-
 	return nil
 }
 
@@ -194,6 +262,12 @@ func (w *wsClient) Close() {
 		c := w.wsconn
 		if c != nil {
 			_ = c.Close()
+		}
+		bgc := w.bgConnDone
+		if bgc != nil {
+			w.bgConnCancelCtx()
+			<-w.bgConnDone
+			w.bgConnDone = nil
 		}
 	}
 }
@@ -220,6 +294,13 @@ func (w *wsClient) SetHeader(header, value string) {
 }
 
 func (w *wsClient) Send(ctx context.Context, message []byte) error {
+	if w.rateLimiter != nil {
+		// Wait for permission to proceed with the request
+		err := w.rateLimiter.Wait(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	// Send
 	select {
 	case w.send <- message:
@@ -278,12 +359,12 @@ func buildWSUrl(ctx context.Context, config *WSConfig) (string, error) {
 
 func (w *wsClient) connect(initial bool) error {
 	l := log.L(w.ctx)
-	return w.retry.DoCustomLog(w.ctx, func(attempt int) (retry bool, err error) {
+	return w.connRetry.DoCustomLog(w.ctx, func(attempt int) (retry bool, err error) {
 		if w.closed {
 			return false, i18n.NewError(w.ctx, i18n.MsgWSClosing)
 		}
 
-		retry = !initial || attempt < w.initialRetryAttempts
+		retry = w.backgroundConnect || !initial || attempt < w.initialRetryAttempts
 		if w.beforeConnect != nil {
 			if err = w.beforeConnect(w.ctx, w); err != nil {
 				l.Warnf("WS %s connect attempt %d failed in beforeConnect", w.url, attempt)
@@ -292,7 +373,7 @@ func (w *wsClient) connect(initial bool) error {
 		}
 
 		var res *http.Response
-		w.wsconn, res, err = w.wsdialer.Dial(w.url, w.headers)
+		w.wsconn, res, err = w.wsdialer.DialContext(w.ctx, w.url, w.headers)
 		if err != nil {
 			var b []byte
 			var status = -1
@@ -423,6 +504,7 @@ func (w *wsClient) sendLoop(receiverDone chan struct{}) {
 				l.Errorf("WS %s closing: %s", w.url, err)
 				disconnecting = true
 			} else if wsconn != nil {
+				l.Debugf("WS %s send heartbeat ping", w.url)
 				if err := wsconn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 					l.Errorf("WS %s heartbeat send failed: %s", w.url, err)
 					disconnecting = true

@@ -66,6 +66,23 @@ type TestStruct2 struct {
 
 var ExampleDesc = i18n.FFM(language.AmericanEnglish, "TestKey", "Test Description")
 
+var example2TagName = "Example 2"
+var tagsMetadata = openapi3.Tags{
+	{
+		Name:        example2TagName,
+		Description: "This is an example description of Example 2",
+		ExternalDocs: &openapi3.ExternalDocs{
+			Description: "Find out more about Example 2",
+			URL:         "https://example2.com/docs",
+		},
+	},
+}
+
+var externalDocsMetadata = openapi3.ExternalDocs{
+	Description: "Find out more about the Unit Test API",
+	URL:         "https://unittest.com/docs",
+}
+
 var testRoutes = []*Route{
 	{
 		Name:   "op1",
@@ -101,6 +118,7 @@ var testRoutes = []*Route{
 			return schemaGen(&TestStruct1{})
 		},
 		JSONOutputCodes: []int{http.StatusOK},
+		Tag:             example2TagName,
 	},
 	{
 		Name:       "op3",
@@ -119,6 +137,7 @@ var testRoutes = []*Route{
 			{Name: "metadata", Description: ExampleDesc},
 		},
 		FormUploadHandler: func(r *APIRequest) (output interface{}, err error) { return nil, nil },
+		Tag:               example2TagName,
 	},
 	{
 		Name:   "op4",
@@ -132,6 +151,7 @@ var testRoutes = []*Route{
 		JSONInputValue:  func() interface{} { return nil },
 		JSONOutputValue: func() interface{} { return nil },
 		JSONOutputCodes: []int{http.StatusNoContent},
+		Tag:             example2TagName,
 	},
 	{
 		Name:            "op5",
@@ -143,6 +163,7 @@ var testRoutes = []*Route{
 		JSONInputValue:  func() interface{} { return &TestStruct1{} },
 		JSONOutputValue: func() interface{} { return &TestStruct1{} },
 		JSONOutputCodes: []int{http.StatusOK},
+		Tag:             example2TagName,
 	},
 	{
 		Name:       "op6",
@@ -175,13 +196,15 @@ type TestNonTaggedType struct {
 
 func TestOpenAPI3SwaggerGen(t *testing.T) {
 	doc := NewSwaggerGen(&SwaggerGenOptions{
-		Title:   "UnitTest",
-		Version: "1.0",
-		BaseURL: "http://localhost:12345/api/v1",
+		Title:                 "UnitTest",
+		Version:               "1.0",
+		SupportFieldRedaction: true,
+		BaseURL:               "http://localhost:12345/api/v1",
 		RouteCustomizations: func(ctx context.Context, sg *SwaggerGen, route *Route, op *openapi3.Operation) {
 			sg.AddParam(ctx, op, "header", "x-my-param", "thing", "stuff", ExampleDesc, false)
 		},
-		SupportFieldRedaction: true,
+		Tags:         tagsMetadata,
+		ExternalDocs: &externalDocsMetadata,
 	}).Generate(context.Background(), testRoutes)
 	err := doc.Validate(context.Background())
 	assert.NoError(t, err)
@@ -245,7 +268,6 @@ func TestDuplicateOperationIDCheck(t *testing.T) {
 		_ = NewSwaggerGen(&SwaggerGenOptions{
 			Title:   "UnitTest",
 			Version: "1.0",
-			BaseURL: "http://localhost:12345/api/v1",
 		}).Generate(context.Background(), routes)
 	})
 }
@@ -261,8 +283,10 @@ func TestWildcards(t *testing.T) {
 		},
 	}
 	swagger := NewSwaggerGen(&SwaggerGenOptions{
+
 		Title:   "UnitTest",
 		Version: "1.0",
+
 		BaseURL: "http://localhost:12345/api/v1",
 	}).Generate(context.Background(), routes)
 	assert.NotNil(t, swagger.Paths.Find("/namespaces/{ns}/example1/{id}"))
@@ -348,6 +372,7 @@ func TestCustomResponseRefs(t *testing.T) {
 	swagger := NewSwaggerGen(&SwaggerGenOptions{
 		Title:   "UnitTest",
 		Version: "1.0",
+
 		BaseURL: "http://localhost:12345/api/v1",
 	}).Generate(context.Background(), routes)
 	assert.Nil(t, swagger.Paths.Find("/test").Get.RequestBody)
@@ -374,8 +399,8 @@ func TestPanicOnMissingDescription(t *testing.T) {
 		_ = NewSwaggerGen(&SwaggerGenOptions{
 			Title:                     "UnitTest",
 			Version:                   "1.0",
-			BaseURL:                   "http://localhost:12345/api/v1",
 			PanicOnMissingDescription: true,
+			BaseURL:                   "http://localhost:12345/api/v1",
 		}).Generate(context.Background(), routes)
 	})
 }
@@ -395,8 +420,8 @@ func TestPanicOnMissingFFStructTag(t *testing.T) {
 		_ = NewSwaggerGen(&SwaggerGenOptions{
 			Title:                     "UnitTest",
 			Version:                   "1.0",
-			BaseURL:                   "http://localhost:12345/api/v1",
 			PanicOnMissingDescription: true,
+			BaseURL:                   "http://localhost:12345/api/v1",
 		}).Generate(context.Background(), routes)
 	})
 }
@@ -415,8 +440,8 @@ func TestPanicOnMissingRouteDescription(t *testing.T) {
 		_ = NewSwaggerGen(&SwaggerGenOptions{
 			Title:                     "UnitTest",
 			Version:                   "1.0",
-			BaseURL:                   "http://localhost:12345/api/v1",
 			PanicOnMissingDescription: true,
+			BaseURL:                   "http://localhost:12345/api/v1",
 		}).Generate(context.Background(), routes)
 	})
 }

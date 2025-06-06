@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2025 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -40,7 +40,14 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const (
+	metricsHTTPResponsesTotal = "http_responses_total"
+	metricsNetworkErrorsTotal = "network_errors_total"
+	metricsHTTPResponseTime   = "http_response_time_seconds"
+)
+
 type retryCtxKey struct{}
+type hostCtxKey struct{}
 
 type retryCtx struct {
 	id       string
@@ -54,7 +61,6 @@ type Config struct {
 }
 
 var (
-	rateLimiter    *rate.Limiter
 	metricsManager metric.MetricsManager
 	onErrorHooks   []resty.ErrorHook
 	onSuccessHooks []resty.SuccessHook
@@ -80,6 +86,7 @@ type HTTPConfig struct {
 	RetryErrorStatusCodeRegex     string                                    `ffstruct:"RESTConfig" json:"retryErrorStatusCodeRegex,omitempty"`
 	HTTPMaxIdleConns              int                                       `ffstruct:"RESTConfig" json:"maxIdleConns,omitempty"`
 	HTTPMaxConnsPerHost           int                                       `ffstruct:"RESTConfig" json:"maxConnsPerHost,omitempty"`
+	HTTPMaxIdleConnsPerHost       int                                       `ffstruct:"RESTConfig" json:"maxIdleConnsPerHost,omitempty"`
 	HTTPPassthroughHeadersEnabled bool                                      `ffstruct:"RESTConfig" json:"httpPassthroughHeadersEnabled,omitempty"`
 	HTTPHeaders                   fftypes.JSONObject                        `ffstruct:"RESTConfig" json:"headers,omitempty"`
 	HTTPTLSHandshakeTimeout       fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"tlsHandshakeTimeout,omitempty"`
@@ -97,27 +104,21 @@ func EnableClientMetrics(ctx context.Context, metricsRegistry metric.MetricsRegi
 		if err != nil {
 			return err
 		}
-		metricsManager.NewCounterMetricWithLabels(ctx, "http_response", "HTTP response", []string{"status", "error", "host", "method"}, false)
-		metricsManager.NewCounterMetricWithLabels(ctx, "network_error", "Network error", []string{"host", "method"}, false)
+		metricsManager.NewCounterMetricWithLabels(ctx, metricsHTTPResponsesTotal, "HTTP response", []string{"status", "error", "host", "method"}, false)
+		metricsManager.NewCounterMetricWithLabels(ctx, metricsNetworkErrorsTotal, "Network error", []string{"host", "method"}, false)
+		metricsManager.NewSummaryMetricWithLabels(ctx, metricsHTTPResponseTime, "HTTP response time", []string{"status", "host", "method"}, false)
 	}
 
 	// create hooks
 	onErrorMetricsHook := func(req *resty.Request, _ error) {
-		method := req.Method
-		u, _ := url.Parse(req.URL)
-		host := u.Host
 		// whilst there it is a possibility to get an response returned in the error here (and resty doc for OnError shows this) it seems to be a special case and the statuscode in such cases was not set.
 		// therefore we log all cases as network_error we may in future find reason to extract more detail from the error
-		metricsManager.IncCounterMetricWithLabels(ctx, "network_error", map[string]string{"host": host, "method": method}, nil)
+		metricsManager.IncCounterMetricWithLabels(ctx, metricsNetworkErrorsTotal, map[string]string{"host": req.Context().Value(hostCtxKey{}).(string), "method": req.Method}, nil)
 	}
 	RegisterGlobalOnError(onErrorMetricsHook)
 
 	onSuccessMetricsHook := func(_ *resty.Client, resp *resty.Response) {
-		method := resp.Request.Method
-		u, _ := url.Parse(resp.Request.URL)
-		host := u.Host
-		code := resp.RawResponse.StatusCode
-		metricsManager.IncCounterMetricWithLabels(ctx, "http_response", map[string]string{"status": fmt.Sprintf("%d", code), "error": "false", "host": host, "method": method}, nil)
+		metricsManager.IncCounterMetricWithLabels(ctx, metricsHTTPResponsesTotal, map[string]string{"status": fmt.Sprintf("%d", resp.RawResponse.StatusCode), "error": "false", "host": resp.Request.Context().Value(hostCtxKey{}).(string), "method": resp.Request.Method}, nil)
 	}
 	RegisterGlobalOnSuccess(onSuccessMetricsHook)
 	return nil
@@ -141,13 +142,17 @@ func OnAfterResponse(c *resty.Client, resp *resty.Response) {
 	}
 	rCtx := resp.Request.Context()
 	rc := rCtx.Value(retryCtxKey{}).(*retryCtx)
-	elapsed := float64(time.Since(rc.start)) / float64(time.Millisecond)
+	elapsed := time.Since(rc.start)
 	level := logrus.DebugLevel
 	status := resp.StatusCode()
 	if status >= 300 {
 		level = logrus.ErrorLevel
 	}
-	log.L(rCtx).Logf(level, "<== %s %s [%d] (%.2fms)", resp.Request.Method, resp.Request.URL, status, elapsed)
+	log.L(rCtx).Logf(level, "<== %s %s [%d] (%dms)", resp.Request.Method, resp.Request.URL, status, time.Since(rc.start).Milliseconds())
+	if metricsManager != nil {
+		metricsManager.ObserveSummaryMetricWithLabels(rCtx, metricsHTTPResponseTime, elapsed.Seconds(), map[string]string{"status": fmt.Sprintf("%d", status), "host": rCtx.Value(hostCtxKey{}).(string), "method": resp.Request.Method}, nil)
+	}
+	// TODO use req.TraceInfo() for richer metrics at the DNS and transport layer
 }
 
 func OnError(req *resty.Request, err error) {
@@ -176,7 +181,9 @@ func New(ctx context.Context, staticConfig config.Section) (client *resty.Client
 	return NewWithConfig(ctx, *ffrestyConfig), nil
 }
 
-func getRateLimiter(rps, burst int) *rate.Limiter {
+var getRateLimiter = GetRateLimiter
+
+func GetRateLimiter(rps, burst int) *rate.Limiter {
 	if rps != 0 { // if rps is not set no need for a rate limiter
 		rpsLimiter := rate.Limit(rps)
 		if burst == 0 {
@@ -192,7 +199,7 @@ func getRateLimiter(rps, burst int) *rate.Limiter {
 //
 // You can use the normal Resty builder pattern, to set per-instance configuration
 // as required.
-func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Client) {
+func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Client) { //nolint:gocyclo
 	if ffrestyConfig.HTTPCustomClient != nil {
 		if httpClient, ok := ffrestyConfig.HTTPCustomClient.(*http.Client); ok {
 			client = resty.NewWithClient(httpClient)
@@ -210,6 +217,7 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 			ForceAttemptHTTP2:     true,
 			MaxIdleConns:          ffrestyConfig.HTTPMaxIdleConns,
 			MaxConnsPerHost:       ffrestyConfig.HTTPMaxConnsPerHost,
+			MaxIdleConnsPerHost:   ffrestyConfig.HTTPMaxConnsPerHost,
 			IdleConnTimeout:       time.Duration(ffrestyConfig.HTTPIdleConnTimeout),
 			TLSHandshakeTimeout:   time.Duration(ffrestyConfig.HTTPTLSHandshakeTimeout),
 			ExpectContinueTimeout: time.Duration(ffrestyConfig.HTTPExpectContinueTimeout),
@@ -225,12 +233,14 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 		client = resty.NewWithClient(httpClient)
 	}
 
-	rateLimiter = getRateLimiter(ffrestyConfig.ThrottleRequestsPerSecond, ffrestyConfig.ThrottleBurst)
+	// this var is held in memory for the lifetime of the client bc the OnBeforeRequest func
+	// uses it to wait for permission to proceed with the request
+	rateLimiter := getRateLimiter(ffrestyConfig.ThrottleRequestsPerSecond, ffrestyConfig.ThrottleBurst)
 
-	url := strings.TrimSuffix(ffrestyConfig.URL, "/")
-	if url != "" {
-		client.SetBaseURL(url)
-		log.L(ctx).Debugf("Created REST client to %s", url)
+	_url := strings.TrimSuffix(ffrestyConfig.URL, "/")
+	if _url != "" {
+		client.SetBaseURL(_url)
+		log.L(ctx).Debugf("Created REST client to %s", _url)
 	}
 
 	if ffrestyConfig.ProxyURL != "" {
@@ -239,7 +249,7 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 
 	client.SetTimeout(time.Duration(ffrestyConfig.HTTPRequestTimeout))
 
-	client.OnBeforeRequest(func(_ *resty.Client, req *resty.Request) error {
+	client.OnBeforeRequest(func(c *resty.Client, req *resty.Request) error {
 		if rateLimiter != nil {
 			// Wait for permission to proceed with the request
 			err := rateLimiter.Wait(req.Context())
@@ -248,6 +258,26 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 			}
 		}
 		rCtx := req.Context()
+		// Record host in context to avoid redundant parses in hooks
+		var u *url.URL
+		if req.URL != "" {
+			u, _ = url.Parse(req.URL)
+		}
+		// The req.URL might have only set a path i.e. /home, fallbacking to the base URL of the client.
+		// So if the URL is nil, that's likely the case and we'll derive the host from the configured
+		// base instead.
+		if (u == nil || u.Host == "") && _url != "" {
+			u, _ = url.Parse(_url)
+		}
+		if (u == nil || u.Host == "") && c.BaseURL != "" {
+			u, _ = url.Parse(c.BaseURL)
+		}
+		if u != nil && u.Host != "" {
+			host := u.Host
+			rCtx = context.WithValue(rCtx, hostCtxKey{}, host)
+		} else {
+			rCtx = context.WithValue(rCtx, hostCtxKey{}, "unknown")
+		}
 		rc := rCtx.Value(retryCtxKey{})
 		if rc == nil {
 			// First attempt
@@ -275,7 +305,7 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 		// If an X-FireFlyRequestID was set on the context, pass that header on this request too
 		ffRequestID := rCtx.Value(ffapi.CtxFFRequestIDKey{})
 		if ffRequestID != nil {
-			req.Header.Set(ffapi.FFRequestIDHeader, ffRequestID.(string))
+			req.Header.Set(ffapi.RequestIDHeader(), ffRequestID.(string))
 		}
 
 		if ffrestyConfig.OnBeforeRequest != nil {
@@ -284,8 +314,9 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 			}
 		}
 
-		log.L(rCtx).Debugf("==> %s %s%s", req.Method, url, req.URL)
+		log.L(rCtx).Debugf("==> %s %s%s", req.Method, _url, req.URL)
 		log.L(rCtx).Tracef("==> (body) %+v", req.Body)
+
 		return nil
 	})
 
