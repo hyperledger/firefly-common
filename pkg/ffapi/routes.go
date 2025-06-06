@@ -19,6 +19,7 @@ package ffapi
 import (
 	"context"
 	"io"
+	"net/http"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/hyperledger/firefly-common/pkg/config"
@@ -52,6 +53,8 @@ type Route struct {
 	PreTranslatedDescription string
 	// FilterFactory models the filter fields that can be specified on the API, and will automatically be parsed
 	FilterFactory QueryFactory
+	// JSONInputDecoder is a function that does the decoding completely - needed (as this was written pre-generics) for handling arrays
+	JSONInputDecoder func(req *http.Request, body io.Reader) (interface{}, error)
 	// JSONInputValue is a function that returns a pointer to a structure to take JSON input
 	JSONInputValue func() interface{}
 	// JSONInputMask are fields that aren't available for users to supply on input

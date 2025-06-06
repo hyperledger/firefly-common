@@ -18,6 +18,7 @@ package ffapi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -112,6 +113,29 @@ var utAPIRoute2 = &Route{
 	},
 }
 
+type testInputStruct struct {
+	Input1 string `json:"input1,omitempty"`
+}
+
+var utAPIRoute3 = &Route{
+	Name:        "utAPIRoute3",
+	Path:        "ut/utresource/{resourceid}/postbatch",
+	Method:      http.MethodPost,
+	Description: "post an array to check arrays go through ok",
+	JSONInputDecoder: func(req *http.Request, body io.Reader) (interface{}, error) {
+		var arrayInput []*testInputStruct
+		err := json.NewDecoder(body).Decode(&arrayInput)
+		return arrayInput, err
+	},
+	JSONInputValue:  func() interface{} { return []*testInputStruct{} },
+	JSONOutputValue: func() interface{} { return []*testInputStruct{} },
+	Extensions: &APIServerRouteExt[*utManager]{
+		JSONHandler: func(a *APIRequest, um *utManager) (output interface{}, err error) {
+			return a.Input.([]*testInputStruct), nil
+		},
+	},
+}
+
 func initUTConfig() (config.Section, config.Section, config.Section) {
 	config.RootConfigReset()
 	apiConfig := config.RootSection("ut.api")
@@ -129,7 +153,7 @@ func newTestAPIServer(t *testing.T, start bool) (*utManager, *apiServer[*utManag
 	um := &utManager{t: t}
 	as := NewAPIServer(ctx, APIServerOptions[*utManager]{
 		MetricsRegistry: metric.NewPrometheusMetricsRegistry("ut"),
-		Routes:          []*Route{utAPIRoute1, utAPIRoute2},
+		Routes:          []*Route{utAPIRoute1, utAPIRoute2, utAPIRoute3},
 		EnrichRequest: func(r *APIRequest) (*utManager, error) {
 			// This could be some dynamic object based on extra processing in the request,
 			// but the most common case is you just have a "manager" that you inject into each
@@ -174,6 +198,30 @@ func TestAPIServerInvokeAPIRouteStream(t *testing.T) {
 	assert.Equal(t, "application/octet-stream", res.Header().Get("Content-Type"))
 	assert.Equal(t, "id12345", um.calledStreamHandler)
 	assert.Equal(t, "a stream!", string(res.Body()))
+}
+
+func TestAPIServerInvokeAPIPostEmptyArray(t *testing.T) {
+	_, as, done := newTestAPIServer(t, true)
+	defer done()
+
+	<-as.Started()
+
+	var o []*testInputStruct
+	res, err := resty.New().R().
+		SetBody([]*testInputStruct{}).
+		SetResult(&o).
+		Post(fmt.Sprintf("%s/api/v1/ut/utresource/id12345/postbatch", as.APIPublicURL()))
+	assert.NoError(t, err)
+	assert.Equal(t, 200, res.StatusCode())
+	assert.Equal(t, []*testInputStruct{}, o)
+
+	res, err = resty.New().R().
+		SetBody([]*testInputStruct{{Input1: "in1"}}).
+		SetResult(&o).
+		Post(fmt.Sprintf("%s/api/v1/ut/utresource/id12345/postbatch", as.APIPublicURL()))
+	assert.NoError(t, err)
+	assert.Equal(t, 200, res.StatusCode())
+	assert.Equal(t, []*testInputStruct{{Input1: "in1"}}, o)
 }
 
 func TestAPIServerInvokeAPIRouteLiveness(t *testing.T) {
