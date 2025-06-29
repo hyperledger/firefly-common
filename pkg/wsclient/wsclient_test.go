@@ -394,6 +394,18 @@ func TestWSSendCanceledContext(t *testing.T) {
 	assert.Regexp(t, "FF00146", err)
 }
 
+func TestWSSenderClosed(t *testing.T) {
+
+	w := &wsClient{
+		send:     make(chan []byte),
+		sendDone: make(chan []byte),
+	}
+	close(w.sendDone)
+
+	err := w.Send(context.Background(), []byte(`sent after close`))
+	assert.Regexp(t, "FF00147", err)
+}
+
 func TestWSConnectClosed(t *testing.T) {
 
 	w := &wsClient{

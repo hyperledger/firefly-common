@@ -307,6 +307,10 @@ func (w *wsClient) Send(ctx context.Context, message []byte) error {
 		return nil
 	case <-ctx.Done():
 		return i18n.NewError(ctx, i18n.MsgWSSendTimedOut)
+	case <-w.sendDone:
+		// Need this case because the receiver can actually call the sender indirectly on reconnect,
+		// so if the sender loop fails the receiver can get blocked
+		return i18n.NewError(ctx, i18n.MsgWSClosing)
 	case <-w.closing:
 		return i18n.NewError(ctx, i18n.MsgWSClosing)
 	}
