@@ -375,14 +375,18 @@ func (w *wsClient) connect(initial bool) error {
 		var res *http.Response
 		w.wsconn, res, err = w.wsdialer.DialContext(w.ctx, w.url, w.headers)
 		if err != nil {
-			var b []byte
+			errMsg := err.Error()
 			var status = -1
 			if res != nil {
-				b, _ = io.ReadAll(res.Body)
+				b, readErr := io.ReadAll(res.Body)
 				res.Body.Close()
+				if readErr == nil && len(b) > 0 {
+					// The info we need is what the server returned and the status
+					errMsg = string(b)
+				}
 				status = res.StatusCode
 			}
-			l.Warnf("WS %s connect attempt %d failed [%d]: %s", w.url, attempt, status, string(b))
+			l.Warnf("WS %s connect attempt %d failed [%d]: %s", w.url, attempt, status, errMsg)
 			return retry, i18n.WrapError(w.ctx, err, i18n.MsgWSConnectFailed)
 		}
 
