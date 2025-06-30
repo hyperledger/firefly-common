@@ -28,6 +28,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -726,4 +727,24 @@ func TestPOSTFormParamsMultiValueUnsupported(t *testing.T) {
 	res, err := http.PostForm(fmt.Sprintf("http://%s/base-path/baz/test", s.Addr()), val)
 	assert.NoError(t, err)
 	assert.Equal(t, 400, res.StatusCode)
+}
+
+func TestGetFormParamsFail(t *testing.T) {
+
+	hs := newTestHandlerFactory("", nil)
+	req := httptest.NewRequest(http.MethodPost, "http://localhost:12345/anything", iotest.ErrReader(fmt.Errorf("pop")))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	_, err := hs.getFormParams(req)
+	require.Regexp(t, "FF00250.*pop", err)
+}
+
+func TestGetFormEmptyValue(t *testing.T) {
+
+	hs := newTestHandlerFactory("", nil)
+	req := httptest.NewRequest(http.MethodPost, "http://localhost:12345/anything", nil)
+	req.Form = url.Values{
+		"nothing": []string{},
+	}
+	_, err := hs.getFormParams(req)
+	require.NoError(t, err)
 }

@@ -216,7 +216,9 @@ func (hs *HandlerFactory) RouteHandler(route *Route) http.HandlerFunc {
 				req.Header.Set("Content-Type", "application/json; charset=utf8")
 				fallthrough
 			case strings.HasPrefix(strings.ToLower(contentType), "application/json"):
-				if jsonInput != nil {
+				if route.JSONInputDecoder != nil {
+					jsonInput, err = route.JSONInputDecoder(req, req.Body)
+				} else if jsonInput != nil {
 					d := json.NewDecoder(req.Body)
 					d.UseNumber()
 					err = d.Decode(&jsonInput)

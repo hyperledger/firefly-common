@@ -77,6 +77,7 @@ type FilterJSONOps struct {
 	NEq                []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"neq,omitempty"` // negated short name
 	Contains           []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"contains,omitempty"`
 	StartsWith         []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"startsWith,omitempty"`
+	EndsWith           []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"endsWith,omitempty"`
 	LessThan           []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"lessThan,omitempty"`
 	LT                 []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"lt,omitempty"` // short name
 	LessThanOrEqual    []*FilterJSONKeyValue  `ffstruct:"FilterJSON" json:"lessThanOrEqual,omitempty"`
@@ -104,14 +105,18 @@ type resolveCtx struct {
 	ctx                 context.Context
 	jsonFilter          *FilterJSON
 	valueResolver       ValueResolverFn
+	fieldResolver       FieldResolverFn
 	skipFieldValidation bool
 	err                 error
 }
 
 type ValueResolverFn func(ctx context.Context, level *FilterJSON, fieldName, suppliedValue string) (driver.Value, error)
 
+type FieldResolverFn func(ctx context.Context, fieldName string) (resolvedFieldName string, err error)
+
 type JSONBuildFilterOpt struct {
 	valueResolver       ValueResolverFn
+	fieldResolver       FieldResolverFn
 	skipFieldValidation bool
 }
 
@@ -120,6 +125,14 @@ type JSONBuildFilterOpt struct {
 func ValueResolver(fn ValueResolverFn) *JSONBuildFilterOpt {
 	return &JSONBuildFilterOpt{
 		valueResolver: fn,
+	}
+}
+
+// If you want to know the full set of fields used in the field, and build a dynamic
+// map of fields that might need JOIN relationships (such as labels)
+func FieldResolver(fn FieldResolverFn) *JSONBuildFilterOpt {
+	return &JSONBuildFilterOpt{
+		fieldResolver: fn,
 	}
 }
 
@@ -165,8 +178,19 @@ func (jq *QueryJSON) BuildFilter(ctx context.Context, qf QueryFactory, options .
 	if jq.Limit != nil {
 		fb = fb.Limit(*jq.Limit)
 	}
-	for _, s := range jq.Sort {
-		fb = fb.Sort(s)
+	if len(jq.Sort) > 0 {
+		rv := buildResolveCtx(ctx, &jq.FilterJSON, options...)
+		for _, field := range jq.Sort {
+			field, isDesc := strings.CutPrefix(field, "-")
+			field, err := validateFilterField(ctx, fb, field, rv)
+			if err != nil {
+				return nil, err
+			}
+			if isDesc {
+				field = "-" + field
+			}
+			fb = fb.Sort(field)
+		}
 	}
 	return (&jq.FilterJSON).BuildSubFilter(ctx, fb, options...)
 }
@@ -174,6 +198,9 @@ func (jq *QueryJSON) BuildFilter(ctx context.Context, qf QueryFactory, options .
 func validateFilterField(ctx context.Context, fb FilterBuilder, fieldAnyCase string, rv *resolveCtx) (string, error) {
 	if rv.skipFieldValidation {
 		return fieldAnyCase, nil
+	}
+	if rv.fieldResolver != nil {
+		return rv.fieldResolver(ctx, fieldAnyCase)
 	}
 	for _, f := range fb.Fields() {
 		if strings.EqualFold(fieldAnyCase, f) {
@@ -241,6 +268,25 @@ func (jf *FilterJSON) addSimpleFilters(ctx context.Context, fb FilterBuilder, an
 			}
 		}
 	}
+	for _, e := range jf.EndsWith {
+		field, err := validateFilterField(ctx, fb, e.Field, rv)
+		if err != nil {
+			return nil, err
+		}
+		if e.CaseInsensitive {
+			if e.Not {
+				andFilter = andFilter.Condition(fb.NotIEndsWith(field, rv.resolve(field, e.Value.String())))
+			} else {
+				andFilter = andFilter.Condition(fb.IEndsWith(field, rv.resolve(field, e.Value.String())))
+			}
+		} else {
+			if e.Not {
+				andFilter = andFilter.Condition(fb.NotEndsWith(field, rv.resolve(field, e.Value.String())))
+			} else {
+				andFilter = andFilter.Condition(fb.EndsWith(field, rv.resolve(field, e.Value.String())))
+			}
+		}
+	}
 	for _, e := range jf.Null {
 		field, err := validateFilterField(ctx, fb, e.Field, rv)
 		if err != nil {
@@ -303,6 +349,9 @@ func buildResolveCtx(ctx context.Context, jsonFilter *FilterJSON, options ...*JS
 	for _, o := range options {
 		if o.valueResolver != nil {
 			rv.valueResolver = o.valueResolver
+		}
+		if o.fieldResolver != nil {
+			rv.fieldResolver = o.fieldResolver
 		}
 		if o.skipFieldValidation {
 			rv.skipFieldValidation = true

@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestBuildQueryJSONNestedAndOr(t *testing.T) {
@@ -167,6 +168,7 @@ func TestBuildQuerySingleNestedWithResolverOk(t *testing.T) {
 
 	var qf QueryJSON
 	err := json.Unmarshal([]byte(`{
+	    "sort": ["-created"],
 		"or": [
 			{
 				"equal": [
@@ -180,18 +182,26 @@ func TestBuildQuerySingleNestedWithResolverOk(t *testing.T) {
 	}`), &qf)
 	assert.NoError(t, err)
 
-	filter, err := qf.BuildFilter(context.Background(), TestQueryFactory, ValueResolver(func(ctx context.Context, level *FilterJSON, fieldName, suppliedValue string) (driver.Value, error) {
-		assert.Equal(t, "tag", fieldName)
-		assert.Equal(t, "a", suppliedValue)
-		assert.Len(t, level.Equal, 1)
-		return "b", nil
-	}))
+	tqf := TestQueryFactory.Clone()
+	filter, err := qf.BuildFilter(context.Background(), tqf,
+		FieldResolver(func(ctx context.Context, fieldName string) (resolvedFieldName string, err error) {
+			resolvedFieldName = fieldName + ".resolved"
+			tqf[resolvedFieldName] = &StringField{}
+			return
+		}),
+		ValueResolver(func(ctx context.Context, level *FilterJSON, fieldName, suppliedValue string) (driver.Value, error) {
+			assert.Equal(t, "tag.resolved", fieldName)
+			assert.Equal(t, "a", suppliedValue)
+			assert.Len(t, level.Equal, 1)
+			return "b", nil
+		}),
+	)
 	assert.NoError(t, err)
 
 	fi, err := filter.Finalize()
 	assert.NoError(t, err)
 
-	assert.Equal(t, "tag == 'b'", fi.String())
+	assert.Equal(t, "tag.resolved == 'b' sort=-created.resolved", fi.String())
 }
 
 func TestBuildQuerySingleNestedWithResolverError(t *testing.T) {
@@ -215,6 +225,21 @@ func TestBuildQuerySingleNestedWithResolverError(t *testing.T) {
 		assert.Equal(t, "tag", fieldName)
 		assert.Equal(t, "a", suppliedValue)
 		assert.Len(t, level.In, 1)
+		return "", fmt.Errorf("pop")
+	}))
+	assert.Regexp(t, "pop", err)
+}
+
+func TestBuildQuerySingleNestedWithFieldResolverError(t *testing.T) {
+
+	var qf QueryJSON
+	err := json.Unmarshal([]byte(`{
+		"sort": ["wrong"]
+	}`), &qf)
+	assert.NoError(t, err)
+
+	_, err = qf.BuildFilter(context.Background(), TestQueryFactory, FieldResolver(func(ctx context.Context, fieldName string) (resolvedFieldName string, err error) {
+		require.Equal(t, "wrong", fieldName)
 		return "", fmt.Errorf("pop")
 	}))
 	assert.Regexp(t, "pop", err)
@@ -349,6 +374,46 @@ func TestBuildQueryJSONStartsWith(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Equal(t, "( tag ^= '0' ) && ( tag !^ 'abc' ) && ( tag :^ 'ABC' ) && ( tag ;^ 'true' ) skip=5 limit=10", fi.String())
+}
+
+func TestBuildQueryJSONEndsWith(t *testing.T) {
+
+	var qf QueryJSON
+	err := json.Unmarshal([]byte(`{
+		"skip": 5,
+		"limit": 10,
+		"endsWith": [
+			{
+				"field": "tag",
+				"value": 0
+			},
+			{
+				"not": true,
+				"field": "tag",
+				"value": "abc"
+			},
+			{
+				"caseInsensitive": true,
+				"field": "tag",
+				"value": "ABC"
+			},
+			{
+				"caseInsensitive": true,
+				"not": true,
+				"field": "tag",
+				"value": true
+			}
+		]
+	}`), &qf)
+	assert.NoError(t, err)
+
+	filter, err := qf.BuildFilter(context.Background(), TestQueryFactory)
+	assert.NoError(t, err)
+
+	fi, err := filter.Finalize()
+	assert.NoError(t, err)
+
+	assert.Equal(t, "( tag $= '0' ) && ( tag !$ 'abc' ) && ( tag :$ 'ABC' ) && ( tag ;$ 'true' ) skip=5 limit=10", fi.String())
 }
 
 func TestBuildQueryJSONGreaterThan(t *testing.T) {
@@ -548,39 +613,45 @@ func TestBuildQueryJSONBadFields(t *testing.T) {
 	assert.Regexp(t, "FF00142", err)
 
 	var qf4 QueryJSON
-	err = json.Unmarshal([]byte(`{"lessThan": [{"field": "wrong"}]}`), &qf4)
+	err = json.Unmarshal([]byte(`{"endsWith": [{"field": "wrong"}]}`), &qf4)
 	assert.NoError(t, err)
 	_, err = qf4.BuildFilter(context.Background(), TestQueryFactory)
 	assert.Regexp(t, "FF00142", err)
 
 	var qf5 QueryJSON
-	err = json.Unmarshal([]byte(`{"lessThanOrEqual": [{"field": "wrong"}]}`), &qf5)
+	err = json.Unmarshal([]byte(`{"lessThan": [{"field": "wrong"}]}`), &qf5)
 	assert.NoError(t, err)
 	_, err = qf5.BuildFilter(context.Background(), TestQueryFactory)
 	assert.Regexp(t, "FF00142", err)
 
 	var qf6 QueryJSON
-	err = json.Unmarshal([]byte(`{"greaterThan": [{"field": "wrong"}]}`), &qf6)
+	err = json.Unmarshal([]byte(`{"lessThanOrEqual": [{"field": "wrong"}]}`), &qf6)
 	assert.NoError(t, err)
 	_, err = qf6.BuildFilter(context.Background(), TestQueryFactory)
 	assert.Regexp(t, "FF00142", err)
 
 	var qf7 QueryJSON
-	err = json.Unmarshal([]byte(`{"greaterThanOrEqual": [{"field": "wrong"}]}`), &qf7)
+	err = json.Unmarshal([]byte(`{"greaterThan": [{"field": "wrong"}]}`), &qf7)
 	assert.NoError(t, err)
 	_, err = qf7.BuildFilter(context.Background(), TestQueryFactory)
 	assert.Regexp(t, "FF00142", err)
 
 	var qf8 QueryJSON
-	err = json.Unmarshal([]byte(`{"in": [{"field": "wrong"}]}`), &qf8)
+	err = json.Unmarshal([]byte(`{"greaterThanOrEqual": [{"field": "wrong"}]}`), &qf8)
 	assert.NoError(t, err)
 	_, err = qf8.BuildFilter(context.Background(), TestQueryFactory)
 	assert.Regexp(t, "FF00142", err)
 
 	var qf9 QueryJSON
-	err = json.Unmarshal([]byte(`{"null": [{"field": "wrong"}]}`), &qf9)
+	err = json.Unmarshal([]byte(`{"in": [{"field": "wrong"}]}`), &qf9)
 	assert.NoError(t, err)
 	_, err = qf9.BuildFilter(context.Background(), TestQueryFactory)
+	assert.Regexp(t, "FF00142", err)
+
+	var qf10 QueryJSON
+	err = json.Unmarshal([]byte(`{"null": [{"field": "wrong"}]}`), &qf10)
+	assert.NoError(t, err)
+	_, err = qf10.BuildFilter(context.Background(), TestQueryFactory)
 	assert.Regexp(t, "FF00142", err)
 }
 

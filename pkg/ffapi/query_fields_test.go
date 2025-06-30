@@ -17,6 +17,8 @@
 package ffapi
 
 import (
+	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -137,6 +139,15 @@ func TestInt64Field(t *testing.T) {
 	v, err = f.Value()
 	assert.NoError(t, err)
 	assert.Equal(t, int64(0), v)
+
+	err = f.Scan(uint64(math.MaxInt64 + 1))
+	assert.Regexp(t, "FF00105", err)
+
+	err = f.Scan(uint(math.MaxInt64 + 1))
+	assert.Regexp(t, "FF00105", err)
+
+	err = f.Scan(fmt.Sprintf("%d", uint64(math.MaxInt64+1)))
+	assert.Regexp(t, "FF00105", err)
 
 }
 

@@ -178,6 +178,21 @@ var testRoutes = []*Route{
 		JSONOutputValue: func() interface{} { return &TestStruct1{} },
 		JSONOutputCodes: []int{http.StatusOK},
 	},
+	{
+		Name:            "op7",
+		Path:            "example7",
+		Method:          http.MethodPut,
+		PathParams:      nil,
+		QueryParams:     nil,
+		Description:     ExampleDesc,
+		JSONInputValue:  func() interface{} { return &TestStruct1{} },
+		JSONOutputValue: func() interface{} { return nil },
+		JSONOutputCodes: []int{http.StatusNoContent},
+		FormParams: []*FormParam{
+			{Name: "metadata", Description: ExampleDesc},
+		},
+		Tag: example2TagName,
+	},
 }
 
 type TestInOutType struct {
