@@ -386,9 +386,8 @@ func (as *apiServer[T]) notFoundHandler(res http.ResponseWriter, req *http.Reque
 	return 404, i18n.NewError(req.Context(), i18n.Msg404NotFound)
 }
 
-func (as *apiServer[T]) emptyJSONHandler(res http.ResponseWriter, _ *http.Request) (status int, err error) {
-	res.Header().Add("Content-Type", "application/json")
-	return 200, nil
+func (as *apiServer[T]) noContentResponder(res http.ResponseWriter, _ *http.Request) {
+	res.WriteHeader(http.StatusNoContent)
 }
 
 func (as *apiServer[T]) createMonitoringMuxRouter(ctx context.Context) (*mux.Router, error) {
@@ -400,7 +399,7 @@ func (as *apiServer[T]) createMonitoringMuxRouter(ctx context.Context) (*mux.Rou
 		panic(err)
 	}
 	r.Path(as.metricsPath).Handler(h)
-	r.HandleFunc(as.livenessPath, hf.APIWrapper(as.emptyJSONHandler))
+	r.HandleFunc(as.livenessPath, as.noContentResponder)
 
 	for _, route := range as.MonitoringRoutes {
 		path := route.Path

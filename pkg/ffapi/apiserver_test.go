@@ -232,7 +232,7 @@ func TestAPIServerInvokeAPIRouteLiveness(t *testing.T) {
 
 	res, err := resty.New().R().Get(fmt.Sprintf("%s/livez", as.MonitoringPublicURL()))
 	assert.NoError(t, err)
-	assert.Equal(t, 200, res.StatusCode()) // note this should really be 204, but not changing as would change behavior
+	assert.Equal(t, 204, res.StatusCode())
 }
 
 func TestAPIServerPanicsMisConfig(t *testing.T) {
