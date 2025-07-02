@@ -254,3 +254,50 @@ func TestJSONNestedSafeGet(t *testing.T) {
 	)
 
 }
+
+func TestDeepCopyBasic(t *testing.T) {
+	original := JSONObject{
+		"key1": "value1",
+		"key2": 123,
+		"key3": true,
+	}
+
+	copy := original.DeepCopy()
+
+	assert.Equal(t, original, copy)
+	assert.NotSame(t, original, copy)
+}
+
+func TestDeepCopyNested(t *testing.T) {
+	original := JSONObject{
+		"key1": JSONObject{
+			"nestedKey1": "nestedValue1",
+			"nestedKey2": 456,
+		},
+		"key2": []interface{}{"elem1", "elem2"},
+	}
+
+	copy := original.DeepCopy()
+
+	assert.Equal(t, original, copy)
+	assert.NotSame(t, original, copy)
+	assert.NotSame(t, original["key1"], copy["key1"])
+	assert.NotSame(t, original["key2"], copy["key2"])
+}
+
+func TestDeepCopyEmpty(t *testing.T) {
+	original := JSONObject{}
+
+	copy := original.DeepCopy()
+
+	assert.Equal(t, original, copy)
+	assert.NotSame(t, original, copy)
+}
+
+func TestDeepCopyNil(t *testing.T) {
+	var original JSONObject = nil
+
+	copy := original.DeepCopy()
+
+	assert.Nil(t, copy)
+}
