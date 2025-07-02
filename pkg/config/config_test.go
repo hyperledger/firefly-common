@@ -19,12 +19,13 @@ package config
 import (
 	"context"
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"os"
 	"path"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
@@ -86,10 +87,18 @@ func TestDefaults(t *testing.T) {
 
 func TestValueSet(t *testing.T) {
 	RootConfigReset()
+
 	// keys with default values are not set
+	AddRootKey("key1")
 	assert.False(t, IsSet("key1"))
 	Set("key1", "updatedvalue")
 	assert.True(t, IsSet("key1"))
+
+	section := RootSection("child")
+	section.AddKnownKey("key1")
+	assert.False(t, section.IsSet("key1"))
+	section.Set("key1", "updatedvalue")
+	assert.True(t, section.IsSet("key1"))
 }
 
 func TestSpecificConfigFileOk(t *testing.T) {

@@ -638,7 +638,7 @@ func (c *configSection) IsSet(key string) bool {
 	keysMutex.Lock()
 	defer keysMutex.Unlock()
 
-	return viper.IsSet(key)
+	return viper.IsSet(c.prefixKey(key))
 }
 
 // SetupLogging initializes logging
