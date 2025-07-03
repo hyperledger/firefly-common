@@ -308,6 +308,34 @@ func TestWildcards(t *testing.T) {
 	assert.NotNil(t, swagger.Paths.Value("/namespaces/{ns}/example1/{id}"))
 }
 
+func TestSamePathWithDifferentValues(t *testing.T) {
+	routes := []*Route{
+		{
+			Name:            "op1",
+			Path:            "namespaces/{ns}/example1/{id}",
+			Method:          http.MethodPost,
+			JSONInputValue:  func() interface{} { return &TestStruct1{} },
+			JSONOutputCodes: []int{http.StatusOK},
+		},
+		{
+			Name:            "op2",
+			Path:            "namespaces/{ns}/example1/{did}",
+			Method:          http.MethodPost,
+			JSONInputValue:  func() interface{} { return &TestStruct1{} },
+			JSONOutputCodes: []int{http.StatusOK},
+		},
+	}
+	swagger := NewSwaggerGen(&SwaggerGenOptions{
+		Title:   "UnitTest",
+		Version: "1.0",
+		BaseURL: "http://localhost:12345/api/v1",
+	}).Generate(context.Background(), routes)
+	assert.Equal(t, 2, swagger.Paths.Len())
+	assert.NotNil(t, swagger.Paths.Find("/namespaces/{ns}/example1/{id}"))
+	assert.NotNil(t, swagger.Paths.Value("/namespaces/{ns}/example1/{id}"))
+	assert.NotNil(t, swagger.Paths.Find("/namespaces/{ns}/example1/{did}"))
+	assert.NotNil(t, swagger.Paths.Value("/namespaces/{ns}/example1/{did}"))
+}
 func TestFFExcludeTag(t *testing.T) {
 	routes := []*Route{
 		{
