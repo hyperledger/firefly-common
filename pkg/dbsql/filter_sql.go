@@ -175,8 +175,11 @@ func (s *Database) BuildUpdate(sel sq.UpdateBuilder, update ffapi.Update, typeMa
 		return sel, err
 	}
 	for _, so := range ui.SetOperations {
-
-		sel = sel.Set(s.mapFieldName("", so.Field, typeMap), so.Value)
+		if ffapi.IsNull(so.Value) {
+			sel = sel.Set(s.mapFieldName("", so.Field, typeMap), sq.Expr("NULL"))
+		} else {
+			sel = sel.Set(s.mapFieldName("", so.Field, typeMap), so.Value)
+		}
 	}
 	return sel, nil
 }
