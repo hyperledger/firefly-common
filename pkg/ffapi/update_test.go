@@ -45,11 +45,20 @@ func TestUpdateBuilderOK(t *testing.T) {
 	u.Set("sequence", 12345).
 		Set("cid", uuid).
 		Set("author", "0x1234").
-		Set("type", "private")
+		Set("type", "private").
+		SetNull("masked")
 	assert.False(t, u.IsEmpty())
 	ui, err := u.Finalize()
 	assert.NoError(t, err)
-	assert.Equal(t, "sequence=12345, cid='c414cab3-9bd4-48f3-b16a-0d74a3bbb60e', author='0x1234', type='private'", ui.String())
+	assert.Equal(t, "sequence=12345, cid='c414cab3-9bd4-48f3-b16a-0d74a3bbb60e', author='0x1234', type='private', masked=null", ui.String())
+}
+
+func TestUpdateBuilderSingleNull(t *testing.T) {
+	u := TestQueryFactory.NewUpdate(context.Background()).SetNull("masked")
+	assert.False(t, u.IsEmpty())
+	ui, err := u.Finalize()
+	assert.NoError(t, err)
+	assert.Equal(t, "masked=null", ui.String())
 }
 
 func TestUpdateBuilderBadField(t *testing.T) {

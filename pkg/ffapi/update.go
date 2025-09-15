@@ -24,10 +24,17 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 )
 
+type UpdateOps interface {
+	// Set adds a set condition to the update
+	Set(field string, value interface{}) Update
+
+	// Set adds a set condition to the update, to set the value to NULL
+	SetNull(field string) Update
+}
+
 // UpdateBuilder is the output of the builder
 type UpdateBuilder interface {
-	// Set starts creation of a set operation
-	Set(field string, value interface{}) Update
+	UpdateOps
 
 	// S starts an update that doesn't have any fields
 	S() Update
@@ -37,8 +44,7 @@ type UpdateBuilder interface {
 }
 
 type Update interface {
-	// Set adds a set condition to the update
-	Set(field string, value interface{}) Update
+	UpdateOps
 
 	// IsEmpty
 	IsEmpty() bool
@@ -66,8 +72,9 @@ type UpdateInfo struct {
 }
 
 type setOperation struct {
-	field string
-	value interface{}
+	field   string
+	value   interface{}
+	setNull bool
 }
 
 type updateBuilder struct {
@@ -88,7 +95,14 @@ func (ub *updateBuilder) Fields() []string {
 func (ub *updateBuilder) Set(field string, value interface{}) Update {
 	return &setUpdate{
 		ub:            ub,
-		setOperations: []*setOperation{{field, value}},
+		setOperations: []*setOperation{{field: field, value: value}},
+	}
+}
+
+func (ub *updateBuilder) SetNull(field string) Update {
+	return &setUpdate{
+		ub:            ub,
+		setOperations: []*setOperation{{field: field, setNull: true}},
 	}
 }
 
@@ -109,7 +123,12 @@ func (u *setUpdate) IsEmpty() bool {
 }
 
 func (u *setUpdate) Set(field string, value interface{}) Update {
-	u.setOperations = append(u.setOperations, &setOperation{field, value})
+	u.setOperations = append(u.setOperations, &setOperation{field: field, value: value})
+	return u
+}
+
+func (u *setUpdate) SetNull(field string) Update {
+	u.setOperations = append(u.setOperations, &setOperation{field: field, setNull: true})
 	return u
 }
 
@@ -134,9 +153,14 @@ func (u *setUpdate) Finalize() (*UpdateInfo, error) {
 		if !ok {
 			return nil, i18n.NewError(u.ub.ctx, i18n.MsgInvalidFilterField, name)
 		}
-		value := field.GetSerialization()
-		if err := value.Scan(si.value); err != nil {
-			return nil, i18n.WrapError(u.ub.ctx, err, i18n.MsgInvalidValueForFilterField, name)
+		var value FieldSerialization
+		if si.setNull {
+			value = &nullField{}
+		} else {
+			value = field.GetSerialization()
+			if err := value.Scan(si.value); err != nil {
+				return nil, i18n.WrapError(u.ub.ctx, err, i18n.MsgInvalidValueForFilterField, name)
+			}
 		}
 		ui.SetOperations[i] = &SetOperation{
 			Field: name,
