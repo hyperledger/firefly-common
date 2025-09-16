@@ -101,6 +101,16 @@ func (f *nullField) Scan(_ interface{}) error {
 }
 func (f *nullField) Value() (driver.Value, error) { return nil, nil }
 func (f *nullField) String() string               { return fftypes.NullString }
+func (f *nullField) isNull() bool                 { return true }
+
+type hasIsNull interface {
+	isNull() bool
+}
+
+func IsNull(v any) bool {
+	vAsIsNull, ok := v.(hasIsNull)
+	return ok && vAsIsNull.isNull()
+}
 
 type StringField struct{}
 type stringField struct {

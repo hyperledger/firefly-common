@@ -28,7 +28,7 @@ import (
 
 func TestNullField(t *testing.T) {
 
-	f := nullField{}
+	f := &nullField{}
 	v, err := f.Value()
 	assert.NoError(t, err)
 	assert.Nil(t, v)
@@ -40,6 +40,7 @@ func TestNullField(t *testing.T) {
 	assert.Nil(t, v)
 
 	assert.Equal(t, "null", f.String())
+	assert.True(t, IsNull(f))
 }
 
 func TestStringField(t *testing.T) {

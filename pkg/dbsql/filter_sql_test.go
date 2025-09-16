@@ -365,6 +365,20 @@ func TestBuildUpdateExample(t *testing.T) {
 	assert.Equal(t, "tag1", v)
 }
 
+func TestBuildUpdateSetNull(t *testing.T) {
+
+	s, _ := NewMockProvider().UTInit()
+	ub := TestQueryFactory.NewUpdate(context.Background())
+	q := squirrel.Update("table1")
+	updateQuery, err := s.BuildUpdate(q, ub.SetNull("tag"), nil)
+	assert.NoError(t, err)
+
+	sqlFilter, args, err := updateQuery.ToSql()
+	assert.NoError(t, err)
+	assert.Equal(t, "UPDATE table1 SET tag = NULL", sqlFilter)
+	assert.Empty(t, args)
+}
+
 func TestFilterUpdateOk(t *testing.T) {
 
 	s, _ := NewMockProvider().UTInit()
