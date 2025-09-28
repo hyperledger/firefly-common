@@ -93,10 +93,11 @@ type FilterJSONOps struct {
 
 type QueryJSON struct {
 	FilterJSON
-	Skip  *uint64  `ffstruct:"FilterJSON" json:"skip,omitempty"`
-	Limit *uint64  `ffstruct:"FilterJSON" json:"limit,omitempty"`
-	Sort  []string `ffstruct:"FilterJSON" json:"sort,omitempty"`
-	Count *bool    `ffstruct:"FilterJSON" json:"count,omitempty"`
+	Skip   *uint64  `ffstruct:"FilterJSON" json:"skip,omitempty"`
+	Limit  *uint64  `ffstruct:"FilterJSON" json:"limit,omitempty"`
+	Sort   []string `ffstruct:"FilterJSON" json:"sort,omitempty"`
+	Count  *bool    `ffstruct:"FilterJSON" json:"count,omitempty"`
+	Fields []string `ffstruct:"FilterJSON" json:"fields,omitempty"`
 }
 
 type SimpleFilterValue string
@@ -177,6 +178,9 @@ func (jq *QueryJSON) BuildFilter(ctx context.Context, qf QueryFactory, options .
 	}
 	if jq.Limit != nil {
 		fb = fb.Limit(*jq.Limit)
+	}
+	if len(jq.Fields) > 0 {
+		fb = fb.RequiredFields(jq.Fields...)
 	}
 	if len(jq.Sort) > 0 {
 		rv := buildResolveCtx(ctx, &jq.FilterJSON, options...)
