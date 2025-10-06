@@ -456,3 +456,11 @@ func (jf *FilterJSON) BuildAndFilter(ctx context.Context, fb FilterBuilder, opti
 	}
 	return andFilter, nil
 }
+
+// Converts to a builder - which will add to the underlying query structure (cannot remove existing elements)
+func (jq *QueryJSON) ToBuilder() QueryBuilder {
+	return &queryBuilderImpl{
+		rootQuery:  jq,
+		statements: &jq.FilterJSON,
+	}
+}
