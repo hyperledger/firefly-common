@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2025 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -53,7 +53,7 @@ type WSBatch interface {
 }
 
 type BatchHeader struct {
-	BatchNumber int64  `json:"batchNumber"`
+	BatchNumber int64  `json:"batchNumber,omitempty"` // In the case of broadcast mode we can omitempty as it's not needed
 	Stream      string `json:"stream"`
 }
 
