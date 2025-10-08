@@ -363,11 +363,13 @@ func buildWSUrl(ctx context.Context, config *WSConfig) (string, error) {
 
 func (w *wsClient) connect(initial bool) error {
 	l := log.L(w.ctx)
+	l.Debugf("WS %s connecting, isInitial: %t", w.url, initial)
 	return w.connRetry.DoCustomLog(w.ctx, func(attempt int) (retry bool, err error) {
 		if w.closed {
+			l.Errorf("WS %s is closed, no retry will be attempted", w.url)
 			return false, i18n.NewError(w.ctx, i18n.MsgWSClosing)
 		}
-
+		l.Debugf("WS %s connect attempt %d", w.url, attempt)
 		retry = w.backgroundConnect || !initial || attempt < w.initialRetryAttempts
 		if w.beforeConnect != nil {
 			if err = w.beforeConnect(w.ctx, w); err != nil {
@@ -393,7 +395,7 @@ func (w *wsClient) connect(initial bool) error {
 			l.Warnf("WS %s connect attempt %d failed [%d]: %s", w.url, attempt, status, errMsg)
 			return retry, i18n.WrapError(w.ctx, err, i18n.MsgWSConnectFailed)
 		}
-
+		l.Debugf("WS %s connect attempt %d succeeded", w.url, attempt)
 		w.pongReceivedOrReset(false)
 		w.wsconn.SetPongHandler(w.pongHandler)
 		l.Infof("WS %s connected", w.url)
