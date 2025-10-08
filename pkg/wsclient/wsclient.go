@@ -544,6 +544,7 @@ func (w *wsClient) receiveReconnectLoop() {
 		var err error
 		if w.afterConnect != nil {
 			err = w.afterConnect(w.ctx, w)
+			l.Debugf("WS %s afterConnect (error: %s)", w.url, err)
 		}
 
 		if err == nil {
@@ -559,13 +560,15 @@ func (w *wsClient) receiveReconnectLoop() {
 			// Ensure the connection is closed after the sender and receivers exit
 			err = w.wsconn.Close()
 			if err != nil {
-				l.Debugf("WS %s close failed: %s", w.url, err)
+				l.Warnf("WS %s ignoring websocket connection close error: %s", w.url, err)
 			}
+			l.Debugf("WS %s reset the connection", w.url)
 			w.sendDone = nil
 			w.wsconn = nil
 		}
 
 		if w.disableReconnect {
+			l.Infof("WS %s exiting (disableReconnect)", w.url)
 			return
 		}
 
@@ -573,7 +576,7 @@ func (w *wsClient) receiveReconnectLoop() {
 		if !w.closed {
 			err = w.connect(false)
 			if err != nil {
-				l.Debugf("WS %s exiting: %s", w.url, err)
+				l.Errorf("WS %s exiting due to connect error: %s", w.url, err)
 				return
 			}
 		}
