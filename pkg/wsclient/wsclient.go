@@ -363,11 +363,13 @@ func buildWSUrl(ctx context.Context, config *WSConfig) (string, error) {
 
 func (w *wsClient) connect(initial bool) error {
 	l := log.L(w.ctx)
+	l.Debugf("WS %s connecting, isInitial: %t", w.url, initial)
 	return w.connRetry.DoCustomLog(w.ctx, func(attempt int) (retry bool, err error) {
 		if w.closed {
+			l.Errorf("WS %s is closed, no retry will be attempted", w.url)
 			return false, i18n.NewError(w.ctx, i18n.MsgWSClosing)
 		}
-
+		l.Debugf("WS %s connect attempt %d", w.url, attempt)
 		retry = w.backgroundConnect || !initial || attempt < w.initialRetryAttempts
 		if w.beforeConnect != nil {
 			if err = w.beforeConnect(w.ctx, w); err != nil {
@@ -393,7 +395,7 @@ func (w *wsClient) connect(initial bool) error {
 			l.Warnf("WS %s connect attempt %d failed [%d]: %s", w.url, attempt, status, errMsg)
 			return retry, i18n.WrapError(w.ctx, err, i18n.MsgWSConnectFailed)
 		}
-
+		l.Debugf("WS %s connect attempt %d succeeded", w.url, attempt)
 		w.pongReceivedOrReset(false)
 		w.wsconn.SetPongHandler(w.pongHandler)
 		l.Infof("WS %s connected", w.url)
@@ -544,6 +546,7 @@ func (w *wsClient) receiveReconnectLoop() {
 		var err error
 		if w.afterConnect != nil {
 			err = w.afterConnect(w.ctx, w)
+			l.Debugf("WS %s afterConnect (error: %v)", w.url, err)
 		}
 
 		if err == nil {
@@ -559,13 +562,15 @@ func (w *wsClient) receiveReconnectLoop() {
 			// Ensure the connection is closed after the sender and receivers exit
 			err = w.wsconn.Close()
 			if err != nil {
-				l.Debugf("WS %s close failed: %s", w.url, err)
+				l.Warnf("WS %s ignoring websocket connection close error: %v", w.url, err)
 			}
+			l.Debugf("WS %s reset the connection", w.url)
 			w.sendDone = nil
 			w.wsconn = nil
 		}
 
 		if w.disableReconnect {
+			l.Infof("WS %s exiting (disableReconnect)", w.url)
 			return
 		}
 
@@ -573,7 +578,7 @@ func (w *wsClient) receiveReconnectLoop() {
 		if !w.closed {
 			err = w.connect(false)
 			if err != nil {
-				l.Debugf("WS %s exiting: %s", w.url, err)
+				l.Errorf("WS %s exiting due to connect error: %v", w.url, err)
 				return
 			}
 		}
