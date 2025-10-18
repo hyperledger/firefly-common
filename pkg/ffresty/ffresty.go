@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -315,7 +316,9 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 		}
 
 		log.L(rCtx).Debugf("==> %s %s%s", req.Method, _url, req.URL)
-		log.L(rCtx).Tracef("==> (body) %+v", req.Body)
+		if logrus.IsLevelEnabled(logrus.TraceLevel) {
+			log.L(rCtx).Tracef("==> (body) %s", traceBody(req.Body))
+		}
 
 		return nil
 	})
@@ -371,6 +374,24 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 	}
 
 	return client
+}
+
+func traceBody(v any) string {
+	switch vt := v.(type) {
+	case string:
+		return vt
+	case []byte:
+		return string(vt)
+	case nil:
+		return ""
+	default:
+		_, isReader := v.(io.Reader)
+		if isReader {
+			return "(binary reader)" // Future work could create a pipe to log the chunks if that were required
+		}
+		jv, _ := json.Marshal(v)
+		return string(jv)
+	}
 }
 
 func WrapRestErr(ctx context.Context, res *resty.Response, err error, key i18n.ErrorMessageKey) error {
