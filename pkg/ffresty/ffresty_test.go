@@ -45,10 +45,12 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftls"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/metric"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/time/rate"
 
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const configDir = "../../test/data/config"
@@ -608,6 +610,8 @@ func TestBadKeyPair(t *testing.T) {
 }
 
 func TestMTLSClientWithServer(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
+
 	// Create an X509 certificate pair
 	privatekey, _ := rsa.GenerateKey(rand.Reader, 2048)
 	publickey := &privatekey.PublicKey
@@ -661,13 +665,11 @@ func TestMTLSClientWithServer(t *testing.T) {
 
 	ctx, cancelCtx := context.WithCancel(context.Background())
 	go func() {
-		select {
-		case <-ctx.Done():
-			shutdownContext, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancel()
-			if err := server.Shutdown(shutdownContext); err != nil {
-				return
-			}
+		<-ctx.Done()
+		shutdownContext, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownContext); err != nil {
+			return
 		}
 	}()
 
@@ -808,4 +810,12 @@ func TestHooks(t *testing.T) {
 	assert.Equal(t, onErrorCount, 2)
 	assert.Equal(t, onSuccessCount, 1)
 
+}
+
+func TestTrace(t *testing.T) {
+	require.Equal(t, "plain", traceBody("plain"))
+	require.Equal(t, "plain", traceBody([]byte("plain")))
+	require.Equal(t, "", traceBody(nil))
+	require.JSONEq(t, `{"some":"data"}`, traceBody(map[string]string{"some": "data"}))
+	require.Equal(t, `(binary reader)`, traceBody(strings.NewReader("data to stream")))
 }
