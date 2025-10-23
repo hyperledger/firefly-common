@@ -120,6 +120,10 @@ func (sg *SwaggerGen) Generate(ctx context.Context, routes []*Route) *openapi3.T
 	}
 	opIDs := make(map[string]bool)
 	for _, route := range routes {
+		// Skip routes that are excluded from OpenAPI generation
+		if route.ExcludeFromOpenAPI {
+			continue
+		}
 		if route.Name == "" || opIDs[route.Name] {
 			log.Panicf("Duplicate/invalid name (used as operation ID in swagger): %s", route.Name)
 		}
