@@ -39,7 +39,7 @@ type OpenAPIHandlerFactory struct {
 	DynamicPublicURLBuilder func(req *http.Request) string
 }
 
-func swaggerUIHTML(swaggerURL string) []byte {
+func SwaggerUIHTML(swaggerURL string) []byte {
 	return []byte(fmt.Sprintf(
 		`<!DOCTYPE html>
 <html lang="en">
@@ -150,7 +150,7 @@ func (ohf *OpenAPIHandlerFactory) OpenAPIHandlerVersioned(apiPath string, format
 func (ohf *OpenAPIHandlerFactory) SwaggerUIHandler(openAPIPath string) HandlerFunction {
 	return func(res http.ResponseWriter, req *http.Request) (status int, err error) {
 		res.Header().Add("Content-Type", "text/html")
-		_, _ = res.Write(swaggerUIHTML(ohf.getPublicURL(req, openAPIPath)))
+		_, _ = res.Write(SwaggerUIHTML(ohf.getPublicURL(req, openAPIPath)))
 		return 200, nil
 	}
 }
