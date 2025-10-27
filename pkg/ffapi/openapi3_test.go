@@ -518,3 +518,63 @@ func TestCheckObjectDocumented(t *testing.T) {
 	}()
 	CheckObjectDocumented(&Undocumented{})
 }
+
+func TestExcludeFromOpenAPI(t *testing.T) {
+	routes := []*Route{
+		{
+			Name:               "IncludedRoute",
+			Path:               "included",
+			Method:             http.MethodGet,
+			Description:        ExampleDesc,
+			JSONInputValue:     func() interface{} { return &TestStruct1{} },
+			JSONOutputValue:    func() interface{} { return &TestStruct1{} },
+			JSONOutputCodes:    []int{http.StatusOK},
+			ExcludeFromOpenAPI: false,
+		},
+		{
+			Name:               "ExcludedRoute",
+			Path:               "excluded",
+			Method:             http.MethodPost,
+			Description:        ExampleDesc,
+			JSONInputValue:     func() interface{} { return &TestStruct1{} },
+			JSONOutputValue:    func() interface{} { return &TestStruct1{} },
+			JSONOutputCodes:    []int{http.StatusOK},
+			ExcludeFromOpenAPI: true,
+		},
+		{
+			Name:               "AnotherIncludedRoute",
+			Path:               "another-included",
+			Method:             http.MethodPut,
+			Description:        ExampleDesc,
+			JSONInputValue:     func() interface{} { return &TestStruct1{} },
+			JSONOutputValue:    func() interface{} { return &TestStruct1{} },
+			JSONOutputCodes:    []int{http.StatusOK},
+			ExcludeFromOpenAPI: false,
+		},
+	}
+
+	doc := NewSwaggerGen(&SwaggerGenOptions{
+		Title:   "ExcludeFromOpenAPITest",
+		Version: "1.0",
+		BaseURL: "http://localhost:12345/api/v1",
+	}).Generate(context.Background(), routes)
+
+	assert.NotNil(t, doc.Paths)
+
+	// Check that included routes are present
+	includedPath := doc.Paths.Find("/included")
+	assert.NotNil(t, includedPath)
+	assert.NotNil(t, includedPath.Get) // GET method should be present
+
+	anotherIncludedPath := doc.Paths.Find("/another-included")
+	assert.NotNil(t, anotherIncludedPath)
+	assert.NotNil(t, anotherIncludedPath.Put) // PUT method should be present
+
+	// Check that excluded route is not present
+	excludedPath := doc.Paths.Find("/excluded")
+	assert.Nil(t, excludedPath) // Should be nil because route was excluded
+
+	// Verify the document is valid
+	err := doc.Validate(context.Background())
+	assert.NoError(t, err)
+}

@@ -79,6 +79,8 @@ type Route struct {
 	Deprecated bool
 	// Tag a category identifier for this route in the generated OpenAPI spec
 	Tag string
+	// ExcludeFromOpenAPI if true, this route will not be included in the generated OpenAPI specification
+	ExcludeFromOpenAPI bool
 	// Extensions allows extension of the route struct by individual microservices
 	Extensions interface{}
 }
