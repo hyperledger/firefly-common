@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2023-2025 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -19,6 +19,7 @@ package config
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"os"
 	"path"
 	"strings"
@@ -521,4 +522,76 @@ func TestSetEnvPrefix(t *testing.T) {
 	assert.Equal(t, "test", viper.GetViper().GetEnvPrefix())
 
 	assert.Equal(t, "two", cfg.GetString("conf"))
+}
+
+func TestGetBigInt(t *testing.T) {
+	defer RootConfigReset()
+
+	// Test valid decimal
+	key1 := AddRootKey("bigint.key1")
+	Set(key1, "12345678901234567890")
+	result1 := GetBigInt(key1)
+	require.NotNil(t, result1)
+	expected1 := big.NewInt(0)
+	expected1.SetString("12345678901234567890", 10)
+	assert.Equal(t, expected1, result1)
+
+	// Test valid hex
+	key2 := AddRootKey("bigint.key2")
+	Set(key2, "0xFF")
+	assert.Equal(t, big.NewInt(255), GetBigInt(key2))
+
+	// Test valid octal
+	key3 := AddRootKey("bigint.key3")
+	Set(key3, "0777")
+	assert.Equal(t, big.NewInt(511), GetBigInt(key3))
+
+	// Test very large value
+	key4 := AddRootKey("bigint.key4")
+	Set(key4, "999999999999999999999999999999")
+	result4 := GetBigInt(key4)
+	require.NotNil(t, result4)
+	expected4 := big.NewInt(0)
+	expected4.SetString("999999999999999999999999999999", 10)
+	assert.Equal(t, expected4, result4)
+
+	// Test trimming whitespace
+	key5 := AddRootKey("bigint.key5")
+	Set(key5, "  999  ")
+	assert.Equal(t, big.NewInt(999), GetBigInt(key5))
+
+	// Test zero value
+	key6 := AddRootKey("bigint.key6")
+	Set(key6, "0")
+	assert.Equal(t, big.NewInt(0), GetBigInt(key6))
+
+	// Test negative value
+	key7 := AddRootKey("bigint.key7")
+	Set(key7, "-123456789")
+	assert.Equal(t, big.NewInt(-123456789), GetBigInt(key7))
+
+	// Test empty string returns nil
+	key8 := AddRootKey("bigint.key8")
+	Set(key8, "")
+	assert.Nil(t, GetBigInt(key8))
+
+	// Test whitespace only returns nil
+	key9 := AddRootKey("bigint.key9")
+	Set(key9, "   ")
+	assert.Nil(t, GetBigInt(key9))
+
+	// Test invalid string returns nil
+	key10 := AddRootKey("bigint.key10")
+	Set(key10, "not a number")
+	assert.Nil(t, GetBigInt(key10))
+
+	// Test with config section
+	section := RootSection("bigintsection")
+	section.AddKnownKey("value")
+	section.Set("value", "98765432109876543210")
+	resultSection := section.GetBigInt("value")
+	require.NotNil(t, resultSection)
+	expectedSection := big.NewInt(0)
+	expectedSection.SetString("98765432109876543210", 10)
+	assert.Equal(t, expectedSection, resultSection)
 }

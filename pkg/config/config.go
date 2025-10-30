@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/big"
 	"reflect"
 	"sort"
 	"strings"
@@ -113,6 +114,7 @@ type Section interface {
 	GetObject(key string) fftypes.JSONObject
 	GetObjectArray(key string) fftypes.JSONObjectArray
 	Get(key string) interface{}
+	GetBigInt(key string) *big.Int
 }
 
 // ArraySection represents an array of options at a particular layer in the config.
@@ -519,6 +521,27 @@ func (c *configSection) GetByteSize(key string) int64 {
 	defer keysMutex.Unlock()
 
 	return fftypes.ParseToByteSize(viper.GetString(c.prefixKey(key)))
+}
+
+// GetBigInt gets a configuration big integer
+func GetBigInt(key RootKey) *big.Int {
+	return root.GetBigInt(string(key))
+}
+func (c *configSection) GetBigInt(key string) *big.Int {
+	keysMutex.Lock()
+	defer keysMutex.Unlock()
+	bigIntStr := viper.GetString(c.prefixKey(key))
+	valueStr := strings.TrimSpace(bigIntStr)
+	if valueStr == "" {
+		return nil
+	}
+
+	value := &big.Int{}
+	_, ok := value.SetString(valueStr, 0)
+	if !ok {
+		return nil
+	}
+	return value
 }
 
 // GetUint gets a configuration uint
