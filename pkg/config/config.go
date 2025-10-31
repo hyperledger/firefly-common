@@ -541,6 +541,7 @@ func (c *configSection) GetBigInt(key string) *big.Int {
 	value := &big.Int{}
 	_, ok := value.SetString(valueStr, 0)
 	if !ok {
+		log.L(context.Background()).Warnf("Unable to parse string %s into big.Int", valueStr)
 		return nil
 	}
 	return value
