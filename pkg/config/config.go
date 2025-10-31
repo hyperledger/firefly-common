@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2025 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/big"
 	"reflect"
 	"sort"
 	"strings"
@@ -113,6 +114,7 @@ type Section interface {
 	GetObject(key string) fftypes.JSONObject
 	GetObjectArray(key string) fftypes.JSONObjectArray
 	Get(key string) interface{}
+	GetBigInt(key string) *big.Int
 }
 
 // ArraySection represents an array of options at a particular layer in the config.
@@ -519,6 +521,30 @@ func (c *configSection) GetByteSize(key string) int64 {
 	defer keysMutex.Unlock()
 
 	return fftypes.ParseToByteSize(viper.GetString(c.prefixKey(key)))
+}
+
+// GetBigInt gets a configuration big integer.
+// Uses base 0 so that the string can be in decimal, hexadecimal (0x...), octal (0o...), or binary (0b...) formats.
+// See math/big.Int.SetString docs for details.
+func GetBigInt(key RootKey) *big.Int {
+	return root.GetBigInt(string(key))
+}
+func (c *configSection) GetBigInt(key string) *big.Int {
+	keysMutex.Lock()
+	defer keysMutex.Unlock()
+	bigIntStr := viper.GetString(c.prefixKey(key))
+	valueStr := strings.TrimSpace(bigIntStr)
+	if valueStr == "" {
+		return nil
+	}
+
+	value := &big.Int{}
+	_, ok := value.SetString(valueStr, 0)
+	if !ok {
+		log.L(context.Background()).Warnf("Unable to parse string %s into big.Int", valueStr)
+		return nil
+	}
+	return value
 }
 
 // GetUint gets a configuration uint
