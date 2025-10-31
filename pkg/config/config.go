@@ -523,7 +523,9 @@ func (c *configSection) GetByteSize(key string) int64 {
 	return fftypes.ParseToByteSize(viper.GetString(c.prefixKey(key)))
 }
 
-// GetBigInt gets a configuration big integer
+// GetBigInt gets a configuration big integer.
+// Uses base 0 so that the string can be in decimal, hexadecimal (0x...), octal (0o...), or binary (0b...) formats.
+// See math/big.Int.SetString docs for details.
 func GetBigInt(key RootKey) *big.Int {
 	return root.GetBigInt(string(key))
 }
