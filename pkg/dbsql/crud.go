@@ -271,16 +271,18 @@ func (c *CrudBase[T]) idField() string {
 }
 
 func (c *CrudBase[T]) idFilter(id string) sq.Eq {
-	var filter sq.Eq
-	if c.ScopedFilter != nil {
-		filter = c.ScopedFilter()
-	} else {
-		filter = sq.Eq{}
-	}
+	filter := sq.Eq{}
+
 	if c.ReadTableAlias != "" {
 		filter[fmt.Sprintf("%s.%s", c.ReadTableAlias, c.GetIDField())] = id
 	} else {
 		filter[c.idField()] = id
+	}
+	if c.ScopedFilter != nil {
+		//copy the fields from the scoped filter without modifying the original
+		for k, v := range c.ScopedFilter() {
+			filter[k] = v
+		}
 	}
 	return filter
 }
