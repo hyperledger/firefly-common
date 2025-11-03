@@ -33,6 +33,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/log"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type TestCRUDable struct {
@@ -566,6 +567,106 @@ func TestCRUDWithDBEnd2End(t *testing.T) {
 
 	// Check all the post commits above fired
 	assert.Equal(t, 8, collection.postCommits)
+
+}
+
+func TestCRUDScoped(t *testing.T) {
+	log.SetLevel("trace")
+
+	sql, done := newSQLiteTestProvider(t)
+	defer done()
+	ctx := context.Background()
+
+	collection := newCRUDCollection(sql.db, "ns1")
+	scopedCollection := collection.Scoped(sq.Eq{"field1": "scope1"})
+
+	bobScope1 := &TestCRUDable{
+		ResourceBase: ResourceBase{
+			ID: fftypes.NewUUID(),
+		},
+		Name:   ptrTo("bob"),
+		NS:     ptrTo("ns1"),
+		Field1: ptrTo("scope1"),
+		Field2: fftypes.NewFFBigInt(12345),
+		Field3: fftypes.JSONAnyPtr(`{"some":"stuff"}`),
+		Field4: ptrTo(int64(12345)),
+		Field5: ptrTo(true),
+	}
+	err := collection.Insert(ctx, bobScope1, collection.postCommit)
+	assert.NoError(t, err)
+
+	bobScope2 := &TestCRUDable{
+		ResourceBase: ResourceBase{
+			ID: fftypes.NewUUID(),
+		},
+		Name:   ptrTo("bob"),
+		NS:     ptrTo("ns1"),
+		Field1: ptrTo("scope2"),
+		Field2: fftypes.NewFFBigInt(12345),
+		Field3: fftypes.JSONAnyPtr(`{"some":"stuff"}`),
+		Field4: ptrTo(int64(12345)),
+		Field5: ptrTo(true),
+	}
+	err = collection.Insert(ctx, bobScope2, collection.postCommit)
+	assert.NoError(t, err)
+
+	aliceScope1 := &TestCRUDable{
+		ResourceBase: ResourceBase{
+			ID: fftypes.NewUUID(),
+		},
+		Name:   ptrTo("bob"),
+		NS:     ptrTo("ns1"),
+		Field1: ptrTo("scope1"),
+		Field2: fftypes.NewFFBigInt(12345),
+		Field3: fftypes.JSONAnyPtr(`{"some":"stuff"}`),
+		Field4: ptrTo(int64(12345)),
+		Field5: ptrTo(true),
+	}
+	err = collection.Insert(ctx, aliceScope1, collection.postCommit)
+	assert.NoError(t, err)
+
+	aliceScope2 := &TestCRUDable{
+		ResourceBase: ResourceBase{
+			ID: fftypes.NewUUID(),
+		},
+		Name:   ptrTo("alice"),
+		NS:     ptrTo("ns1"),
+		Field1: ptrTo("scope2"),
+		Field2: fftypes.NewFFBigInt(12345),
+		Field3: fftypes.JSONAnyPtr(`{"some":"stuff"}`),
+		Field4: ptrTo(int64(12345)),
+		Field5: ptrTo(true),
+	}
+	err = collection.Insert(ctx, aliceScope2, collection.postCommit)
+	assert.NoError(t, err)
+
+	//Get many only returns scope1 rows
+	cs, _, err := scopedCollection.GetMany(ctx, CRUDableQueryFactory.NewFilter(ctx).And())
+	assert.NoError(t, err)
+	assert.Len(t, cs, 2)
+	assert.Equal(t, bobScope1.ID.String(), cs[1].ID.String())
+	assert.Equal(t, aliceScope1.ID.String(), cs[0].ID.String())
+
+	//Get many on the non scoped collection only returns all rows
+	cs2, _, err := collection.GetMany(ctx, CRUDableQueryFactory.NewFilter(ctx).And())
+	assert.NoError(t, err)
+	assert.Len(t, cs2, 4)
+
+	//Get by id fails if the id is not in the scoped collection
+	_, err = scopedCollection.GetByID(ctx, aliceScope2.ID.String(), FailIfNotFound)
+	assert.Regexp(t, "FF00164", err)
+
+	//Get by id succeeds if the id is in the scoped collection
+	cs1, err := scopedCollection.GetByID(ctx, aliceScope1.ID.String(), FailIfNotFound)
+	assert.NoError(t, err)
+	assert.Equal(t, aliceScope1.ID.String(), cs1.ID.String())
+
+	//Get many still returns all scope1 rows
+	cs, _, err = scopedCollection.GetMany(ctx, CRUDableQueryFactory.NewFilter(ctx).And())
+	assert.NoError(t, err)
+	require.Len(t, cs, 2)
+	assert.Equal(t, bobScope1.ID.String(), cs[1].ID.String())
+	assert.Equal(t, aliceScope1.ID.String(), cs[0].ID.String())
 
 }
 
