@@ -279,7 +279,7 @@ func (c *CrudBase[T]) idFilter(id string) sq.Eq {
 		filter[c.idField()] = id
 	}
 	if c.ScopedFilter != nil {
-		//copy the fields from the scoped filter without modifying the original
+		// copy the fields from the scoped filter without modifying the original
 		for k, v := range c.ScopedFilter() {
 			filter[k] = v
 		}
