@@ -139,6 +139,52 @@ func TestBuildQuerySingleNestedOr(t *testing.T) {
 	assert.Equal(t, "tag == 'a'", fi.String())
 }
 
+func TestBuildQueryAndWithNestedOr(t *testing.T) {
+
+	var qf QueryJSON
+	err := json.Unmarshal([]byte(`{
+	  "and": [
+	  	{
+			"or": [
+				{
+					"equal": [
+						{
+							"field": "tag",
+							"value": "a"
+						}
+					]		
+				},
+				{
+					"equal": [
+						{
+							"field": "tag",
+							"value": "b"
+						}
+					]		
+				}			
+			]
+		},
+	  	{
+			"equal": [
+				{
+					"field": "cid",
+					"value": "12345"
+				}
+			]		
+		}		
+	  ]
+	}`), &qf)
+	assert.NoError(t, err)
+
+	filter, err := qf.BuildFilter(context.Background(), TestQueryFactory)
+	assert.NoError(t, err)
+
+	fi, err := filter.Finalize()
+	assert.NoError(t, err)
+
+	assert.Equal(t, "( ( tag == 'a' ) || ( tag == 'b' ) ) && ( cid == '12345' )", fi.String())
+}
+
 func TestBuildQuerySkipFieldValidation(t *testing.T) {
 
 	var jf *FilterJSON
@@ -705,4 +751,29 @@ func TestBuildQueryJSONContainsShortNames(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Equal(t, "( sequence <= 12345 ) && ( sequence >> 12345 )", fi.String())
+}
+
+func TestBuildQueryAndFail(t *testing.T) {
+
+	var qf QueryJSON
+	err := json.Unmarshal([]byte(`{
+	  "and": [
+	  	{
+			"or": [
+				{
+					"equal": [
+						{
+							"field": "color",
+							"value": "b"
+						}
+					]		
+				}			
+			]
+		}	
+	  ]
+	}`), &qf)
+	assert.NoError(t, err)
+
+	_, err = qf.BuildFilter(context.Background(), TestQueryFactory)
+	assert.Regexp(t, "FF00142.*color", err)
 }

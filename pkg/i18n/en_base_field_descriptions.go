@@ -44,6 +44,7 @@ var (
 	FilterJSONSort               = ffm("FilterJSON.sort", "Array of fields to sort by. A '-' prefix on a field requests that field is sorted in descending order")
 	FilterJSONCount              = ffm("FilterJSON.count", "If true, the total number of entries that could be returned from the database will be calculated and returned as a 'total' (has a performance cost)")
 	FilterJSONOr                 = ffm("FilterJSON.or", "Array of sub-queries where any sub-query can match to return results (OR combined). Note that within each sub-query all filters must match (AND combined)")
+	FilterJSONAnd                = ffm("FilterJSON.and", "Array of sub-queries where any sub-query can match to return results (AND combined). Allows complex construction, such as an AND of two nested OR sub-queries.")
 	FilterJSONFields             = ffm("FilterJSON.fields", "Fields to return in the response")
 
 	EventStreamBatchSize         = ffm("eventstream.batchSize", "Maximum number of events to deliver in each batch")
