@@ -43,8 +43,8 @@ var (
 	FilterJSONSkip               = ffm("FilterJSON.skip", "Number of results to skip before returning entries, for skip+limit based pagination")
 	FilterJSONSort               = ffm("FilterJSON.sort", "Array of fields to sort by. A '-' prefix on a field requests that field is sorted in descending order")
 	FilterJSONCount              = ffm("FilterJSON.count", "If true, the total number of entries that could be returned from the database will be calculated and returned as a 'total' (has a performance cost)")
-	FilterJSONOr                 = ffm("FilterJSON.or", "Array of sub-queries where any sub-query can match to return results (OR combined). Note that within each sub-query all filters must match (AND combined)")
-	FilterJSONAnd                = ffm("FilterJSON.and", "Array of sub-queries where any sub-query can match to return results (AND combined). Allows complex construction, such as an AND of two nested OR sub-queries.")
+	FilterJSONOr                 = ffm("FilterJSON.or", "Array of sub-queries")  // Note due to complex issue in swagger generator AND/OR need to be identical
+	FilterJSONAnd                = ffm("FilterJSON.and", "Array of sub-queries") // ^^^ the `description` field is getting pushed to the sub-schema definition, and is non-deterministic
 	FilterJSONFields             = ffm("FilterJSON.fields", "Fields to return in the response")
 
 	EventStreamBatchSize         = ffm("eventstream.batchSize", "Maximum number of events to deliver in each batch")
