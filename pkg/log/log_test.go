@@ -30,7 +30,7 @@ func TestLogContext(t *testing.T) {
 }
 
 func TestLogContextLimited(t *testing.T) {
-	ctx := WithLogField(context.Background(), "myfield", "0123456789012345678901234567890123456789012345678901234567890123456789")
+	ctx := WithLogFields(context.Background(), "myfield", "0123456789012345678901234567890123456789012345678901234567890123456789")
 	assert.Equal(t, "0123456789012345678901234567890123456789012345678901234567890...", L(ctx).Data["myfield"])
 }
 
