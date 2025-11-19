@@ -27,17 +27,19 @@ import (
 type Sink struct {
 	name   string
 	logger *logrus.Entry
-	values []interface{}
+	ctx    context.Context
 }
 
+// NewLogr creates a new logr.Logger backed by firefly-common's logrus wrapper
 func NewLogr(ctx context.Context, name string) logr.Logger {
 	return logr.New(&Sink{
 		name:   name,
-		logger: L(ctx), // or log.NewLogger() depending on your setup
-		values: []interface{}{},
+		ctx:    ctx,
+		logger: L(ctx),
 	})
 }
 
+// Init initializes the sink
 func (l *Sink) Init(_ logr.RuntimeInfo) {
 	// Optional: store callDepth if needed
 }
@@ -55,35 +57,40 @@ func (l *Sink) Enabled(level int) bool {
 	}
 }
 
+// Info logs an info message with the given keys and values
 func (l *Sink) Info(level int, msg string, keysAndValues ...interface{}) {
-	fields := l.mergeKeysAndValues(keysAndValues)
+	logger := L(l.buildContext(keysAndValues))
 
 	switch level {
 	case 0:
-		l.logger.Infof(msg, fields...)
+		logger.Infof(msg)
 	case 1:
-		l.logger.Debugf(msg, fields...)
+		logger.Debugf(msg)
 	default:
-		l.logger.Tracef(msg, fields...)
+		logger.Tracef(msg)
 	}
 }
 
+// Error logs an error message with the given keys and values
 func (l *Sink) Error(err error, msg string, keysAndValues ...interface{}) {
-	fields := l.mergeKeysAndValues(keysAndValues)
+	logger := L(l.buildContext(keysAndValues))
 	if err != nil {
-		fields = append(fields, "error", err)
+		logger = logger.WithError(err)
 	}
-	l.logger.Errorf(msg, fields...)
+	logger.Errorf(msg)
 }
 
+// WithValues adds the given keys and values to the logger
 func (l *Sink) WithValues(keysAndValues ...interface{}) logr.LogSink {
+	ctx := l.buildContext(keysAndValues)
 	return &Sink{
 		name:   l.name,
-		logger: l.logger,
-		values: append(l.values, keysAndValues...),
+		logger: L(ctx),
+		ctx:    ctx,
 	}
 }
 
+// WithName adds the given name to the logger
 func (l *Sink) WithName(name string) logr.LogSink {
 	newName := l.name
 	if len(newName) > 0 {
@@ -94,16 +101,14 @@ func (l *Sink) WithName(name string) logr.LogSink {
 	return &Sink{
 		name:   newName,
 		logger: l.logger.WithField("logger", newName),
-		values: l.values,
+		ctx:    l.ctx,
 	}
 }
 
-func (l *Sink) mergeKeysAndValues(keysAndValues []interface{}) []interface{} {
-	result := make([]interface{}, 0, len(l.values)+len(keysAndValues)+2)
-	if l.name != "" {
-		result = append(result, "logger", l.name)
+func (l *Sink) buildContext(keysAndValues []interface{}) context.Context {
+	fields := make(map[string]string)
+	for i := 0; i < len(keysAndValues); i += 2 {
+		fields[keysAndValues[i].(string)] = keysAndValues[i+1].(string)
 	}
-	result = append(result, l.values...)
-	result = append(result, keysAndValues...)
-	return result
+	return WithFields(l.ctx, fields)
 }

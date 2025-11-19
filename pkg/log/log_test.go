@@ -82,3 +82,24 @@ func TestSetFormattingJSONEnabled(t *testing.T) {
 
 	L(context.Background()).Infof("JSON logs")
 }
+
+func TestWithFields(t *testing.T) {
+	ctx := WithFields(context.Background(), map[string]string{
+		"myfield": "myvalue",
+		"myfield2": "myvalue2",
+	})
+	assert.Equal(t, "myvalue", L(ctx).Data["myfield"])
+	assert.Equal(t, "myvalue2", L(ctx).Data["myfield2"])
+}
+
+func TestWithLogFields(t *testing.T) {
+	ctx := WithLogFields(context.Background(), "myfield", "myvalue", "myfield2", "myvalue2")
+	assert.Equal(t, "myvalue", L(ctx).Data["myfield"])
+	assert.Equal(t, "myvalue2", L(ctx).Data["myfield2"])
+}
+
+func TestWithLogFieldsOddNumberOfFields(t *testing.T) {
+	assert.Panics(t, func() {
+		WithLogFields(context.Background(), "myfield", "myvalue", "myfield2")
+	})
+}

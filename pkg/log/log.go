@@ -40,12 +40,44 @@ func WithLogger(ctx context.Context, logger *logrus.Entry) context.Context {
 	return context.WithValue(ctx, ctxLogKey{}, logger)
 }
 
+// Deprecated: Use WithLogFields instead.
 // WithLogField adds the specified field to the logger in the context
 func WithLogField(ctx context.Context, key, value string) context.Context {
 	if len(value) > 61 {
 		value = value[0:61] + "..."
 	}
 	return WithLogger(ctx, loggerFromContext(ctx).WithField(key, value))
+}
+
+// WithLogFields adds the specified fields to the logger in the context for structured logging. The key-value pairs must be provided in pairs.
+func WithLogFields(ctx context.Context, keyValues ...string) context.Context {
+	if len(keyValues)%2 != 0 {
+		panic("odd number of key-value entry fields provided, cannot determine key-value pairs")
+	}
+
+	entry := loggerFromContext(ctx)
+	fields := logrus.Fields{}
+	for i := 0; i < len(keyValues); i += 2 {
+		key := keyValues[i]
+		value := keyValues[i+1]
+		if len(value) > 61 {
+			value = value[0:61] + "..."
+		}
+		fields[key] = value
+	}
+	return WithLogger(ctx, entry.WithFields(fields))
+}
+
+// WithFields adds the specified, structured fields to the logger in the context
+func WithFields(ctx context.Context, fields map[string]string) context.Context {
+	entryFields := logrus.Fields{}
+	for key, value := range fields {
+		if len(value) > 61 {
+			value = value[0:61] + "..."
+		}
+		entryFields[key] = value
+	}
+	return WithLogger(ctx, loggerFromContext(ctx).WithFields(entryFields))
 }
 
 // LoggerFromContext returns the logger for the current context, or no logger if there is no context
