@@ -288,7 +288,7 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 			}
 			rCtx = context.WithValue(rCtx, retryCtxKey{}, r)
 			// Create a request logger from the root logger passed into the client
-			rCtx = log.WithLogField(rCtx, "breq", r.id)
+			rCtx = log.WithLogFields(rCtx, "breq", r.id)
 			req.SetContext(rCtx)
 		}
 

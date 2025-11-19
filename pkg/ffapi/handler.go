@@ -368,7 +368,7 @@ func (hs *HandlerFactory) APIWrapper(handler HandlerFunction) http.HandlerFunc {
 		}
 		ctx = withRequestID(ctx, httpReqID)
 		ctx = withPassthroughHeaders(ctx, req, hs.PassthroughHeaders)
-		ctx = log.WithLogField(ctx, "httpreq", httpReqID)
+		ctx = log.WithLogFields(ctx, "httpreq", httpReqID)
 
 		req = req.WithContext(ctx)
 		defer cancel()

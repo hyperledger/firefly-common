@@ -57,7 +57,7 @@ func (l *Sink) Enabled(level int) bool {
 	}
 }
 
-// Info logs an info message with the given keys and values
+// Info logs an info message with the given keys and values. keysAndValues is not efficiently implemented, use WithValues instead
 func (l *Sink) Info(level int, msg string, keysAndValues ...interface{}) {
 	logger := L(l.buildContext(keysAndValues))
 
@@ -71,7 +71,7 @@ func (l *Sink) Info(level int, msg string, keysAndValues ...interface{}) {
 	}
 }
 
-// Error logs an error message with the given keys and values
+// Error logs an error message with the given keys and values. keysAndValues is not efficiently implemented, use WithValues instead
 func (l *Sink) Error(err error, msg string, keysAndValues ...interface{}) {
 	logger := L(l.buildContext(keysAndValues))
 	if err != nil {
