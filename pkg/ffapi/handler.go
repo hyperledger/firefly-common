@@ -66,6 +66,7 @@ type (
 type HandlerFunction func(res http.ResponseWriter, req *http.Request) (status int, err error)
 
 type HandlerFactory struct {
+	LogLevel              *logrus.Level
 	DefaultRequestTimeout time.Duration
 	MaxTimeout            time.Duration
 	DefaultFilterLimit    uint64
@@ -77,6 +78,8 @@ type HandlerFactory struct {
 	SupportFieldRedaction bool
 	BasePath              string
 	BasePathParams        []*PathParam
+
+	logLevel logrus.Level
 }
 
 var ffMsgCodeExtractor = regexp.MustCompile(`^(FF\d+):`)
@@ -86,6 +89,18 @@ type multipartState struct {
 	formParams map[string]string
 	part       *Multipart
 	close      func()
+}
+
+func (hs *HandlerFactory) Init() {
+	if hs.LogLevel == nil {
+		hs.logLevel = logrus.InfoLevel
+	} else {
+		hs.logLevel = *hs.LogLevel
+	}
+}
+
+func (hs *HandlerFactory) SetLogLevel(logLevel logrus.Level) {
+	hs.logLevel = logLevel
 }
 
 func (hs *HandlerFactory) getFilePart(req *http.Request) (*multipartState, error) {
@@ -375,7 +390,7 @@ func (hs *HandlerFactory) APIWrapper(handler HandlerFunction) http.HandlerFunc {
 
 		// Wrap the request itself in a log wrapper, that gives minimal request/response and timing info
 		l := log.L(ctx)
-		l.Infof("--> %s %s", req.Method, req.URL.Path)
+		l.Logf(hs.logLevel, "--> %s %s", req.Method, req.URL.Path)
 		startTime := time.Now()
 		status, err := handler(res, req)
 		durationMS := float64(time.Since(startTime)) / float64(time.Millisecond)
@@ -412,14 +427,14 @@ func (hs *HandlerFactory) APIWrapper(handler HandlerFunction) http.HandlerFunc {
 			if status < 300 {
 				status = 500
 			}
-			l.Infof("<-- %s %s [%d] (%.2fms): %s", req.Method, req.URL.Path, status, durationMS, err)
+			l.Logf(hs.logLevel, "<-- %s %s [%d] (%.2fms): %s", req.Method, req.URL.Path, status, durationMS, err)
 			res.Header().Add("Content-Type", "application/json")
 			res.WriteHeader(status)
 			_ = json.NewEncoder(res).Encode(&fftypes.RESTError{
 				Error: err.Error(),
 			})
 		} else {
-			l.Infof("<-- %s %s [%d] (%.2fms)", req.Method, req.URL.Path, status, durationMS)
+			l.Logf(hs.logLevel, "<-- %s %s [%d] (%.2fms)", req.Method, req.URL.Path, status, durationMS)
 		}
 	}
 }

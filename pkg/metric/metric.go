@@ -59,8 +59,9 @@ type MetricsRegistry interface {
 	// GetHTTPMetricsInstrumentationsMiddlewareForSubsystem returns the HTTP middleware of a subsystem that used predefined HTTP metrics
 	GetHTTPMetricsInstrumentationsMiddlewareForSubsystem(ctx context.Context, subsystem string) (func(next http.Handler) http.Handler, error)
 
+	// MustRegisterCollector allows for registering a customer collector within the metrics registry, outside of the manager/subsystem context
 	MustRegisterCollector(collector prometheus.Collector)
-
+	// GetGatherer returns the gatherer of the metrics registry, allowing for programmatic metrics exporting
 	GetGatherer() prometheus.Gatherer
 }
 
