@@ -127,7 +127,7 @@ func (hs *httpServer) createServer(ctx context.Context, r *mux.Router) (srv *htt
 		writeTimeout = hs.options.MaximumRequestTimeout + 1*time.Second
 	}
 
-	log.L(ctx).Debugf("HTTP Server Timeouts (%s): read=%s write=%s request=%s", hs.l.Addr(), readTimeout, writeTimeout, hs.options.MaximumRequestTimeout)
+	log.L(ctx).Tracef("HTTP Server Timeouts (%s): read=%s write=%s request=%s", hs.l.Addr(), readTimeout, writeTimeout, hs.options.MaximumRequestTimeout)
 	srv = &http.Server{
 		Handler:           handler,
 		WriteTimeout:      writeTimeout,
@@ -137,7 +137,7 @@ func (hs *httpServer) createServer(ctx context.Context, r *mux.Router) (srv *htt
 		ConnContext: func(newCtx context.Context, c net.Conn) context.Context {
 			l := log.L(ctx).WithField("req", fftypes.ShortID())
 			newCtx = log.WithLogger(newCtx, l)
-			l.Debugf("New HTTP connection: remote=%s local=%s", c.RemoteAddr().String(), c.LocalAddr().String())
+			l.Tracef("New HTTP connection: remote=%s local=%s", c.RemoteAddr().String(), c.LocalAddr().String())
 			return newCtx
 		},
 	}
