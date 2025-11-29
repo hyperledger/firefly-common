@@ -53,6 +53,7 @@ const configDir = "../../test/data/config"
 
 func newTestHandlerFactory(basePath string, basePathParams []*PathParam) *HandlerFactory {
 	return &HandlerFactory{
+		logLevel:              logrus.DebugLevel,
 		DefaultRequestTimeout: 5 * time.Second,
 		PassthroughHeaders: []string{
 			"X-Custom-Header",

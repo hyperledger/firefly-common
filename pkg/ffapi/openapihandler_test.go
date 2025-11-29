@@ -104,6 +104,7 @@ func TestOpenAPI3SwaggerUIDynamicPublicURL(t *testing.T) {
 func TestOpenAPIHandlerNonVersioned(t *testing.T) {
 	mux := mux.NewRouter()
 	hf := HandlerFactory{}
+	hf.Init()
 	oah := &OpenAPIHandlerFactory{
 		BaseSwaggerGenOptions: SwaggerGenOptions{
 			Title:                 "FireFly Transaction Manager API",
