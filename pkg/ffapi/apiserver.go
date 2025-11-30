@@ -67,7 +67,7 @@ type apiServer[T any] struct {
 	monitoringEnabled         bool
 	metricsPath               string
 	livenessPath              string
-	changeLogLevelPath        string
+	loggingPath        string
 	monitoringPublicURL       string
 	mux                       *mux.Router
 	oah                       *OpenAPIHandlerFactory
@@ -124,7 +124,7 @@ func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APISe
 		monitoringEnabled:         options.MonitoringConfig.GetBool(ConfMonitoringServerEnabled),
 		metricsPath:               options.MonitoringConfig.GetString(ConfMonitoringServerMetricsPath),
 		livenessPath:              options.MonitoringConfig.GetString(ConfMonitoringServerLivenessPath),
-		changeLogLevelPath:        options.MonitoringConfig.GetString(ConfMonitoringServerChangeLogLevelPath),
+		loggingPath:               options.MonitoringConfig.GetString(ConfMonitoringServerLoggingPath),
 		alwaysPaginate:            options.APIConfig.GetBool(ConfAPIAlwaysPaginate),
 		handleYAML:                options.HandleYAML,
 		apiDynamicPublicURLHeader: options.APIConfig.GetString(ConfAPIDynamicPublicURLHeader),
@@ -396,17 +396,19 @@ func (as *apiServer[T]) noContentResponder(res http.ResponseWriter, _ *http.Requ
 	res.WriteHeader(http.StatusNoContent)
 }
 
-func (as *apiServer[T]) changeLogLevelHandler(_ http.ResponseWriter, req *http.Request) (status int, err error) {
+func (as *apiServer[T]) loggingSettingsHandler(_ http.ResponseWriter, req *http.Request) (status int, err error) {
 	if req.Method != http.MethodPut {
 		return http.StatusMethodNotAllowed, i18n.NewError(req.Context(), i18n.MsgMethodNotAllowed)
 	}
-	logLevel := req.URL.Query().Get("logLevel")
-	if logLevel == "" {
-		return http.StatusBadRequest, i18n.NewError(req.Context(), i18n.MsgMissingLogLevel)
+	logLevel := req.URL.Query().Get("level")
+	if logLevel != "" {
+		ctx := log.WithLogFields(req.Context(), "new_level", logLevel)
+		log.L(ctx).Warn("changing log level", logLevel)
+		log.SetLevel(logLevel)
 	}
-	ctx := log.WithLogFields(req.Context(), "newLogLevel", logLevel)
-	log.L(ctx).Warn("changing log level")
-	log.SetLevel(logLevel)
+
+	// TODO allow for toggling formatting (json, text), sampling, etc.
+
 	return http.StatusAccepted, nil
 }
 
@@ -421,7 +423,7 @@ func (as *apiServer[T]) createMonitoringMuxRouter(ctx context.Context) (*mux.Rou
 		panic(err)
 	}
 	r.Path(as.metricsPath).Handler(h)
-	r.Path(as.changeLogLevelPath).Handler(hf.APIWrapper(as.changeLogLevelHandler))
+	r.Path(as.loggingPath).Handler(hf.APIWrapper(as.loggingSettingsHandler))
 	r.HandleFunc(as.livenessPath, as.noContentResponder)
 
 	for _, route := range as.MonitoringRoutes {

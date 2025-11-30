@@ -25,7 +25,7 @@ var (
 	ConfMonitoringServerEnabled            = "enabled"
 	ConfMonitoringServerMetricsPath        = "metricsPath"
 	ConfMonitoringServerLivenessPath       = "livenessPath"
-	ConfMonitoringServerChangeLogLevelPath = "changeLogLevelPath"
+	ConfMonitoringServerLoggingPath        = "loggingPath"
 
 	ConfAPIDefaultFilterLimit     = "defaultFilterLimit"
 	ConfAPIMaxFilterLimit         = "maxFilterLimit"
@@ -52,5 +52,5 @@ func InitAPIServerConfig(apiConfig, monitoringConfig, corsConfig config.Section)
 	monitoringConfig.AddKnownKey(ConfMonitoringServerEnabled, true)
 	monitoringConfig.AddKnownKey(ConfMonitoringServerMetricsPath, "/metrics")
 	monitoringConfig.AddKnownKey(ConfMonitoringServerLivenessPath, "/livez")
-	monitoringConfig.AddKnownKey(ConfMonitoringServerChangeLogLevelPath, "/changeLogLevel")
+	monitoringConfig.AddKnownKey(ConfMonitoringServerLoggingPath, "/logging")
 }
