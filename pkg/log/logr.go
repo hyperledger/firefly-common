@@ -18,6 +18,7 @@ package log
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
 	"github.com/sirupsen/logrus"
@@ -108,7 +109,7 @@ func (l *Sink) WithName(name string) logr.LogSink {
 func (l *Sink) buildContext(keysAndValues []interface{}) context.Context {
 	fields := make(map[string]string)
 	for i := 0; i < len(keysAndValues); i += 2 {
-		fields[keysAndValues[i].(string)] = keysAndValues[i+1].(string)
+		fields[keysAndValues[i].(string)] = fmt.Sprintf("%v", keysAndValues[i+1])
 	}
 	return WithFields(l.ctx, fields)
 }
