@@ -10,7 +10,6 @@ require (
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/getkin/kin-openapi v0.131.0
 	github.com/ghodss/yaml v1.0.0
-	github.com/go-logr/logr v1.4.3
 	github.com/go-resty/resty/v2 v2.11.0
 	github.com/golang-migrate/migrate/v4 v4.17.0
 	github.com/google/uuid v1.5.0
