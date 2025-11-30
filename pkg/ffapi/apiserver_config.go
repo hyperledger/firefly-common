@@ -22,10 +22,10 @@ import (
 )
 
 var (
-	ConfMonitoringServerEnabled            = "enabled"
-	ConfMonitoringServerMetricsPath        = "metricsPath"
-	ConfMonitoringServerLivenessPath       = "livenessPath"
-	ConfMonitoringServerLoggingPath        = "loggingPath"
+	ConfMonitoringServerEnabled      = "enabled"
+	ConfMonitoringServerMetricsPath  = "metricsPath"
+	ConfMonitoringServerLivenessPath = "livenessPath"
+	ConfMonitoringServerLoggingPath  = "loggingPath"
 
 	ConfAPIDefaultFilterLimit     = "defaultFilterLimit"
 	ConfAPIMaxFilterLimit         = "maxFilterLimit"
