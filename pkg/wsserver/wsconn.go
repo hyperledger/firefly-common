@@ -48,7 +48,7 @@ type WebSocketCommandMessage struct {
 func newConnection(bgCtx context.Context, server *webSocketServer, conn *ws.Conn) *webSocketConnection {
 	id := fftypes.NewUUID().String()
 	wsc := &webSocketConnection{
-		ctx:     log.WithLogField(bgCtx, "wsc", id),
+		ctx:     log.WithLogFields(bgCtx, "wsc", id),
 		id:      id,
 		server:  server,
 		conn:    conn,

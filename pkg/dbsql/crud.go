@@ -811,7 +811,7 @@ func (c *CrudBase[T]) getManyScoped(ctx context.Context, tableFrom string, fi *f
 		}
 		instances = append(instances, inst)
 	}
-	log.L(ctx).Debugf("SQL<- GetMany(%s): %d", c.Table, len(instances))
+	log.L(ctx).Tracef("SQL<- GetMany(%s): %d", c.Table, len(instances))
 	return instances, c.DB.QueryRes(ctx, c.Table, tx, fop, c.ReadQueryModifier, fi), err
 }
 
