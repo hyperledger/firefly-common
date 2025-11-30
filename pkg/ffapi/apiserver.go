@@ -67,7 +67,7 @@ type apiServer[T any] struct {
 	monitoringEnabled         bool
 	metricsPath               string
 	livenessPath              string
-	loggingPath        string
+	loggingPath               string
 	monitoringPublicURL       string
 	mux                       *mux.Router
 	oah                       *OpenAPIHandlerFactory
