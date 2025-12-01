@@ -34,6 +34,7 @@ import (
 	"github.com/ghodss/yaml"
 	"github.com/gorilla/mux"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
+	"github.com/hyperledger/firefly-common/pkg/httpserver"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
 	"github.com/sirupsen/logrus"
@@ -77,6 +78,8 @@ type HandlerFactory struct {
 	SupportFieldRedaction bool
 	BasePath              string
 	BasePathParams        []*PathParam
+
+	apiEntryLoggingLevel logrus.Level // the log level at which entry/exit logging is enabled at all (does not affect trace logging)
 }
 
 var ffMsgCodeExtractor = regexp.MustCompile(`^(FF\d+):`)
@@ -86,6 +89,10 @@ type multipartState struct {
 	formParams map[string]string
 	part       *Multipart
 	close      func()
+}
+
+func (hs *HandlerFactory) SetAPIEntryLoggingLevel(logLevel logrus.Level) {
+	hs.apiEntryLoggingLevel = logLevel
 }
 
 func (hs *HandlerFactory) getFilePart(req *http.Request) (*multipartState, error) {
@@ -368,22 +375,28 @@ func (hs *HandlerFactory) APIWrapper(handler HandlerFunction) http.HandlerFunc {
 		}
 		ctx = withRequestID(ctx, httpReqID)
 		ctx = withPassthroughHeaders(ctx, req, hs.PassthroughHeaders)
-		ctx = log.WithLogField(ctx, "httpreq", httpReqID)
+		ctx = log.WithLogFields(ctx, "httpreq", httpReqID)
 
 		req = req.WithContext(ctx)
 		defer cancel()
 
 		// Wrap the request itself in a log wrapper, that gives minimal request/response and timing info
-		l := log.L(ctx)
-		l.Infof("--> %s %s", req.Method, req.URL.Path)
+		addrFields := map[string]string{}
+		if remoteAddr := httpserver.RemoteAddr(ctx); remoteAddr != nil {
+			addrFields["remote"] = remoteAddr.String()
+		}
+		if localAddr := httpserver.LocalAddr(ctx); localAddr != nil {
+			addrFields["local"] = localAddr.String()
+		}
+		l := log.L(log.WithLogFieldsMap(ctx, addrFields))
+		l.Logf(hs.apiEntryLoggingLevel, "--> %s %s", req.Method, req.URL.Path)
 		startTime := time.Now()
 		status, err := handler(res, req)
 		durationMS := float64(time.Since(startTime)) / float64(time.Millisecond)
 		if err != nil {
-
 			if ffe, ok := (interface{}(err)).(i18n.FFError); ok {
 				if logrus.IsLevelEnabled(logrus.DebugLevel) {
-					log.L(ctx).Debugf("%s:\n%s", ffe.Error(), ffe.StackTrace())
+					l.Debugf("%s:\n%s", ffe.Error(), ffe.StackTrace())
 				}
 				status = ffe.HTTPStatus()
 			} else {
@@ -412,14 +425,14 @@ func (hs *HandlerFactory) APIWrapper(handler HandlerFunction) http.HandlerFunc {
 			if status < 300 {
 				status = 500
 			}
-			l.Infof("<-- %s %s [%d] (%.2fms): %s", req.Method, req.URL.Path, status, durationMS, err)
+			l.Logf(hs.apiEntryLoggingLevel, "<-- %s %s [%d] (%.2fms): %s", req.Method, req.URL.Path, status, durationMS, err)
 			res.Header().Add("Content-Type", "application/json")
 			res.WriteHeader(status)
 			_ = json.NewEncoder(res).Encode(&fftypes.RESTError{
 				Error: err.Error(),
 			})
 		} else {
-			l.Infof("<-- %s %s [%d] (%.2fms)", req.Method, req.URL.Path, status, durationMS)
+			l.Logf(hs.apiEntryLoggingLevel, "<-- %s %s [%d] (%.2fms)", req.Method, req.URL.Path, status, durationMS)
 		}
 	}
 }

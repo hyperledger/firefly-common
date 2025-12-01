@@ -27,6 +27,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/sirupsen/logrus"
 )
 
 func TestOpenAPI3SwaggerUI(t *testing.T) {
@@ -104,6 +105,7 @@ func TestOpenAPI3SwaggerUIDynamicPublicURL(t *testing.T) {
 func TestOpenAPIHandlerNonVersioned(t *testing.T) {
 	mux := mux.NewRouter()
 	hf := HandlerFactory{}
+	hf.SetAPIEntryLoggingLevel(logrus.DebugLevel)
 	oah := &OpenAPIHandlerFactory{
 		BaseSwaggerGenOptions: SwaggerGenOptions{
 			Title:                 "FireFly Transaction Manager API",

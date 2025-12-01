@@ -33,7 +33,9 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftls"
 	"github.com/hyperledger/firefly-common/pkg/httpserver"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
+	"github.com/hyperledger/firefly-common/pkg/log"
 	"github.com/hyperledger/firefly-common/pkg/metric"
+	"github.com/sirupsen/logrus"
 )
 
 const APIServerMetricsSubSystemName = "api_server_rest"
@@ -65,6 +67,7 @@ type apiServer[T any] struct {
 	monitoringEnabled         bool
 	metricsPath               string
 	livenessPath              string
+	loggingPath               string
 	monitoringPublicURL       string
 	mux                       *mux.Router
 	oah                       *OpenAPIHandlerFactory
@@ -121,6 +124,7 @@ func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APISe
 		monitoringEnabled:         options.MonitoringConfig.GetBool(ConfMonitoringServerEnabled),
 		metricsPath:               options.MonitoringConfig.GetString(ConfMonitoringServerMetricsPath),
 		livenessPath:              options.MonitoringConfig.GetString(ConfMonitoringServerLivenessPath),
+		loggingPath:               options.MonitoringConfig.GetString(ConfMonitoringServerLoggingPath),
 		alwaysPaginate:            options.APIConfig.GetBool(ConfAPIAlwaysPaginate),
 		handleYAML:                options.HandleYAML,
 		apiDynamicPublicURLHeader: options.APIConfig.GetString(ConfAPIDynamicPublicURLHeader),
@@ -271,8 +275,8 @@ func (as *apiServer[T]) routeHandler(hf *HandlerFactory, route *Route) http.Hand
 	return hf.RouteHandler(route)
 }
 
-func (as *apiServer[T]) handlerFactory() *HandlerFactory {
-	return &HandlerFactory{
+func (as *apiServer[T]) handlerFactory(logLevel logrus.Level) *HandlerFactory {
+	hf := &HandlerFactory{
 		DefaultRequestTimeout: as.requestTimeout,
 		MaxTimeout:            as.requestMaxTimeout,
 		DefaultFilterLimit:    as.defaultFilterLimit,
@@ -282,11 +286,13 @@ func (as *apiServer[T]) handlerFactory() *HandlerFactory {
 		AlwaysPaginate:        as.alwaysPaginate,
 		HandleYAML:            as.handleYAML,
 	}
+	hf.SetAPIEntryLoggingLevel(logLevel)
+	return hf
 }
 
 func (as *apiServer[T]) createMuxRouter(ctx context.Context) (*mux.Router, error) {
 	r := mux.NewRouter().UseEncodedPath()
-	hf := as.handlerFactory()
+	hf := as.handlerFactory(logrus.InfoLevel)
 
 	as.oah = &OpenAPIHandlerFactory{
 		BaseSwaggerGenOptions: SwaggerGenOptions{
@@ -390,15 +396,44 @@ func (as *apiServer[T]) noContentResponder(res http.ResponseWriter, _ *http.Requ
 	res.WriteHeader(http.StatusNoContent)
 }
 
+func (as *apiServer[T]) loggingSettingsHandler(_ http.ResponseWriter, req *http.Request) (status int, err error) {
+	if req.Method != http.MethodPut {
+		return http.StatusMethodNotAllowed, i18n.NewError(req.Context(), i18n.MsgMethodNotAllowed)
+	}
+	logLevel := req.URL.Query().Get("level")
+	if logLevel != "" {
+		l := log.L(log.WithLogFieldsMap(req.Context(), map[string]string{"new_level": logLevel}))
+		switch strings.ToLower(logLevel) {
+		case "error":
+		case "debug":
+		case "trace":
+		case "info":
+		case "warn":
+			// noop - all valid levels
+		default:
+			l.Warn("invalid log level")
+			return http.StatusBadRequest, i18n.NewError(req.Context(), i18n.MsgInvalidLogLevel, logLevel)
+		}
+		l.Warn("changing log level", logLevel)
+		log.SetLevel(logLevel)
+	}
+
+	// TODO allow for toggling formatting (json, text), sampling, etc.
+
+	return http.StatusAccepted, nil
+}
+
 func (as *apiServer[T]) createMonitoringMuxRouter(ctx context.Context) (*mux.Router, error) {
 	r := mux.NewRouter().UseEncodedPath()
-	hf := as.handlerFactory() // TODO separate factory for monitoring ??
+	// This ensures logs aren't polluted with monitoring API requests such as metrics or probes
+	hf := as.handlerFactory(logrus.TraceLevel)
 
 	h, err := as.MetricsRegistry.HTTPHandler(ctx, promhttp.HandlerOpts{})
 	if err != nil {
 		panic(err)
 	}
 	r.Path(as.metricsPath).Handler(h)
+	r.Path(as.loggingPath).Handler(hf.APIWrapper(as.loggingSettingsHandler))
 	r.HandleFunc(as.livenessPath, as.noContentResponder)
 
 	for _, route := range as.MonitoringRoutes {

@@ -243,7 +243,7 @@ func (esm *esManager[CT, DT]) initEventStream(
 		return nil, err
 	}
 
-	streamCtx := log.WithLogField(esm.bgCtx, "eventstream", *spec.ESFields().Name)
+	streamCtx := log.WithLogFields(esm.bgCtx, "eventstream", *spec.ESFields().Name)
 	es = &eventStream[CT, DT]{
 		bgCtx:       streamCtx,
 		esm:         esm,

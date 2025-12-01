@@ -51,7 +51,7 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 		VerifyPeerCertificate: func(_ [][]byte, verifiedChains [][]*x509.Certificate) error {
 			if len(verifiedChains) > 0 && len(verifiedChains[0]) > 0 {
 				cert := verifiedChains[0][0]
-				log.L(ctx).Debugf("Client certificate provided Subject=%s Issuer=%s Expiry=%s", cert.Subject, cert.Issuer, cert.NotAfter)
+				log.L(ctx).Tracef("Client certificate provided Subject=%s Issuer=%s Expiry=%s", cert.Subject, cert.Issuer, cert.NotAfter)
 			} else {
 				log.L(ctx).Debugf("Client certificate unverified")
 			}
@@ -64,7 +64,7 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 	var rootCAs *x509.CertPool
 	switch {
 	case config.CAFile != "":
-		log.L(ctx).Debugf("Loading CA file at %s", config.CAFile)
+		log.L(ctx).Tracef("Loading CA file at %s", config.CAFile)
 		rootCAs = x509.NewCertPool()
 		var caBytes []byte
 		caBytes, err = os.ReadFile(config.CAFile)
@@ -93,7 +93,7 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 	var configuredCert *tls.Certificate
 	// For mTLS we need both the cert and key
 	if config.CertFile != "" && config.KeyFile != "" {
-		log.L(ctx).Debugf("Loading Cert file at %s and Key file at %s", config.CertFile, config.KeyFile)
+		log.L(ctx).Tracef("Loading Cert file at %s and Key file at %s", config.CertFile, config.KeyFile)
 		// Read the key pair to create certificate
 		cert, err := tls.LoadX509KeyPair(config.CertFile, config.KeyFile)
 		if err != nil {
@@ -112,11 +112,11 @@ func NewTLSConfig(ctx context.Context, config *Config, tlsType TLSType) (*tls.Co
 		// Rather than letting Golang pick a certificate it thinks matches from the list of one,
 		// we directly supply it the one we have in all cases.
 		tlsConfig.GetClientCertificate = func(_ *tls.CertificateRequestInfo) (*tls.Certificate, error) {
-			log.L(ctx).Debugf("Supplying client certificate")
+			log.L(ctx).Tracef("Supplying client certificate")
 			return configuredCert, nil
 		}
 		tlsConfig.GetCertificate = func(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
-			log.L(ctx).Debugf("Supplying server certificate")
+			log.L(ctx).Tracef("Supplying server certificate")
 			return configuredCert, nil
 		}
 	}
@@ -215,7 +215,7 @@ func buildDNValidator(ctx context.Context, requiredDNAttributes map[string]inter
 			// We get a chain of one or more certificates, leaf first.
 			// Only check the leaf.
 			cert := chain[0]
-			log.L(ctx).Debugf("Performing TLS DN check on '%s'", cert.Subject)
+			log.L(ctx).Tracef("Performing TLS DN check on '%s'", cert.Subject)
 			for attr, validator := range validators {
 				matched := false
 				values := SubjectDNKnownAttributes[attr](cert.Subject) // Note check above makes this safe

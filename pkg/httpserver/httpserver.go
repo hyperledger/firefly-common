@@ -31,6 +31,25 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/log"
 )
 
+type remoteAddrContextKey struct{}
+type localAddrContextKey struct{}
+
+func RemoteAddr(ctx context.Context) net.Addr {
+	remoteAddr := ctx.Value(remoteAddrContextKey{})
+	if remoteAddr == nil {
+		return nil
+	}
+	return remoteAddr.(net.Addr)
+}
+
+func LocalAddr(ctx context.Context) net.Addr {
+	localAddr := ctx.Value(localAddrContextKey{})
+	if localAddr == nil {
+		return nil
+	}
+	return localAddr.(net.Addr)
+}
+
 type HTTPServer interface {
 	ServeHTTP(ctx context.Context)
 	Addr() net.Addr
@@ -127,7 +146,7 @@ func (hs *httpServer) createServer(ctx context.Context, r *mux.Router) (srv *htt
 		writeTimeout = hs.options.MaximumRequestTimeout + 1*time.Second
 	}
 
-	log.L(ctx).Debugf("HTTP Server Timeouts (%s): read=%s write=%s request=%s", hs.l.Addr(), readTimeout, writeTimeout, hs.options.MaximumRequestTimeout)
+	log.L(ctx).Tracef("HTTP Server Timeouts (%s): read=%s write=%s request=%s", hs.l.Addr(), readTimeout, writeTimeout, hs.options.MaximumRequestTimeout)
 	srv = &http.Server{
 		Handler:           handler,
 		WriteTimeout:      writeTimeout,
@@ -135,9 +154,13 @@ func (hs *httpServer) createServer(ctx context.Context, r *mux.Router) (srv *htt
 		ReadHeaderTimeout: hs.conf.GetDuration(HTTPConfReadTimeout), // safe for this to always be the read timeout - should be short
 		TLSConfig:         tlsConfig,
 		ConnContext: func(newCtx context.Context, c net.Conn) context.Context {
+			remoteAddr := c.RemoteAddr()
+			localAddr := c.LocalAddr()
 			l := log.L(ctx).WithField("req", fftypes.ShortID())
+			newCtx = context.WithValue(newCtx, remoteAddrContextKey{}, remoteAddr)
+			newCtx = context.WithValue(newCtx, localAddrContextKey{}, localAddr)
 			newCtx = log.WithLogger(newCtx, l)
-			l.Debugf("New HTTP connection: remote=%s local=%s", c.RemoteAddr().String(), c.LocalAddr().String())
+			log.L(log.WithLogFieldsMap(newCtx, map[string]string{"remote": remoteAddr.String(), "local": localAddr.String()})).Trace("New HTTP connection")
 			return newCtx
 		},
 	}

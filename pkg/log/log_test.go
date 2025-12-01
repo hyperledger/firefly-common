@@ -1,4 +1,4 @@
-// Copyright © 2022 Kaleido, Inc.
+// Copyright © 2022 - 2025 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -30,7 +30,7 @@ func TestLogContext(t *testing.T) {
 }
 
 func TestLogContextLimited(t *testing.T) {
-	ctx := WithLogField(context.Background(), "myfield", "0123456789012345678901234567890123456789012345678901234567890123456789")
+	ctx := WithLogFields(context.Background(), "myfield", "0123456789012345678901234567890123456789012345678901234567890123456789")
 	assert.Equal(t, "0123456789012345678901234567890123456789012345678901234567890...", L(ctx).Data["myfield"])
 }
 
@@ -81,4 +81,25 @@ func TestSetFormattingJSONEnabled(t *testing.T) {
 	})
 
 	L(context.Background()).Infof("JSON logs")
+}
+
+func TestWithLogFieldsMap(t *testing.T) {
+	ctx := WithLogFieldsMap(context.Background(), map[string]string{
+		"myfield": "myvalue",
+		"myfield2": "myvalue2",
+	})
+	assert.Equal(t, "myvalue", L(ctx).Data["myfield"])
+	assert.Equal(t, "myvalue2", L(ctx).Data["myfield2"])
+}
+
+func TestWithLogFields(t *testing.T) {
+	ctx := WithLogFields(context.Background(), "myfield", "myvalue", "myfield2", "myvalue2")
+	assert.Equal(t, "myvalue", L(ctx).Data["myfield"])
+	assert.Equal(t, "myvalue2", L(ctx).Data["myfield2"])
+}
+
+func TestWithLogFieldsOddNumberOfFields(t *testing.T) {
+	assert.Panics(t, func() {
+		WithLogFields(context.Background(), "myfield", "myvalue", "myfield2")
+	})
 }
