@@ -276,8 +276,7 @@ func (as *apiServer[T]) routeHandler(hf *HandlerFactory, route *Route) http.Hand
 }
 
 func (as *apiServer[T]) handlerFactory(logLevel logrus.Level) *HandlerFactory {
-	return &HandlerFactory{
-		LogLevel:              &logLevel,
+	hf := &HandlerFactory{
 		DefaultRequestTimeout: as.requestTimeout,
 		MaxTimeout:            as.requestMaxTimeout,
 		DefaultFilterLimit:    as.defaultFilterLimit,
@@ -287,12 +286,13 @@ func (as *apiServer[T]) handlerFactory(logLevel logrus.Level) *HandlerFactory {
 		AlwaysPaginate:        as.alwaysPaginate,
 		HandleYAML:            as.handleYAML,
 	}
+	hf.SetAPIEntryLoggingLevel(logLevel)
+	return hf
 }
 
 func (as *apiServer[T]) createMuxRouter(ctx context.Context) (*mux.Router, error) {
 	r := mux.NewRouter().UseEncodedPath()
 	hf := as.handlerFactory(logrus.InfoLevel)
-	hf.Init()
 
 	as.oah = &OpenAPIHandlerFactory{
 		BaseSwaggerGenOptions: SwaggerGenOptions{
@@ -416,7 +416,6 @@ func (as *apiServer[T]) createMonitoringMuxRouter(ctx context.Context) (*mux.Rou
 	r := mux.NewRouter().UseEncodedPath()
 	// This ensures logs aren't polluted with monitoring API requests such as metrics or probes
 	hf := as.handlerFactory(logrus.TraceLevel)
-	hf.Init()
 
 	h, err := as.MetricsRegistry.HTTPHandler(ctx, promhttp.HandlerOpts{})
 	if err != nil {

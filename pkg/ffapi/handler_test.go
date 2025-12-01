@@ -52,8 +52,7 @@ const scientificParamLiteral = `{
 const configDir = "../../test/data/config"
 
 func newTestHandlerFactory(basePath string, basePathParams []*PathParam) *HandlerFactory {
-	return &HandlerFactory{
-		logLevel:              logrus.DebugLevel,
+	hr := &HandlerFactory{
 		DefaultRequestTimeout: 5 * time.Second,
 		PassthroughHeaders: []string{
 			"X-Custom-Header",
@@ -61,6 +60,8 @@ func newTestHandlerFactory(basePath string, basePathParams []*PathParam) *Handle
 		BasePath:       basePath,
 		BasePathParams: basePathParams,
 	}
+	hr.SetAPIEntryLoggingLevel(logrus.DebugLevel)
+	return hr
 }
 
 func newTestServer(t *testing.T, routes []*Route, basePath string, basePathParams []*PathParam) (httpserver.HTTPServer, *mux.Router, func()) {
