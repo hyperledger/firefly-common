@@ -192,7 +192,7 @@ func (s *Database) BeginOrUseTx(ctx context.Context) (ctx1 context.Context, tx *
 		sqlTX: sqlTX,
 	}
 	ctx1 = context.WithValue(ctx1, txContextKey{}, tx)
-	l.Tracef("SQL<- begin (%.2fms)", floatMillisSince(before))
+	l.Debugf("SQL<- begin (%.2fms)", floatMillisSince(before))
 	return ctx1, tx, false, err
 }
 
@@ -225,7 +225,7 @@ func (s *Database) RunAsQueryTx(ctx context.Context, table string, tx *TXWrapper
 		l.Errorf(`SQL query failed: %s sql=[ %s ]`, err, sqlQuery)
 		return nil, tx, i18n.WrapError(ctx, err, i18n.MsgDBQueryFailed)
 	}
-	l.Tracef(`SQL<- query %s (%.2fms)`, table, floatMillisSince(before))
+	l.Debugf(`SQL<- query %s (%.2fms)`, table, floatMillisSince(before))
 	return rows, tx, nil
 }
 
@@ -272,7 +272,7 @@ func (s *Database) CountQuery(ctx context.Context, table string, tx *TXWrapper, 
 			return count, i18n.WrapError(ctx, err, i18n.MsgDBReadErr, table)
 		}
 	}
-	l.Tracef(`SQL<- count query %s: %d (%.2fms)`, table, count, floatMillisSince(before))
+	l.Debugf(`SQL<- count query %s: %d (%.2fms)`, table, count, floatMillisSince(before))
 	return count, nil
 }
 
@@ -342,7 +342,7 @@ func (s *Database) InsertTxRows(ctx context.Context, table string, tx *TXWrapper
 		}
 		sequences[0], _ = res.LastInsertId()
 	}
-	l.Tracef(`SQL<- insert %s sequences=%v (%.2fms)`, table, sequences, floatMillisSince(before))
+	l.Debugf(`SQL<- insert %s sequences=%v (%.2fms)`, table, sequences, floatMillisSince(before))
 
 	if postCommit != nil {
 		tx.AddPostCommitHook(postCommit)
@@ -364,7 +364,7 @@ func (s *Database) DeleteTx(ctx context.Context, table string, tx *TXWrapper, q 
 		return i18n.WrapError(ctx, err, i18n.MsgDBDeleteFailed)
 	}
 	ra, _ := res.RowsAffected()
-	l.Tracef(`SQL<- delete %s affected=%d (%.2fms)`, table, ra, floatMillisSince(before))
+	l.Debugf(`SQL<- delete %s affected=%d (%.2fms)`, table, ra, floatMillisSince(before))
 	if ra < 1 {
 		return fftypes.DeleteRecordNotFound
 	}
@@ -385,7 +385,7 @@ func (s *Database) ExecTx(ctx context.Context, table string, tx *TXWrapper, sqlQ
 		return nil, i18n.WrapError(ctx, err, i18n.MsgDBExecFailed)
 	}
 	ra, _ := res.RowsAffected()
-	l.Tracef(`SQL<- exec: %s affected=%d (%.2fms)`, table, ra, floatMillisSince(before))
+	l.Debugf(`SQL<- exec: %s affected=%d (%.2fms)`, table, ra, floatMillisSince(before))
 	return res, nil
 }
 
@@ -403,7 +403,7 @@ func (s *Database) UpdateTx(ctx context.Context, table string, tx *TXWrapper, q 
 		return -1, i18n.WrapError(ctx, err, i18n.MsgDBUpdateFailed)
 	}
 	ra, _ := res.RowsAffected()
-	l.Tracef(`SQL<- update %s affected=%d (%.2fms)`, table, ra, floatMillisSince(before))
+	l.Debugf(`SQL<- update %s affected=%d (%.2fms)`, table, ra, floatMillisSince(before))
 
 	if postCommit != nil {
 		tx.AddPostCommitHook(postCommit)
@@ -423,7 +423,7 @@ func (s *Database) AcquireLockTx(ctx context.Context, lockName string, tx *TXWra
 			l.Errorf(`SQL lock failed: %s sql=[ %s ]`, err, sqlQuery)
 			return i18n.WrapError(ctx, err, i18n.MsgDBLockFailed)
 		}
-		l.Tracef(`SQL<- lock %s (%.2fms)`, lockName, floatMillisSince(before))
+		l.Debugf(`SQL<- lock %s (%.2fms)`, lockName, floatMillisSince(before))
 	}
 	return nil
 }
@@ -468,7 +468,7 @@ func (s *Database) CommitTx(ctx context.Context, tx *TXWrapper, autoCommit bool)
 		l.Errorf(`SQL commit failed: %s`, err)
 		return i18n.WrapError(ctx, err, i18n.MsgDBCommitFailed)
 	}
-	l.Tracef(`SQL<- commit (%.2fms)`, floatMillisSince(before))
+	l.Debugf(`SQL<- commit (%.2fms)`, floatMillisSince(before))
 
 	// Emit any post commit events (these aren't currently allowed to cause errors)
 	for i, pce := range tx.postCommit {
