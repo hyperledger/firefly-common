@@ -240,6 +240,10 @@ func TestServeAuthorization(t *testing.T) {
 	r.HandleFunc("/test", func(res http.ResponseWriter, req *http.Request) {
 		res.WriteHeader(200)
 		json.NewEncoder(res).Encode(map[string]interface{}{"hello": "world"})
+		remoteAddr := RemoteAddr(req.Context())
+		localAddr := LocalAddr(req.Context())
+		assert.NotNil(t, remoteAddr)
+		assert.NotNil(t, localAddr)
 	})
 	errChan := make(chan error)
 	hs, err := NewHTTPServer(context.Background(), "ut", r, errChan, cp, cc)
