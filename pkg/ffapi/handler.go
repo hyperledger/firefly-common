@@ -34,6 +34,7 @@ import (
 	"github.com/ghodss/yaml"
 	"github.com/gorilla/mux"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
+	"github.com/hyperledger/firefly-common/pkg/httpserver"
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
 	"github.com/sirupsen/logrus"
@@ -380,16 +381,22 @@ func (hs *HandlerFactory) APIWrapper(handler HandlerFunction) http.HandlerFunc {
 		defer cancel()
 
 		// Wrap the request itself in a log wrapper, that gives minimal request/response and timing info
-		l := log.L(ctx)
+		addrFields := map[string]string{}
+		if remoteAddr := httpserver.RemoteAddr(ctx); remoteAddr != nil {
+			addrFields["remote"] = remoteAddr.String()
+		}
+		if localAddr := httpserver.LocalAddr(ctx); localAddr != nil {
+			addrFields["local"] = localAddr.String()
+		}
+		l := log.L(log.WithLogFieldsMap(ctx, addrFields))
 		l.Logf(hs.apiEntryLoggingLevel, "--> %s %s", req.Method, req.URL.Path)
 		startTime := time.Now()
 		status, err := handler(res, req)
 		durationMS := float64(time.Since(startTime)) / float64(time.Millisecond)
 		if err != nil {
-
 			if ffe, ok := (interface{}(err)).(i18n.FFError); ok {
 				if logrus.IsLevelEnabled(logrus.DebugLevel) {
-					log.L(ctx).Debugf("%s:\n%s", ffe.Error(), ffe.StackTrace())
+					l.Debugf("%s:\n%s", ffe.Error(), ffe.StackTrace())
 				}
 				status = ffe.HTTPStatus()
 			} else {
