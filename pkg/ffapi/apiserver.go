@@ -402,8 +402,7 @@ func (as *apiServer[T]) loggingSettingsHandler(_ http.ResponseWriter, req *http.
 	}
 	logLevel := req.URL.Query().Get("level")
 	if logLevel != "" {
-		ctx := log.WithLogFields(req.Context(), "new_level", logLevel)
-		log.L(ctx).Warn("changing log level", logLevel)
+log.L(ctx).WithLogField("new_level", logLevel).Warn("changing log level", logLevel)
 		log.SetLevel(logLevel)
 	}
 
