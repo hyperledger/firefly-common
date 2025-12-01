@@ -40,7 +40,7 @@ func WithLogger(ctx context.Context, logger *logrus.Entry) context.Context {
 	return context.WithValue(ctx, ctxLogKey{}, logger)
 }
 
-// Deprecated: Use WithLogFields instead.
+// Deprecated: Use WithLogFields or WithLogFieldsMap instead.
 // WithLogField adds the specified field to the logger in the context
 func WithLogField(ctx context.Context, key, value string) context.Context {
 	if len(value) > 61 {
@@ -49,7 +49,7 @@ func WithLogField(ctx context.Context, key, value string) context.Context {
 	return WithLogger(ctx, loggerFromContext(ctx).WithField(key, value))
 }
 
-// WithLogFields adds the specified fields to the logger in the context for structured logging. The key-value pairs must be provided in pairs.
+// WithLogFields adds the specified fields to the logger in the context for structured logging. The key-value pairs must be provided in pairs. This is a convenience for readability over `WithLogFieldsMap`
 func WithLogFields(ctx context.Context, keyValues ...string) context.Context {
 	if len(keyValues)%2 != 0 {
 		panic("odd number of key-value entry fields provided, cannot determine key-value pairs")
@@ -68,8 +68,8 @@ func WithLogFields(ctx context.Context, keyValues ...string) context.Context {
 	return WithLogger(ctx, entry.WithFields(fields))
 }
 
-// WithFields adds the specified, structured fields to the logger in the context
-func WithFields(ctx context.Context, fields map[string]string) context.Context {
+// WithLogFieldsMap adds the specified, structured fields to the logger in the context
+func WithLogFieldsMap(ctx context.Context, fields map[string]string) context.Context {
 	entryFields := logrus.Fields{}
 	for key, value := range fields {
 		if len(value) > 61 {
