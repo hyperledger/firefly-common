@@ -83,8 +83,8 @@ func TestSetFormattingJSONEnabled(t *testing.T) {
 	L(context.Background()).Infof("JSON logs")
 }
 
-func TestWithFields(t *testing.T) {
-	ctx := WithFields(context.Background(), map[string]string{
+func TestWithLogFieldsMap(t *testing.T) {
+	ctx := WithLogFieldsMap(context.Background(), map[string]string{
 		"myfield": "myvalue",
 		"myfield2": "myvalue2",
 	})
