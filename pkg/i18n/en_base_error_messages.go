@@ -191,5 +191,5 @@ var (
 	MsgNonExistDefaultAPIVersion                   = ffe("FF00254", "Default version '%s' does not exist")
 	MsgRoutePathNotStartWithSlash                  = ffe("FF00255", "Route path '%s' must not start with '/'")
 	MsgMethodNotAllowed                            = ffe("FF00256", "Method not allowed", http.StatusMethodNotAllowed)
-	MsgMissingLogLevel                             = ffe("FF00257", "Missing log level", http.StatusBadRequest)
+	MsgInvalidLogLevel                             = ffe("FF00257", "Invalid log level: '%s'", http.StatusBadRequest)
 )

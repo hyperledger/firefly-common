@@ -402,7 +402,19 @@ func (as *apiServer[T]) loggingSettingsHandler(_ http.ResponseWriter, req *http.
 	}
 	logLevel := req.URL.Query().Get("level")
 	if logLevel != "" {
-		log.L(log.WithLogFieldsMap(req.Context(), map[string]string{"new_level": logLevel})).Warn("changing log level", logLevel)
+		l := log.L(log.WithLogFieldsMap(req.Context(), map[string]string{"new_level": logLevel}))
+		switch strings.ToLower(logLevel) {
+		case "error":
+		case "debug":
+		case "trace":
+		case "info":
+		case "warn":
+			// noop - all valid levels
+		default:
+			l.Warn("invalid log level")
+			return http.StatusBadRequest, i18n.NewError(req.Context(), i18n.MsgInvalidLogLevel, logLevel)
+		}
+		l.Warn("changing log level", logLevel)
 		log.SetLevel(logLevel)
 	}
 
