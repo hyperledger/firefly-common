@@ -67,7 +67,8 @@ type FilterJSONKeyValues struct {
 }
 
 type FilterJSON struct {
-	Or []*FilterJSON `ffstruct:"FilterJSON" json:"or,omitempty"`
+	Or  []*FilterJSON `ffstruct:"FilterJSON" json:"or,omitempty"`
+	And []*FilterJSON `ffstruct:"FilterJSON" json:"and,omitempty"`
 	FilterJSONOps
 }
 
@@ -434,6 +435,13 @@ func (jf *FilterJSON) BuildAndFilter(ctx context.Context, fb FilterBuilder, opti
 		} else {
 			andFilter = andFilter.Condition(fb.In(field, rv.resolveMany(field, e.Values)))
 		}
+	}
+	for _, child := range jf.And {
+		subFilter, err := child.BuildSubFilter(ctx, fb, options...)
+		if err != nil {
+			return nil, err
+		}
+		andFilter.Condition(subFilter)
 	}
 	if len(jf.Or) > 0 {
 		childFilter := fb.Or()
