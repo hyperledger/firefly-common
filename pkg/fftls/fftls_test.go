@@ -31,6 +31,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"io"
 
 	"github.com/hyperledger/firefly-common/pkg/config"
 	"github.com/stretchr/testify/assert"
@@ -100,11 +101,18 @@ func buildTLSListener(t *testing.T, conf config.Section, tlsType TLSType) (strin
 	server, err := tls.Listen("tcp4", "127.0.0.1:0", tlsConfig)
 	assert.NoError(t, err)
 
+	done := make(chan struct{})
+
 	go func() {
 		for {
 			tlsConn, err := server.Accept()
 			if err != nil {
-				t.Logf("Server ending: %s", err)
+				select {
+				case <-done:
+					return // cleanup in progress, don't log
+				default:
+					t.Logf("Server ending: %s", err)
+				}
 				return
 			}
 			// Just read until EOF, echoing back
@@ -112,16 +120,23 @@ func buildTLSListener(t *testing.T, conf config.Section, tlsType TLSType) (strin
 				oneByte := make([]byte, 1)
 				_, err = tlsConn.Read(oneByte)
 				if err != nil {
-					t.Logf("read failed: %s", err)
+					select {
+					case <-done:
+						// cleanup in progress, don't log
+					default:
+						if err != io.EOF {
+							t.Logf("read failed: %s", err)
+						}
+					}
 					break
 				}
-				_, err = tlsConn.Write(oneByte)
-				assert.NoError(t, err)
+				_, _ = tlsConn.Write(oneByte) // ignore write errors during shutdown
 			}
 			tlsConn.Close()
 		}
 	}()
 	return server.Addr().String(), func() {
+		close(done)
 		err := server.Close()
 		assert.NoError(t, err)
 	}
