@@ -149,6 +149,49 @@ func TestQuery_StringOr(t *testing.T) {
 	assert.JSONEq(t, expectedQuery, string(jsonQuery))
 }
 
+func TestQuery_AndNestedOr(t *testing.T) {
+	expectedQuery := `{
+	    "and": [
+			{
+				"eq": [
+					{ "field": "field1", "value": "aaa" }
+				]
+			},
+			{
+				"or": [
+					{
+						"eq": [
+							{ "field": "field2", "value": "bbb" }
+						]
+					},
+					{
+						"eq": [
+							{ "field": "field2", "value": "ccc" }
+						]
+					}
+				]
+			}
+		]
+    }`
+
+	query := QB().
+		And(
+			QB().Equal("field1", "aaa"),
+			QB().
+				Or(
+					QB().Equal("field2", "bbb"),
+				).
+				Or(
+					QB().Equal("field2", "ccc"),
+				),
+		).
+		Query()
+
+	jsonQuery, err := json.Marshal(query)
+	assert.NoError(t, err)
+	assert.JSONEq(t, expectedQuery, string(jsonQuery))
+}
+
 func assertQueryEqual(t *testing.T, jsonMap map[string]interface{}, jq *QueryJSON) {
 	jmb, err := json.Marshal(jsonMap)
 	assert.NoError(t, err)

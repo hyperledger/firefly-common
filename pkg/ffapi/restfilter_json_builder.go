@@ -71,6 +71,9 @@ type QueryBuilder interface {
 	// Or creates an OR condition between multiple queries
 	Or(...QueryBuilder) QueryBuilder
 
+	// And creates an AND condition between multiple queries
+	And(...QueryBuilder) QueryBuilder
+
 	// Query returns the query
 	Query() *QueryJSON
 }
@@ -86,6 +89,10 @@ type queryBuilderImpl struct {
 func NewQueryBuilder() QueryBuilder {
 	qj := &QueryJSON{}
 	return qj.ToBuilder()
+}
+
+func QB() QueryBuilder {
+	return NewQueryBuilder()
 }
 
 // Limit sets the limit of the query
@@ -202,6 +209,14 @@ func (qb *queryBuilderImpl) NotNull(field string) QueryBuilder {
 func (qb *queryBuilderImpl) Or(q ...QueryBuilder) QueryBuilder {
 	for _, child := range q {
 		qb.statements.Or = append(qb.statements.Or, child.(*queryBuilderImpl).statements)
+	}
+	return qb
+}
+
+// And creates an AND condition between multiple queries
+func (qb *queryBuilderImpl) And(q ...QueryBuilder) QueryBuilder {
+	for _, child := range q {
+		qb.statements.And = append(qb.statements.And, child.(*queryBuilderImpl).statements)
 	}
 	return qb
 }
