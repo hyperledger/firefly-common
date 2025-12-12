@@ -365,8 +365,10 @@ func (hs *HandlerFactory) getTimeout(req *http.Request) time.Duration {
 }
 
 func (hs *HandlerFactory) APIWrapper(handler HandlerFunction) http.HandlerFunc {
+	if hs.apiEntryLoggingLevel == 0 {
+		hs.SetAPIEntryLoggingLevel(logrus.InfoLevel)
+	}
 	return func(res http.ResponseWriter, req *http.Request) {
-
 		reqTimeout := hs.getTimeout(req)
 		ctx, cancel := context.WithTimeout(req.Context(), reqTimeout)
 		httpReqID := req.Header.Get(RequestIDHeader())

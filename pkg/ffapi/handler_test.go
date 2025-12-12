@@ -60,7 +60,6 @@ func newTestHandlerFactory(basePath string, basePathParams []*PathParam) *Handle
 		BasePath:       basePath,
 		BasePathParams: basePathParams,
 	}
-	hr.SetAPIEntryLoggingLevel(logrus.DebugLevel)
 	return hr
 }
 
