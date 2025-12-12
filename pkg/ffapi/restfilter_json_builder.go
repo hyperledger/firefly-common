@@ -71,7 +71,7 @@ type QueryBuilder interface {
 	// Or creates an OR condition between multiple queries
 	Or(...QueryBuilder) QueryBuilder
 
-	// And creates an OR condition between multiple queries
+	// And creates an AND condition between multiple queries
 	And(...QueryBuilder) QueryBuilder
 
 	// Query returns the query
