@@ -213,7 +213,7 @@ func (qb *queryBuilderImpl) Or(q ...QueryBuilder) QueryBuilder {
 	return qb
 }
 
-// Or creates an AND condition between multiple queries
+// And creates an AND condition between multiple queries
 func (qb *queryBuilderImpl) And(q ...QueryBuilder) QueryBuilder {
 	for _, child := range q {
 		qb.statements.And = append(qb.statements.And, child.(*queryBuilderImpl).statements)
