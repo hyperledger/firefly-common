@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2025 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -59,14 +59,12 @@ func (s *Database) GetChartHistogram(
 			return nil, err
 		}
 		defer rows.Close()
-
-		// Process results
 		data, total, err := s.processHistogramRows(ctx, tableName, rows, hasTypeColumn)
 		if err != nil {
 			return nil, err
 		}
 
-		// Build histogram bucket
+		// Build hist bucket
 		histBucket := &fftypes.ChartHistogram{
 			Count:     strconv.FormatInt(total, 10),
 			Timestamp: intervals[i].StartTime,
@@ -112,10 +110,10 @@ func (s *Database) buildHistogramQueries(
 		cols = append(cols, typeColumn)
 	}
 
-	for _, interval := range intervals {
+	for _, i := range intervals {
 		whereClause := sq.And{
-			sq.GtOrEq{timestampColumn: interval.StartTime},
-			sq.Lt{timestampColumn: interval.EndTime},
+			sq.GtOrEq{timestampColumn: i.StartTime},
+			sq.Lt{timestampColumn: i.EndTime},
 		}
 
 		// namespace filter
