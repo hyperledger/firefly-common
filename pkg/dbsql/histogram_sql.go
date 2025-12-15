@@ -66,10 +66,10 @@ func (s *Database) GetChartHistogram(
 
 		// Build hist bucket
 		histBucket := &fftypes.ChartHistogram{
-			Count:     strconv.FormatInt(total, 10),
+			Count:     strconv.FormatUint(total, 10),
 			Timestamp: intervals[i].StartTime,
 			Types:     []*fftypes.ChartHistogramType{},
-			IsCapped:  total == int64(maxRows), //warning here doesn't matter since maxrows value is capped at 100
+			IsCapped:  total == maxRows,
 		}
 
 		// Add type counts if applicable
@@ -143,9 +143,9 @@ func (s *Database) processHistogramRows(
 	tableName string,
 	rows *sql.Rows,
 	hasTypeColumn bool,
-) (map[string]int, int64, error) {
+) (map[string]int, uint64, error) {
 
-	total := int64(0)
+	total := uint64(0)
 
 	if !hasTypeColumn {
 		// counting rows

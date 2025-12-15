@@ -120,7 +120,7 @@ func TestProcessHistogramRowsNoTypeColumn(t *testing.T) {
 
 	typeMap, total, e := db.processHistogramRows(ctx, "mytable", r, false)
 	assert.NoError(t, e)
-	assert.Equal(t, int64(2), total)
+	assert.Equal(t, uint64(2), total)
 	assert.Empty(t, typeMap)
 
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -144,7 +144,7 @@ func TestProcessHistogramRowsWithTypeColumn(t *testing.T) {
 
 	typeMap, total, e := db.processHistogramRows(ctx, "mytable", rows, true)
 	assert.NoError(t, e)
-	assert.Equal(t, int64(3), total)
+	assert.Equal(t, uint64(3), total)
 	assert.Equal(t, map[string]int{
 		"A": 2,
 		"B": 1,
