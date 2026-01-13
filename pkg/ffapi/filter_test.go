@@ -1,4 +1,4 @@
-// Copyright © 2021 Kaleido, Inc.
+// Copyright © 2021 - 2026 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -372,4 +372,120 @@ func TestValueFilterAccess(t *testing.T) {
 	assert.Equal(t, FilterOpGte, fb.ValueFilter().Op())
 	assert.Equal(t, "seq", fb.ValueFilter().Field())
 	assert.Equal(t, 12345, fb.ValueFilter().Value())
+}
+
+func TestFilterDistinctOnSingleField(t *testing.T) {
+	fb := TestQueryFactory.NewFilter(context.Background())
+	f, err := fb.And(
+		fb.Eq("tag", "tag1"),
+	).DistinctOn("tag").Finalize()
+	assert.NoError(t, err)
+	assert.Contains(t, f.String(), "distinctOn=tag")
+	assert.Equal(t, []string{"tag"}, f.DistinctOn)
+}
+
+func TestFilterDistinctOnMultipleFields(t *testing.T) {
+	fb := TestQueryFactory.NewFilter(context.Background())
+	f, err := fb.And(
+		fb.Eq("tag", "tag1"),
+	).DistinctOn("tag", "type").Finalize()
+	assert.NoError(t, err)
+	assert.Contains(t, f.String(), "distinctOn=tag,type")
+	assert.Equal(t, []string{"tag", "type"}, f.DistinctOn)
+}
+
+func TestFilterDistinctOnWithSort(t *testing.T) {
+	fb := TestQueryFactory.NewFilter(context.Background())
+	f, err := fb.And(
+		fb.Eq("tag", "tag1"),
+	).DistinctOn("type").Sort("tag").Sort("-sequence").Finalize()
+	assert.NoError(t, err)
+	assert.Contains(t, f.String(), "distinctOn=type")
+	assert.Contains(t, f.String(), "sort=tag,-sequence")
+	assert.Equal(t, []string{"type"}, f.DistinctOn)
+}
+
+func TestFilterDistinctOnWithGroupBy(t *testing.T) {
+	fb := TestQueryFactory.NewFilter(context.Background())
+	f, err := fb.And(
+		fb.Eq("tag", "tag1"),
+	).DistinctOn("type").GroupBy("type").Finalize()
+	assert.NoError(t, err)
+	assert.Contains(t, f.String(), "distinctOn=type")
+	assert.Contains(t, f.String(), "groupBy=type")
+	assert.Equal(t, []string{"type"}, f.DistinctOn)
+}
+
+func TestFilterDistinctOnWithAllOptions(t *testing.T) {
+	fb := TestQueryFactory.NewFilter(context.Background())
+	f, err := fb.And(
+		fb.Eq("tag", "tag1"),
+	).DistinctOn("type", "tag").
+		Sort("tag").
+		GroupBy("type").
+		Skip(10).
+		Limit(25).
+		RequiredFields("type", "tag").
+		Finalize()
+	assert.NoError(t, err)
+	assert.Contains(t, f.String(), "distinctOn=type,tag")
+	assert.Contains(t, f.String(), "sort=tag")
+	assert.Contains(t, f.String(), "groupBy=type")
+	assert.Contains(t, f.String(), "skip=10")
+	assert.Contains(t, f.String(), "limit=25")
+	assert.Contains(t, f.String(), "requiredFields=type,tag")
+	assert.Equal(t, []string{"type", "tag"}, f.DistinctOn)
+}
+
+func TestFilterDistinctOnInvalidField(t *testing.T) {
+	fb := TestQueryFactory.NewFilter(context.Background())
+	// DISTINCT ON with invalid field should be ignored (not added to distinctOn)
+	f, err := fb.And(
+		fb.Eq("tag", "tag1"),
+	).DistinctOn("invalidField", "tag").Finalize()
+	assert.NoError(t, err)
+	// Only valid field should be in distinctOn
+	assert.Equal(t, []string{"tag"}, f.DistinctOn)
+	assert.Contains(t, f.String(), "distinctOn=tag")
+}
+
+func TestFilterDistinctOnOnFilterBuilder(t *testing.T) {
+	fb := TestQueryFactory.NewFilter(context.Background())
+	// Test DistinctOn on FilterBuilder (before Finalize)
+	fb2 := fb.DistinctOn("tag", "type")
+	assert.NotNil(t, fb2)
+
+	f, err := fb2.And(
+		fb.Eq("tag", "tag1"),
+	).Finalize()
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"tag", "type"}, f.DistinctOn)
+}
+
+func TestFilterDistinctOnOnFilter(t *testing.T) {
+	fb := TestQueryFactory.NewFilter(context.Background())
+	// Test DistinctOn on Filter (after calling And which returns Filter)
+	f := fb.And(
+		fb.Eq("tag", "tag1"),
+	)
+
+	// Call DistinctOn on the Filter interface
+	f2 := f.DistinctOn("type")
+	assert.NotNil(t, f2)
+
+	// Finalize to get the FilterInfo
+	fi, err := f2.Finalize()
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"type"}, fi.DistinctOn)
+}
+
+func TestFilterDistinctOnEmptyFields(t *testing.T) {
+	fb := TestQueryFactory.NewFilter(context.Background())
+	f, err := fb.And(
+		fb.Eq("tag", "tag1"),
+	).DistinctOn().Finalize()
+	assert.NoError(t, err)
+	// Empty DistinctOn should result in empty slice
+	assert.Empty(t, f.DistinctOn)
+	assert.NotContains(t, f.String(), "distinctOn=")
 }

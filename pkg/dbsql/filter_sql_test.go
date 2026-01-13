@@ -1,4 +1,4 @@
-// Copyright © 2021 Kaleido, Inc.
+// Copyright © 2021 - 2026 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -409,4 +409,206 @@ func TestFilterUpdateErr(t *testing.T) {
 
 	_, err := s.FilterUpdate(context.Background(), q, f, nil)
 	assert.Regexp(t, "FF00142", err)
+}
+
+func TestFilterSelectDistinctOnPostgreSQL(t *testing.T) {
+	// Test DISTINCT ON with PostgreSQL provider - should work
+	pgmp := &postgresMockProvider{MockProvider: NewMockProvider()}
+	_ = pgmp.Database.Init(context.Background(), pgmp, pgmp.config)
+
+	fb := TestQueryFactory.NewFilter(context.Background())
+	f := fb.And(
+		fb.Eq("tag", "tag1"),
+	).DistinctOn("tag", "type")
+
+	sel := squirrel.Select("*").From("mytable")
+	sel, _, _, err := pgmp.FilterSelect(context.Background(), "", sel, f, nil, []interface{}{"sequence"})
+	assert.NoError(t, err)
+
+	sqlFilter, args, err := sel.ToSql()
+	assert.NoError(t, err)
+	// DISTINCT ON fields should be prepended to ORDER BY
+	assert.Contains(t, sqlFilter, "ORDER BY tag, type, seq DESC")
+	assert.Equal(t, "tag1", args[0])
+}
+
+func TestFilterSelectDistinctOnNonPostgreSQL(t *testing.T) {
+	// Test DISTINCT ON with non-PostgreSQL provider - should error
+	s, _ := NewMockProvider().UTInit()
+
+	fb := TestQueryFactory.NewFilter(context.Background())
+	f := fb.And(
+		fb.Eq("tag", "tag1"),
+	).DistinctOn("tag")
+
+	sel := squirrel.Select("*").From("mytable")
+	_, _, _, err := s.FilterSelect(context.Background(), "", sel, f, nil, []interface{}{"sequence"})
+	assert.Error(t, err)
+	assert.Regexp(t, "FF00258", err)
+	assert.Contains(t, err.Error(), "DISTINCT ON is only supported for PostgreSQL")
+	assert.Contains(t, err.Error(), "mockdb")
+}
+
+func TestFilterSelectDistinctOnWithSortPostgreSQL(t *testing.T) {
+	// Test DISTINCT ON with existing sort - DISTINCT ON fields should come first
+	pgmp := &postgresMockProvider{MockProvider: NewMockProvider()}
+	_ = pgmp.Database.Init(context.Background(), pgmp, pgmp.config)
+
+	fb := TestQueryFactory.NewFilter(context.Background())
+	// Use a DISTINCT ON field that's NOT in the sort to avoid duplication
+	f := fb.And(
+		fb.Eq("tag", "tag1"),
+	).DistinctOn("type").Sort("-tag")
+
+	sel := squirrel.Select("*").From("mytable")
+	sel, _, _, err := pgmp.FilterSelect(context.Background(), "", sel, f, nil, []interface{}{"sequence"})
+	assert.NoError(t, err)
+
+	sqlFilter, args, err := sel.ToSql()
+	assert.NoError(t, err)
+
+	orderByStart := -1
+	for i := 0; i <= len(sqlFilter)-len("ORDER BY"); i++ {
+		if sqlFilter[i:i+len("ORDER BY")] == "ORDER BY" {
+			orderByStart = i + len("ORDER BY")
+			break
+		}
+	}
+	assert.Greater(t, orderByStart, 0, "ORDER BY clause should be present")
+
+	if orderByStart > 0 {
+		orderByClause := sqlFilter[orderByStart:]
+		// Remove any trailing clauses (LIMIT, etc.)
+		if limitIdx := findSubstring(orderByClause, " LIMIT"); limitIdx > 0 {
+			orderByClause = orderByClause[:limitIdx]
+		}
+		// Verify required fields are present
+		assert.Contains(t, orderByClause, "type")
+		assert.Contains(t, orderByClause, "tag DESC")
+		// Verify type comes before tag
+		typePos := findSubstring(orderByClause, "type")
+		tagPos := findSubstring(orderByClause, "tag")
+		assert.Greater(t, tagPos, typePos, "type should come before tag in ORDER BY")
+	}
+	assert.Equal(t, "tag1", args[0])
+}
+
+func TestFilterSelectDistinctOnWithDistinctSortPostgreSQL(t *testing.T) {
+	// Test DISTINCT ON with existing sort - DISTINCT ON fields should come first
+	pgmp := &postgresMockProvider{MockProvider: NewMockProvider()}
+	_ = pgmp.Database.Init(context.Background(), pgmp, pgmp.config)
+
+	fb := TestQueryFactory.NewFilter(context.Background())
+	// Use a DISTINCT ON field that's NOT in the sort to avoid duplication
+	f := fb.And(
+		fb.Eq("tag", "tag1"),
+	).DistinctOn("tag").Sort("type").Sort("-tag")
+
+	sel := squirrel.Select("*").From("mytable")
+	sel, _, _, err := pgmp.FilterSelect(context.Background(), "", sel, f, nil, []interface{}{"sequence"})
+	assert.NoError(t, err)
+
+	sqlFilter, args, err := sel.ToSql()
+	assert.NoError(t, err)
+
+	orderByStart := -1
+	for i := 0; i <= len(sqlFilter)-len("ORDER BY"); i++ {
+		if sqlFilter[i:i+len("ORDER BY")] == "ORDER BY" {
+			orderByStart = i + len("ORDER BY")
+			break
+		}
+	}
+	assert.Greater(t, orderByStart, 0, "ORDER BY clause should be present")
+
+	if orderByStart > 0 {
+		orderByClause := sqlFilter[orderByStart:]
+		// Remove any trailing clauses (LIMIT, etc.)
+		if limitIdx := findSubstring(orderByClause, " LIMIT"); limitIdx > 0 {
+			orderByClause = orderByClause[:limitIdx]
+		}
+		// Verify required fields are present
+		assert.Contains(t, orderByClause, "type")
+		assert.Contains(t, orderByClause, "tag DESC")
+		// Verify type comes before tag
+		typePos := findSubstring(orderByClause, "type")
+		tagPos := findSubstring(orderByClause, "tag DESC")
+		// tag should come before type
+		assert.Greater(t, typePos, tagPos, "tag should come before type in ORDER BY")
+	}
+	assert.Equal(t, "tag1", args[0])
+}
+
+func TestFilterSelectDistinctOnWithDefaultSortPostgreSQL(t *testing.T) {
+	// Test DISTINCT ON with existing sort - DISTINCT ON fields should come first
+	pgmp := &postgresMockProvider{MockProvider: NewMockProvider()}
+	_ = pgmp.Database.Init(context.Background(), pgmp, pgmp.config)
+
+	fb := TestQueryFactory.NewFilter(context.Background())
+	// Use a DISTINCT ON field that's NOT in the sort to avoid duplication
+	f := fb.And(
+		fb.Eq("tag", "tag1"),
+	).DistinctOn("type")
+
+	sel := squirrel.Select("*").From("mytable")
+	sel, _, _, err := pgmp.FilterSelect(context.Background(), "", sel, f, nil, []interface{}{"sequence"})
+	assert.NoError(t, err)
+
+	sqlFilter, args, err := sel.ToSql()
+	assert.NoError(t, err)
+
+	orderByStart := -1
+	for i := 0; i <= len(sqlFilter)-len("ORDER BY"); i++ {
+		if sqlFilter[i:i+len("ORDER BY")] == "ORDER BY" {
+			orderByStart = i + len("ORDER BY")
+			break
+		}
+	}
+	assert.Greater(t, orderByStart, 0, "ORDER BY clause should be present")
+
+	if orderByStart > 0 {
+		orderByClause := sqlFilter[orderByStart:]
+		// Remove any trailing clauses (LIMIT, etc.)
+		if limitIdx := findSubstring(orderByClause, " LIMIT"); limitIdx > 0 {
+			orderByClause = orderByClause[:limitIdx]
+		}
+		// Verify required fields are present
+		assert.Contains(t, orderByClause, "type")
+		assert.Contains(t, orderByClause, "seq DESC")
+		// Verify type comes before tag
+		typePos := findSubstring(orderByClause, "type")
+		seqPos := findSubstring(orderByClause, "seq")
+		assert.Greater(t, seqPos, typePos, "seq should come after type in ORDER BY")
+	}
+	assert.Equal(t, "tag1", args[0])
+}
+
+// Helper function to find substring position
+func findSubstring(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestFilterSelectDistinctOnWithMultipleFieldsPostgreSQL(t *testing.T) {
+	// Test DISTINCT ON with multiple fields
+	pgmp := &postgresMockProvider{MockProvider: NewMockProvider()}
+	_ = pgmp.Database.Init(context.Background(), pgmp, pgmp.config)
+
+	fb := TestQueryFactory.NewFilter(context.Background())
+	f := fb.And(
+		fb.Eq("tag", "tag1"),
+	).DistinctOn("type", "tag")
+
+	sel := squirrel.Select("*").From("mytable")
+	sel, _, _, err := pgmp.FilterSelect(context.Background(), "", sel, f, nil, []interface{}{"sequence"})
+	assert.NoError(t, err)
+
+	sqlFilter, args, err := sel.ToSql()
+	assert.NoError(t, err)
+	// DISTINCT ON fields should be prepended to ORDER BY
+	assert.Contains(t, sqlFilter, "ORDER BY type, tag, seq DESC")
+	assert.Equal(t, "tag1", args[0])
 }

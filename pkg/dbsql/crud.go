@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2024 - 2026 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -785,13 +785,48 @@ func (c *CrudBase[T]) getManyScoped(ctx context.Context, tableFrom string, fi *f
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// Apply ReadQueryModifier first (before wrapping with DISTINCT ON)
 	if c.ReadQueryModifier != nil {
 		if query, err = c.ReadQueryModifier(query); err != nil {
 			return nil, nil, err
 		}
 	}
 
-	rows, tx, err := c.DB.Query(ctx, c.Table, query)
+	// Apply placeholder format to the query
+	query = query.PlaceholderFormat(c.DB.features.PlaceholderFormat)
+
+	// Apply DISTINCT ON wrapper for PostgreSQL if needed
+	var finalQuery sq.Sqlizer = query
+	if len(fi.DistinctOn) > 0 {
+		if c.DB.provider == nil || c.DB.provider.Name() != "postgres" {
+			providerName := "unknown"
+			if c.DB.provider != nil {
+				providerName = c.DB.provider.Name()
+			}
+			return nil, nil, i18n.NewError(ctx, i18n.MsgDistinctOnNotSupported, providerName)
+		}
+		distinctOnFields := make([]string, len(fi.DistinctOn))
+		for i, do := range fi.DistinctOn {
+			// Map the field name using the FilterFieldMap
+			mappedField := do
+			if c.FilterFieldMap != nil {
+				if mf, ok := c.FilterFieldMap[do]; ok {
+					mappedField = mf
+				}
+			}
+			if c.ReadTableAlias != "" && !strings.Contains(mappedField, ".") {
+				mappedField = fmt.Sprintf("%s.%s", c.ReadTableAlias, mappedField)
+			}
+			distinctOnFields[i] = mappedField
+		}
+		finalQuery = &distinctOnSqlizer{
+			inner:      query,
+			distinctOn: distinctOnFields,
+		}
+	}
+
+	rows, tx, err := c.DB.RunAsQueryTx(ctx, c.Table, nil, finalQuery)
 	if err != nil {
 		return nil, nil, err
 	}

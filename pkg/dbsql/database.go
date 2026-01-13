@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2024 - 2026 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -20,6 +20,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
@@ -205,10 +206,39 @@ func (s *Database) QueryTx(ctx context.Context, table string, tx *TXWrapper, q s
 	return s.RunAsQueryTx(ctx, table, tx, q.PlaceholderFormat(s.features.PlaceholderFormat))
 }
 
+// distinctOnSqlizer wraps a SelectBuilder to add PostgreSQL DISTINCT ON support
+type distinctOnSqlizer struct {
+	inner      sq.SelectBuilder
+	distinctOn []string
+}
+
+func (d *distinctOnSqlizer) ToSql() (string, []interface{}, error) {
+	sql, args, err := d.inner.ToSql()
+	if err != nil {
+		return sql, args, err
+	}
+	// Replace SELECT with SELECT DISTINCT ON (fields)
+	if len(d.distinctOn) > 0 {
+		distinctOnClause := fmt.Sprintf("DISTINCT ON (%s) ", strings.Join(d.distinctOn, ", "))
+		sql = strings.Replace(sql, "SELECT ", fmt.Sprintf("SELECT %s", distinctOnClause), 1)
+	}
+	return sql, args, nil
+}
+
 func (s *Database) RunAsQueryTx(ctx context.Context, table string, tx *TXWrapper, q sq.Sqlizer) (*sql.Rows, *TXWrapper, error) {
 
 	l := log.L(ctx)
-	sqlQuery, args, err := q.ToSql()
+
+	// Check if this is a distinctOnSqlizer wrapper
+	var sqlQuery string
+	var args []interface{}
+	var err error
+	if dos, ok := q.(*distinctOnSqlizer); ok {
+		sqlQuery, args, err = dos.ToSql()
+	} else {
+		sqlQuery, args, err = q.ToSql()
+	}
+
 	if err != nil {
 		return nil, tx, i18n.WrapError(ctx, err, i18n.MsgDBQueryBuildFailed)
 	}

@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2024 - 2026 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -33,6 +33,11 @@ type FilterModifiers[T any] interface {
 
 	// GroupBy adds a set of fields to group rows that have the same values into summary rows. Not assured every persistence implementation will support this (doc DBs cannot)
 	GroupBy(...string) T
+
+	// DistinctOn adds PostgreSQL-specific DISTINCT ON clause. Only supported for PostgreSQL databases.
+	// DISTINCT ON (field1, field2, ...) returns one row per unique combination of the specified fields.
+	// The ORDER BY clause must start with the DISTINCT ON fields.
+	DistinctOn(...string) T
 
 	// Ascending sort order
 	Ascending() T
@@ -255,6 +260,7 @@ type SortField struct {
 // into the underlying database mechanism's filter language
 type FilterInfo struct {
 	GroupBy        []string
+	DistinctOn     []string // PostgreSQL-specific: DISTINCT ON (field1, field2, ...)
 	RequiredFields []string
 	Sort           []*SortField
 	Skip           uint64
@@ -324,6 +330,9 @@ func (f *FilterInfo) String() string {
 	if len(f.GroupBy) > 0 {
 		val.WriteString(fmt.Sprintf(" groupBy=%s", strings.Join(f.GroupBy, ",")))
 	}
+	if len(f.DistinctOn) > 0 {
+		val.WriteString(fmt.Sprintf(" distinctOn=%s", strings.Join(f.DistinctOn, ",")))
+	}
 	if len(f.RequiredFields) > 0 {
 		val.WriteString(fmt.Sprintf(" requiredFields=%s", strings.Join(f.RequiredFields, ",")))
 	}
@@ -365,6 +374,7 @@ type filterBuilder struct {
 	queryFields     QueryFields
 	sort            []*SortField
 	groupBy         []string
+	distinctOn      []string
 	requiredFields  []string
 	skip            uint64
 	limit           uint64
@@ -511,6 +521,7 @@ func (f *baseFilter) Finalize() (fi *FilterInfo, err error) {
 		Value:          value,
 		Sort:           f.fb.sort,
 		GroupBy:        f.fb.groupBy,
+		DistinctOn:     f.fb.distinctOn,
 		RequiredFields: f.fb.requiredFields,
 		Skip:           f.fb.skip,
 		Limit:          f.fb.limit,
@@ -551,6 +562,20 @@ func (fb *filterBuilder) GroupBy(fields ...string) FilterBuilder {
 
 func (f *baseFilter) GroupBy(fields ...string) Filter {
 	_ = f.fb.GroupBy(fields...)
+	return f
+}
+
+func (fb *filterBuilder) DistinctOn(fields ...string) FilterBuilder {
+	for _, field := range fields {
+		if _, ok := fb.queryFields[field]; ok {
+			fb.distinctOn = append(fb.distinctOn, field)
+		}
+	}
+	return fb
+}
+
+func (f *baseFilter) DistinctOn(fields ...string) Filter {
+	_ = f.fb.DistinctOn(fields...)
 	return f
 }
 

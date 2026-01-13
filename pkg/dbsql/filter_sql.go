@@ -1,4 +1,4 @@
-// Copyright © 2025 Kaleido, Inc.
+// Copyright © 2025 - 2026 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -99,7 +99,8 @@ func (s *Database) FilterSelect(ctx context.Context, tableName string, sel sq.Se
 }
 
 func (s *Database) filterSelectFinalized(ctx context.Context, tableName string, sel sq.SelectBuilder, fi *ffapi.FilterInfo, typeMap map[string]string, defaultSort []interface{}, preconditions ...sq.Sqlizer) (sq.SelectBuilder, sq.Sqlizer, *ffapi.FilterInfo, error) {
-	if len(fi.Sort) == 0 {
+	sortNotProvided := len(fi.Sort) == 0
+	if sortNotProvided {
 		for _, s := range defaultSort {
 			switch v := s.(type) {
 			case string:
@@ -117,6 +118,47 @@ func (s *Database) filterSelectFinalized(ctx context.Context, tableName string, 
 	}
 
 	sel = sel.Where(fop)
+
+	// Handle PostgreSQL DISTINCT ON - ensure ORDER BY starts with DISTINCT ON fields
+	if len(fi.DistinctOn) > 0 {
+		if s.provider == nil || s.provider.Name() != "postgres" {
+			providerName := "unknown"
+			if s.provider != nil {
+				providerName = s.provider.Name()
+			}
+			return sel, nil, nil, i18n.NewError(ctx, i18n.MsgDistinctOnNotSupported, providerName)
+		}
+		// Ensure ORDER BY starts with DISTINCT ON fields (PostgreSQL requirement)
+		distinctOnInSort := make(map[string]bool)
+		for _, doField := range fi.DistinctOn {
+			distinctOnInSort[doField] = false
+		}
+
+		// Check which DISTINCT ON fields are already in sort
+		for _, sf := range fi.Sort {
+			if _, ok := distinctOnInSort[sf.Field]; ok {
+				distinctOnInSort[sf.Field] = true
+			}
+		}
+
+		// Prepend missing DISTINCT ON fields to sort (they must come first)
+		newSort := make([]*ffapi.SortField, 0, len(fi.DistinctOn)+len(fi.Sort))
+		for _, doField := range fi.DistinctOn {
+			if !distinctOnInSort[doField] {
+				newSort = append(newSort, &ffapi.SortField{Field: doField, Descending: false})
+			}
+		}
+		// Add existing sort fields, ensuring DISTINCT ON fields come first
+		for _, sf := range fi.Sort {
+			if distinctOnInSort[sf.Field] {
+				// This is a DISTINCT ON field - prepend it to preserve sort direction
+				newSort = append([]*ffapi.SortField{sf}, newSort...)
+			} else {
+				newSort = append(newSort, sf)
+			}
+		}
+		fi.Sort = newSort
+	}
 
 	if len(fi.GroupBy) > 0 {
 		groupByWithResolvedFieldName := make([]string, len(fi.GroupBy))
@@ -152,6 +194,9 @@ func (s *Database) filterSelectFinalized(ctx context.Context, tableName string, 
 	if fi.Limit > 0 {
 		sel = sel.Limit(fi.Limit)
 	}
+
+	// Note: DISTINCT ON will be applied via distinctOnSqlizer wrapper in QueryTx
+	// The FilterInfo already has the DistinctOn fields stored for reference
 	return sel, fop, fi, err
 }
 

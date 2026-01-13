@@ -1,4 +1,4 @@
-// Copyright © 2024 Kaleido, Inc.
+// Copyright © 2024 - 2026 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -192,4 +192,5 @@ var (
 	MsgRoutePathNotStartWithSlash                  = ffe("FF00255", "Route path '%s' must not start with '/'")
 	MsgMethodNotAllowed                            = ffe("FF00256", "Method not allowed", http.StatusMethodNotAllowed)
 	MsgInvalidLogLevel                             = ffe("FF00257", "Invalid log level: '%s'", http.StatusBadRequest)
+	MsgDistinctOnNotSupported                      = ffe("FF00258", "DISTINCT ON is only supported for PostgreSQL databases, but current provider is '%s'", 400)
 )

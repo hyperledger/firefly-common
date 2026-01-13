@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2023 - 2026 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -621,4 +621,113 @@ func TestExecTxFail(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = s.ExecTx(ctx, "mytable", tx, sqlQuery, args)
 	assert.Regexp(t, "pop", err)
+}
+
+func TestDistinctOnSqlizerToSql(t *testing.T) {
+	// Test that distinctOnSqlizer correctly transforms SQL
+	s, _ := NewMockProvider().UTInit()
+	innerQuery := sq.Select("id", "name", "tag").From("mytable").Where(sq.Eq{"tag": "test"}).PlaceholderFormat(s.features.PlaceholderFormat)
+	dos := &distinctOnSqlizer{
+		inner:      innerQuery,
+		distinctOn: []string{"tag", "name"},
+	}
+
+	sql, args, err := dos.ToSql()
+	assert.NoError(t, err)
+	// Should contain DISTINCT ON clause
+	assert.Contains(t, sql, "SELECT DISTINCT ON (tag, name)")
+	assert.Contains(t, sql, "FROM mytable")
+	assert.Contains(t, sql, "WHERE")
+	assert.Contains(t, sql, "tag = $1")
+	assert.Len(t, args, 1)
+	assert.Equal(t, "test", args[0])
+}
+
+func TestDistinctOnSqlizerToSqlEmptyDistinctOn(t *testing.T) {
+	// Test that distinctOnSqlizer with empty distinctOn doesn't add DISTINCT ON
+	innerQuery := sq.Select("id", "name").From("mytable")
+	dos := &distinctOnSqlizer{
+		inner:      innerQuery,
+		distinctOn: []string{},
+	}
+
+	sql, args, err := dos.ToSql()
+	assert.NoError(t, err)
+	// Should NOT contain DISTINCT ON clause
+	assert.NotContains(t, sql, "DISTINCT ON")
+	assert.Contains(t, sql, "SELECT")
+	assert.Contains(t, sql, "FROM mytable")
+	assert.Empty(t, args)
+}
+
+func TestDistinctOnSqlizerToSqlInnerError(t *testing.T) {
+	// Test that distinctOnSqlizer propagates errors from inner query
+	// Use an empty SelectBuilder which will fail when ToSql is called
+	innerQuery := sq.SelectBuilder{}
+	dos := &distinctOnSqlizer{
+		inner:      innerQuery,
+		distinctOn: []string{"id"},
+	}
+
+	_, _, err := dos.ToSql()
+	// The error should be propagated from the inner query
+	assert.Error(t, err)
+}
+
+func TestRunAsQueryTxWithDistinctOnSqlizer(t *testing.T) {
+	// Test that RunAsQueryTx correctly handles distinctOnSqlizer
+	s, mdb := NewMockProvider().UTInit()
+	innerQuery := sq.Select("id", "name").From("mytable")
+	dos := &distinctOnSqlizer{
+		inner:      innerQuery,
+		distinctOn: []string{"name"},
+	}
+
+	mdb.ExpectQuery("SELECT DISTINCT ON \\(name\\) id, name FROM mytable").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow("1", "test"))
+
+	rows, tx, err := s.RunAsQueryTx(context.Background(), "mytable", nil, dos)
+	assert.NoError(t, err)
+	assert.NotNil(t, rows)
+	assert.Nil(t, tx) // No transaction passed, so tx should be nil
+	rows.Close()
+	assert.NoError(t, mdb.ExpectationsWereMet())
+}
+
+func TestRunAsQueryTxWithDistinctOnSqlizerInTransaction(t *testing.T) {
+	// Test that RunAsQueryTx correctly handles distinctOnSqlizer within a transaction
+	s, mdb := NewMockProvider().UTInit()
+	mdb.ExpectBegin()
+	ctx, tx, _, err := s.BeginOrUseTx(context.Background())
+	assert.NoError(t, err)
+
+	innerQuery := sq.Select("id", "name").From("mytable")
+	dos := &distinctOnSqlizer{
+		inner:      innerQuery,
+		distinctOn: []string{"name"},
+	}
+
+	mdb.ExpectQuery("SELECT DISTINCT ON \\(name\\) id, name FROM mytable").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name"}).AddRow("1", "test"))
+
+	rows, returnedTx, err := s.RunAsQueryTx(ctx, "mytable", tx, dos)
+	assert.NoError(t, err)
+	assert.NotNil(t, rows)
+	assert.Equal(t, tx, returnedTx) // Transaction should be returned
+	rows.Close()
+	assert.NoError(t, mdb.ExpectationsWereMet())
+}
+
+func TestRunAsQueryTxWithDistinctOnSqlizerBuildError(t *testing.T) {
+	// Test that RunAsQueryTx handles SQL build errors from distinctOnSqlizer
+	s, _ := NewMockProvider().UTInit()
+	innerQuery := sq.SelectBuilder{}
+	dos := &distinctOnSqlizer{
+		inner:      innerQuery,
+		distinctOn: []string{"id"},
+	}
+
+	_, _, err := s.RunAsQueryTx(context.Background(), "mytable", nil, dos)
+	assert.Error(t, err)
+	assert.Regexp(t, "FF00174", err) // DBQueryBuildFailed
 }

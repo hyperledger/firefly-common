@@ -1,4 +1,4 @@
-// Copyright © 2023 Kaleido, Inc.
+// Copyright © 2023 - 2026 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -112,6 +112,7 @@ var LinkableQueryFactory = &ffapi.QueryFields{
 	"id":      &ffapi.UUIDField{},
 	"created": &ffapi.TimeField{},
 	"updated": &ffapi.TimeField{},
+	"ns":      &ffapi.StringField{},
 	"crud":    &ffapi.UUIDField{},
 }
 
@@ -1524,4 +1525,165 @@ func TestCustomIDColumn(t *testing.T) {
 		},
 	}
 	tc.Validate()
+}
+
+// postgresMockProvider wraps MockProvider to return "postgres" as the name for DISTINCT ON testing
+type postgresMockProvider struct {
+	*MockProvider
+}
+
+func (p *postgresMockProvider) Name() string {
+	return "postgres"
+}
+
+func newPostgresMockProvider() (*postgresMockProvider, sqlmock.Sqlmock) {
+	mp := NewMockProvider()
+	pgmp := &postgresMockProvider{MockProvider: mp}
+	_ = pgmp.Database.Init(context.Background(), pgmp, pgmp.config)
+	return pgmp, pgmp.mdb
+}
+
+func TestGetManyWithDistinctOnPostgreSQL(t *testing.T) {
+	db, mock := newPostgresMockProvider()
+	tc := newCRUDCollection(&db.Database, "ns1")
+
+	// Test DISTINCT ON with a single field
+	filter := CRUDableQueryFactory.NewFilter(context.Background()).
+		DistinctOn("ns").
+		And()
+
+	// Expect query with DISTINCT ON
+	mock.ExpectQuery(`SELECT DISTINCT ON \(.*ns.*\)`).
+		WillReturnRows(sqlmock.NewRows([]string{"seq", "id", "created", "updated", "ns", "name", "field1", "field2", "field3", "field4", "field5", "field6"}).
+			AddRow(1, fftypes.NewUUID().String(), fftypes.Now().String(), fftypes.Now().String(), "ns1", "test", "test", nil, nil, nil, nil, nil))
+
+	results, _, err := tc.GetMany(context.Background(), filter)
+	assert.NoError(t, err)
+	assert.NotNil(t, results)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetManyWithDistinctOnMultipleFieldsPostgreSQL(t *testing.T) {
+	db, mock := newPostgresMockProvider()
+	tc := newCRUDCollection(&db.Database, "ns1")
+
+	// Test DISTINCT ON with multiple fields
+	filter := CRUDableQueryFactory.NewFilter(context.Background()).
+		DistinctOn("ns", "name").
+		And()
+
+	// Expect query with DISTINCT ON for multiple fields
+	mock.ExpectQuery(`SELECT DISTINCT ON \(.*ns.*name.*\)`).
+		WillReturnRows(sqlmock.NewRows([]string{"seq", "id", "created", "updated", "ns", "name", "field1", "field2", "field3", "field4", "field5", "field6"}).
+			AddRow(1, fftypes.NewUUID().String(), fftypes.Now().String(), fftypes.Now().String(), "ns1", "test", "test", nil, nil, nil, nil, nil))
+
+	results, _, err := tc.GetMany(context.Background(), filter)
+	assert.NoError(t, err)
+	assert.NotNil(t, results)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetManyWithDistinctOnAndReadTableAliasPostgreSQL(t *testing.T) {
+	db, mock := newPostgresMockProvider()
+	linkables := newLinkableCollection(&db.Database, "ns1")
+
+	// Test DISTINCT ON with ReadTableAlias
+	filter := LinkableQueryFactory.NewFilter(context.Background()).
+		DistinctOn("ns").
+		And()
+
+	// Expect query with DISTINCT ON using table alias
+	// The regex should match: SELECT DISTINCT ON (l.ns) ...
+	mock.ExpectQuery(`SELECT.*DISTINCT ON.*l\.ns`).
+		WillReturnRows(sqlmock.NewRows([]string{"seq", "id", "created", "updated", "ns", "desc", "crud_id", "c.field1", "c.field2", "c.field3"}).
+			AddRow(1, fftypes.NewUUID().String(), fftypes.Now().String(), fftypes.Now().String(), "ns1", "desc", nil, "", nil, nil))
+
+	results, _, err := linkables.GetMany(context.Background(), filter)
+	assert.NoError(t, err)
+	assert.NotNil(t, results)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetManyWithDistinctOnAndReadQueryModifierPostgreSQL(t *testing.T) {
+	db, mock := newPostgresMockProvider()
+	tc := newCRUDCollection(&db.Database, "ns1")
+
+	// Set up a ReadQueryModifier
+	tc.ReadQueryModifier = func(sb sq.SelectBuilder) (sq.SelectBuilder, error) {
+		return sb.Where(sq.Eq{"ns": "ns1"}), nil
+	}
+
+	// Test DISTINCT ON with ReadQueryModifier
+	filter := CRUDableQueryFactory.NewFilter(context.Background()).
+		DistinctOn("ns").
+		And()
+
+	// Expect query with DISTINCT ON - modifier should be applied to inner query before wrapping
+	mock.ExpectQuery(`SELECT DISTINCT ON \(.*ns.*\)`).
+		WillReturnRows(sqlmock.NewRows([]string{"seq", "id", "created", "updated", "ns", "name", "field1", "field2", "field3", "field4", "field5", "field6"}).
+			AddRow(1, fftypes.NewUUID().String(), fftypes.Now().String(), fftypes.Now().String(), "ns1", "test", "test", nil, nil, nil, nil, nil))
+
+	results, _, err := tc.GetMany(context.Background(), filter)
+	assert.NoError(t, err)
+	assert.NotNil(t, results)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetManyWithDistinctOnNonPostgreSQL(t *testing.T) {
+	// Test that DISTINCT ON throws an error for non-PostgreSQL databases
+	db, mock := NewMockProvider().UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+
+	// Test DISTINCT ON with non-postgres provider (should return error)
+	filter := CRUDableQueryFactory.NewFilter(context.Background()).
+		DistinctOn("ns").
+		And()
+
+	// Should return error, no query should be executed
+	_, _, err := tc.GetMany(context.Background(), filter)
+	assert.Error(t, err)
+	assert.Regexp(t, "FF00258", err)
+	assert.Contains(t, err.Error(), "DISTINCT ON is only supported for PostgreSQL")
+	assert.Contains(t, err.Error(), "mockdb")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetManyWithDistinctOnAndFilterFieldMapPostgreSQL(t *testing.T) {
+	db, mock := newPostgresMockProvider()
+	tc := newCRUDCollection(&db.Database, "ns1")
+
+	// Test DISTINCT ON with field mapping (f1 -> field1)
+	filter := CRUDableQueryFactory.NewFilter(context.Background()).
+		DistinctOn("f1").
+		And()
+
+	// Expect query with DISTINCT ON using mapped field name
+	mock.ExpectQuery(`SELECT DISTINCT ON \(.*field1.*\)`).
+		WillReturnRows(sqlmock.NewRows([]string{"seq", "id", "created", "updated", "ns", "name", "field1", "field2", "field3", "field4", "field5", "field6"}).
+			AddRow(1, fftypes.NewUUID().String(), fftypes.Now().String(), fftypes.Now().String(), "ns1", "test", "test", nil, nil, nil, nil, nil))
+
+	results, _, err := tc.GetMany(context.Background(), filter)
+	assert.NoError(t, err)
+	assert.NotNil(t, results)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetManyWithDistinctOnReadQueryModifierError(t *testing.T) {
+	db, mock := newPostgresMockProvider()
+	tc := newCRUDCollection(&db.Database, "ns1")
+
+	// Set up a ReadQueryModifier that returns an error
+	tc.ReadQueryModifier = func(sb sq.SelectBuilder) (sq.SelectBuilder, error) {
+		return sb, fmt.Errorf("modifier error")
+	}
+
+	// Test DISTINCT ON with ReadQueryModifier error
+	filter := CRUDableQueryFactory.NewFilter(context.Background()).
+		DistinctOn("ns").
+		And()
+
+	_, _, err := tc.GetMany(context.Background(), filter)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "modifier error")
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
