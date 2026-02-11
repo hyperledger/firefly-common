@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -62,6 +63,18 @@ type TestStruct2 struct {
 	String1  string           `ffstruct:"ut1" json:"string1"`
 	String2  string           `ffstruct:"ut1" json:"string2"`
 	JSONAny1 *fftypes.JSONAny `ffstruct:"ut1" json:"jsonAny1,omitempty"`
+}
+
+type TestOneOfA struct {
+	FieldA string `ffstruct:"TestOneOfA" json:"fieldA"`
+}
+
+type TestOneOfB struct {
+	FieldB int64 `ffstruct:"TestOneOfB" json:"fieldB"`
+}
+
+type TestOneOfHolder struct {
+	Value *fftypes.JSONAny `ffstruct:"TestOneOfHolder" json:"value,omitempty" ffoneof:"TestOneOfA,TestOneOfB"`
 }
 
 var ExampleDesc = i18n.FFM(language.AmericanEnglish, "TestKey", "Test Description")
@@ -577,4 +590,307 @@ func TestExcludeFromOpenAPI(t *testing.T) {
 	// Verify the document is valid
 	err := doc.Validate(context.Background())
 	assert.NoError(t, err)
+}
+
+func TestPanicOnUnresolvedOneOfsInInput(t *testing.T) {
+	routes := []*Route{
+		{
+			Name:            "opOneOf",
+			Path:            "oneof",
+			Method:          http.MethodPost,
+			Description:     ExampleDesc,
+			JSONInputValue:  func() interface{} { return &TestOneOfHolder{} },
+			JSONOutputCodes: []int{http.StatusOK},
+		},
+	}
+
+	assert.PanicsWithValue(t, "invalid schema: FF00258: ffoneof references unregistered schema: TestOneOfA", func() {
+		_ = NewSwaggerGen(&SwaggerGenOptions{
+			Title:                   "TestPanicOnUnresolvedOneOfsInInput",
+			Version:                 "1.0",
+			BaseURL:                 "http://localhost:12345/api/v1",
+			PanicOnUnresolvedOneOfs: true,
+		}).Generate(context.Background(), routes)
+	})
+}
+
+func TestPanicOnUnresolvedOneOfsInOutput(t *testing.T) {
+	routes := []*Route{
+		{
+			Name:            "opOneOf",
+			Path:            "oneof",
+			Method:          http.MethodPost,
+			Description:     ExampleDesc,
+			JSONOutputValue: func() interface{} { return &TestOneOfHolder{} },
+			JSONOutputCodes: []int{http.StatusOK},
+		},
+	}
+
+	assert.PanicsWithValue(t, "invalid schema: FF00258: ffoneof references unregistered schema: TestOneOfA", func() {
+		_ = NewSwaggerGen(&SwaggerGenOptions{
+			Title:                   "TestPanicOnUnresolvedOneOfsInOutput",
+			Version:                 "1.0",
+			BaseURL:                 "http://localhost:12345/api/v1",
+			PanicOnUnresolvedOneOfs: true,
+		}).Generate(context.Background(), routes)
+	})
+}
+
+func TestNoPanicOnUnresolvedOnOfs(t *testing.T) {
+	routes := []*Route{
+		{
+			Name:            "opOneOf",
+			Path:            "oneof",
+			Method:          http.MethodPost,
+			Description:     ExampleDesc,
+			JSONOutputValue: func() interface{} { return &TestOneOfHolder{} },
+			JSONInputValue:  func() interface{} { return &TestOneOfHolder{} },
+			JSONOutputCodes: []int{http.StatusOK},
+		},
+	}
+	doc := NewSwaggerGen(&SwaggerGenOptions{
+		Title:                   "TestNoPanicOnUnresolvedOnOfs",
+		Version:                 "1.0",
+		BaseURL:                 "http://localhost:12345/api/v1",
+		PanicOnUnresolvedOneOfs: false,
+	}).Generate(context.Background(), routes)
+	assert.NotNil(t, doc)
+
+	// however, we should get an error if we try to validate the document
+	loader := openapi3.NewLoader()
+	err := loader.ResolveRefsIn(doc, nil)
+	assert.Error(t, err)
+
+}
+
+func TestOneOfWithRegistrationOfStruct(t *testing.T) {
+	RegisterSchemaType("TestOneOfA", &TestOneOfA{})
+	RegisterSchemaType("TestOneOfB", &TestOneOfB{})
+	defer UnregisterSchemaType("TestOneOfA")
+	defer UnregisterSchemaType("TestOneOfB")
+
+	routes := []*Route{
+		{
+			Name:            "opOneOf",
+			Path:            "oneof",
+			Method:          http.MethodPost,
+			Description:     ExampleDesc,
+			JSONInputValue:  func() interface{} { return &TestOneOfHolder{} },
+			JSONOutputCodes: []int{http.StatusOK},
+		},
+	}
+
+	doc := NewSwaggerGen(&SwaggerGenOptions{
+		Title:   "TestOneOfWithStaticRegistrationOfStruct",
+		Version: "1.0",
+		BaseURL: "http://localhost:12345/api/v1",
+	}).Generate(context.Background(), routes)
+
+	b, err := yaml.Marshal(doc)
+	assert.NoError(t, err)
+	fmt.Print(string(b))
+
+	loader := openapi3.NewLoader()
+	err = loader.ResolveRefsIn(doc, nil)
+	assert.NoError(t, err)
+
+	err = doc.Validate(context.Background())
+	assert.NoError(t, err)
+
+	oneOfSchema := doc.Paths.Find("/oneof").Post.RequestBody.Value.Content.Get("application/json").Schema
+	require.NotNil(t, oneOfSchema)
+	require.NotNil(t, oneOfSchema.Value)
+	require.NotNil(t, oneOfSchema.Value.Properties)
+	require.NotNil(t, oneOfSchema.Value.Properties["value"])
+	require.NotNil(t, oneOfSchema.Value.Properties["value"].Value)
+	assert.Equal(t, 2, len(oneOfSchema.Value.Properties["value"].Value.OneOf))
+	assert.Equal(t, "#/components/schemas/TestOneOfA", oneOfSchema.Value.Properties["value"].Value.OneOf[0].Ref)
+	assert.Equal(t, "#/components/schemas/TestOneOfB", oneOfSchema.Value.Properties["value"].Value.OneOf[1].Ref)
+	assert.NotNil(t, doc.Components.Schemas["TestOneOfA"])
+	assert.NotNil(t, doc.Components.Schemas["TestOneOfB"])
+}
+
+func TestOneOfWithPostInjectionOfSchema(t *testing.T) {
+
+	routes := []*Route{
+		{
+			Name:            "opOneOf",
+			Path:            "oneof",
+			Method:          http.MethodPost,
+			Description:     ExampleDesc,
+			JSONInputValue:  func() interface{} { return &TestOneOfHolder{} },
+			JSONOutputCodes: []int{http.StatusOK},
+		},
+	}
+
+	doc := NewSwaggerGen(&SwaggerGenOptions{
+		Title:   "TestOneOfWithDynamicRegistrationOfSchema",
+		Version: "1.0",
+		BaseURL: "http://localhost:12345/api/v1",
+	}).Generate(context.Background(), routes)
+
+	// at this point the schema has unresolved oneof references to TestOneOfA and TestOneOfB
+	loader := openapi3.NewLoader()
+	err := loader.ResolveRefsIn(doc, nil)
+	assert.Error(t, err)
+
+	// Create a new Schema from a JSON string
+	aSchemaJSON := `{
+		"type": "object",
+		"properties": {
+			"type": { "type": "string" },
+			"fieldA": { "type": "string" }
+		},
+		"required": ["type", "fieldA"]
+	}`
+	var aSchema openapi3.Schema
+	err = aSchema.UnmarshalJSON([]byte(aSchemaJSON))
+	require.NoError(t, err)
+	doc.Components.Schemas["TestOneOfA"] = &openapi3.SchemaRef{
+		Value: &aSchema,
+	}
+
+	bSchemaJSON := `{
+		"type": "object",
+		"properties": {
+			"type": { "type": "string" },
+			"fieldB": { "type": "string" }
+		},
+		"required": ["type", "fieldB"]
+	}`
+	var bSchema openapi3.Schema
+	err = bSchema.UnmarshalJSON([]byte(bSchemaJSON))
+	require.NoError(t, err)
+	doc.Components.Schemas["TestOneOfB"] = &openapi3.SchemaRef{
+		Value: &bSchema,
+	}
+
+	loader = openapi3.NewLoader()
+	err = loader.ResolveRefsIn(doc, nil)
+	assert.NoError(t, err)
+
+	err = doc.Validate(context.Background())
+	assert.NoError(t, err)
+
+	oneOfSchema := doc.Paths.Find("/oneof").Post.RequestBody.Value.Content.Get("application/json").Schema
+	require.NotNil(t, oneOfSchema)
+	require.NotNil(t, oneOfSchema.Value)
+	require.NotNil(t, oneOfSchema.Value.Properties)
+	require.NotNil(t, oneOfSchema.Value.Properties["value"])
+	require.NotNil(t, oneOfSchema.Value.Properties["value"].Value)
+	assert.Equal(t, 2, len(oneOfSchema.Value.Properties["value"].Value.OneOf))
+	assert.Equal(t, "#/components/schemas/TestOneOfA", oneOfSchema.Value.Properties["value"].Value.OneOf[0].Ref)
+	assert.Equal(t, "#/components/schemas/TestOneOfB", oneOfSchema.Value.Properties["value"].Value.OneOf[1].Ref)
+	assert.NotNil(t, doc.Components.Schemas["TestOneOfA"])
+	assert.NotNil(t, doc.Components.Schemas["TestOneOfB"])
+}
+
+func TestSplitCSVEmpty(t *testing.T) {
+	assert.Nil(t, splitCSV(""))
+}
+
+func TestComponentNameFromRefEmpty(t *testing.T) {
+	assert.Equal(t, "", componentNameFromRef("   "))
+}
+
+func TestComponentNameFromRefNonComponentRef(t *testing.T) {
+	assert.Equal(t, "", componentNameFromRef("https://example.com/schemas/Foo"))
+	assert.Equal(t, "", componentNameFromRef("#/paths/Foo"))
+}
+
+func TestComponentNameFromRefComponentSchema(t *testing.T) {
+	assert.Equal(t, "MyType", componentNameFromRef("#/components/schemas/MyType"))
+}
+
+func TestApplyOneOfTagNoNames(t *testing.T) {
+	sg := &SwaggerGen{}
+	schema := &openapi3.Schema{}
+	componentsSchemas := openapi3.Schemas{}
+
+	err := sg.applyOneOfTag(context.Background(), reflect.StructTag(`ffoneof:"#/paths/Foo"`), componentsSchemas, schema)
+	assert.NoError(t, err)
+	assert.Nil(t, schema.OneOf)
+}
+
+func TestEnsureComponentAliasNilInputs(t *testing.T) {
+	sg := &SwaggerGen{}
+	sg.ensureComponentAlias(nil, "Any", &openapi3.SchemaRef{})
+	sg.ensureComponentAlias(openapi3.Schemas{}, "", &openapi3.SchemaRef{})
+	sg.ensureComponentAlias(openapi3.Schemas{}, "Any", nil)
+}
+
+func TestEnsureComponentAliasExistingName(t *testing.T) {
+	sg := &SwaggerGen{}
+	components := openapi3.Schemas{
+		"Existing": &openapi3.SchemaRef{Ref: "#/components/schemas/Existing"},
+	}
+
+	sg.ensureComponentAlias(components, "Existing", &openapi3.SchemaRef{Ref: "#/components/schemas/Other"})
+	assert.Equal(t, "#/components/schemas/Existing", components["Existing"].Ref)
+}
+
+func TestEnsureComponentAliasRef(t *testing.T) {
+	sg := &SwaggerGen{}
+	components := openapi3.Schemas{}
+
+	sg.ensureComponentAlias(components, "Alias", &openapi3.SchemaRef{Ref: "#/components/schemas/Target"})
+
+	require.NotNil(t, components["Alias"])
+	assert.Equal(t, "#/components/schemas/Target", components["Alias"].Ref)
+	assert.Nil(t, components["Alias"].Value)
+}
+
+func TestRegisterSchemaTypeEarlyReturn(t *testing.T) {
+	_, ok := getRegisteredSchemaType("TestRegisterSchemaTypeEarlyReturn")
+	require.False(t, ok)
+
+	RegisterSchemaType("", &TestStruct1{})
+	RegisterSchemaType("TestRegisterSchemaTypeEarlyReturn", nil)
+
+	_, ok = getRegisteredSchemaType("TestRegisterSchemaTypeEarlyReturn")
+	require.False(t, ok)
+}
+
+func TestUnregisterSchemaTypeEarlyReturn(t *testing.T) {
+	RegisterSchemaType("TestUnregisterSchemaTypeEarlyReturn", &TestStruct1{})
+	defer UnregisterSchemaType("TestUnregisterSchemaTypeEarlyReturn")
+
+	_, ok := getRegisteredSchemaType("TestUnregisterSchemaTypeEarlyReturn")
+	require.True(t, ok)
+
+	UnregisterSchemaType("")
+
+	_, ok = getRegisteredSchemaType("TestUnregisterSchemaTypeEarlyReturn")
+	require.True(t, ok)
+}
+
+func TestPanicIfRegisteredSchemaHasUnresolvedOneofs(t *testing.T) {
+	type ResolvableOneOf struct {
+		Field1 string `ffstruct:"ResolvableOneOf" json:"field1" ffoneof:"#/components/schemas/UnresolvableOneOf"`
+	}
+	RegisterSchemaType("ResolvableOneOf", &ResolvableOneOf{})
+	defer UnregisterSchemaType("ResolvableOneOf")
+	type UnresolvableOneOf struct {
+		Field1 string `ffstruct:"UnresolvableOneOf" json:"field1" ffoneof:"#/components/schemas/doesNotExist"`
+	}
+	RegisterSchemaType("UnresolvableOneOf", &UnresolvableOneOf{})
+	defer UnregisterSchemaType("UnresolvableOneOf")
+
+	assert.PanicsWithValue(t, "invalid schema registration for UnresolvableOneOf: FF00258: ffoneof references unregistered schema: doesNotExist", func() {
+		_ = NewSwaggerGen(&SwaggerGenOptions{
+			Title:                   "TestOneOfTags",
+			Version:                 "1.0",
+			BaseURL:                 "http://localhost:12345/api/v1",
+			PanicOnUnresolvedOneOfs: true,
+		}).Generate(context.Background(), []*Route{
+			{
+				Name:            "opOneOf",
+				Path:            "oneof",
+				Method:          http.MethodPost,
+				Description:     ExampleDesc,
+				JSONInputValue:  func() interface{} { return &ResolvableOneOf{} },
+				JSONOutputCodes: []int{http.StatusOK},
+			},
+		})
+	})
 }

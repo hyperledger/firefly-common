@@ -192,4 +192,5 @@ var (
 	MsgRoutePathNotStartWithSlash                  = ffe("FF00255", "Route path '%s' must not start with '/'")
 	MsgMethodNotAllowed                            = ffe("FF00256", "Method not allowed", http.StatusMethodNotAllowed)
 	MsgInvalidLogLevel                             = ffe("FF00257", "Invalid log level: '%s'", http.StatusBadRequest)
+	MsgFFOneOfReferencesUnregisteredSchema         = ffe("FF00258", "ffoneof references unregistered schema: %s", http.StatusBadRequest)
 )
