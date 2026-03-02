@@ -193,5 +193,7 @@ var (
 	MsgMethodNotAllowed                            = ffe("FF00256", "Method not allowed", http.StatusMethodNotAllowed)
 	MsgInvalidLogLevel                             = ffe("FF00257", "Invalid log level: '%s'", http.StatusBadRequest)
 	MsgFFExtensionsInvalid                         = ffe("FF00258", "Invalid extension '%s' - extensions must follow the format 'x-<name>=<value>'", http.StatusBadRequest)
-	MsgFFExtensionsKeyInvalid                      = ffe("FF00259", "Invalid extension key '%s' - extension keys must follow the format 'x-<name>'", http.StatusBadRequest)
+	MsgFFExtensionsInvalidKey                      = ffe("FF00259", "Invalid extension key '%s' - extension keys must follow the format 'x-<name>'", http.StatusBadRequest)
+	MsgFFExtensionsInvalidKeyEncoding              = ffe("FF00260", "Invalid extension key encoding '%s'", http.StatusBadRequest)
+	MsgFFExtensionsInvalidValueEncoding            = ffe("FF00261", "Invalid extension value encoding '%s' for key '%s'", http.StatusBadRequest)
 )

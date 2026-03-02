@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"reflect"
 	"regexp"
 	"sort"
@@ -192,16 +193,24 @@ func (sg *SwaggerGen) applyFFExtensionsTag(ctx context.Context, schema *openapi3
 	if tag == "" {
 		return nil
 	}
-	for _, extension := range strings.Split(tag, ",") {
+	for _, extension := range strings.Split(tag, "&") {
 		kv := strings.SplitN(strings.TrimSpace(extension), "=", 2)
 		if len(kv) != 2 {
 			return i18n.NewError(ctx, i18n.MsgFFExtensionsInvalid, extension)
 		}
-		key := strings.TrimSpace(kv[0])
-		if !ffExtensionKeyRegexp.MatchString(key) {
-			return i18n.NewError(ctx, i18n.MsgFFExtensionsKeyInvalid, key)
+		keyEnc := strings.TrimSpace(kv[0])
+		key, err := url.QueryUnescape(keyEnc)
+		if err != nil {
+			return i18n.NewError(ctx, i18n.MsgFFExtensionsInvalidKeyEncoding, keyEnc)
 		}
-		val := strings.TrimSpace(kv[1])
+		if !ffExtensionKeyRegexp.MatchString(key) {
+			return i18n.NewError(ctx, i18n.MsgFFExtensionsInvalidKey, key)
+		}
+		valEnc := strings.TrimSpace(kv[1])
+		val, err := url.QueryUnescape(valEnc)
+		if err != nil {
+			return i18n.NewError(ctx, i18n.MsgFFExtensionsInvalidValueEncoding, valEnc, key)
+		}
 		if schema.Extensions == nil {
 			schema.Extensions = make(map[string]interface{})
 		}
@@ -214,7 +223,7 @@ func (sg *SwaggerGen) ffTagHandler(ctx context.Context, route *Route, name strin
 	if ffEnum := tag.Get("ffenum"); ffEnum != "" {
 		schema.Enum = fftypes.FFEnumValues(ffEnum)
 	}
-	if ffExtensions := tag.Get("ffextensions"); ffExtensions != "" {
+	if ffExtensions := tag.Get("ffschemaext"); ffExtensions != "" {
 		if err := sg.applyFFExtensionsTag(ctx, schema, ffExtensions); err != nil {
 			return err
 		}
