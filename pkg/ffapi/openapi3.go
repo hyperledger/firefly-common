@@ -193,28 +193,20 @@ func (sg *SwaggerGen) applyFFExtensionsTag(ctx context.Context, schema *openapi3
 	if tag == "" {
 		return nil
 	}
-	for _, extension := range strings.Split(tag, "&") {
-		kv := strings.SplitN(strings.TrimSpace(extension), "=", 2)
-		if len(kv) != 2 {
-			return i18n.NewError(ctx, i18n.MsgFFExtensionsInvalid, extension)
+	q, err := url.ParseQuery(tag)
+	if err != nil {
+		return i18n.WrapError(ctx, err, i18n.MsgFFExtensionsInvalid, tag)
+	}
+	for extension, values := range q {
+		for _, value := range values {
+			if !ffExtensionKeyRegexp.MatchString(extension) {
+				return i18n.NewError(ctx, i18n.MsgFFExtensionsInvalidEncoding, extension)
+			}
+			if schema.Extensions == nil {
+				schema.Extensions = make(map[string]interface{})
+			}
+			schema.Extensions[extension] = value
 		}
-		keyEnc := strings.TrimSpace(kv[0])
-		key, err := url.QueryUnescape(keyEnc)
-		if err != nil {
-			return i18n.NewError(ctx, i18n.MsgFFExtensionsInvalidKeyEncoding, keyEnc)
-		}
-		if !ffExtensionKeyRegexp.MatchString(key) {
-			return i18n.NewError(ctx, i18n.MsgFFExtensionsInvalidKey, key)
-		}
-		valEnc := strings.TrimSpace(kv[1])
-		val, err := url.QueryUnescape(valEnc)
-		if err != nil {
-			return i18n.NewError(ctx, i18n.MsgFFExtensionsInvalidValueEncoding, valEnc, key)
-		}
-		if schema.Extensions == nil {
-			schema.Extensions = make(map[string]interface{})
-		}
-		schema.Extensions[key] = val
 	}
 	return nil
 }

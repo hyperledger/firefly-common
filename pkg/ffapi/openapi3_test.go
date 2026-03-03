@@ -66,27 +66,15 @@ type TestStruct2 struct {
 
 type TestExtensions struct {
 	String1 string `ffstruct:"ut1" json:"string1" ffschemaext:"x-key1=value1"`
-	String2 string `ffstruct:"ut1" json:"string2" ffschemaext:"x-key1=value1,x-key2=value2"`
+	String2 string `ffstruct:"ut1" json:"string2" ffschemaext:"x-key1=value1&x-key1=value2&x-key2=value2%26value3"`
 	String3 string `ffstruct:"ut1" json:"string3" ffschemaext:""`
 }
 
-type TestExtensionsBad1 struct {
-	String1 string `ffstruct:"ut1" json:"string1" ffschemaext:"x-key1"`
-}
-
-type TestExtensionsBad2 struct {
-	String1 string `ffstruct:"ut1" json:"string1" ffschemaext:"key1=value1,key2=value2"`
-}
-
-type TestExtensionsBad3 struct {
+type TestExtensionsBadKey struct {
 	String1 string `ffstruct:"ut1" json:"string1" ffschemaext:"x-=value1"`
 }
 
-type TestExtensionsBadKeyEncoding struct {
-	String1 string `ffstruct:"ut1" json:"string1" ffschemaext:"x-key%=value1"`
-}
-
-type TestExtensionsBadValueEncoding struct {
+type TestExtensionsBadEncoding struct {
 	String1 string `ffstruct:"ut1" json:"string1" ffschemaext:"x-key1=value1%"`
 }
 
@@ -617,19 +605,19 @@ func TestExcludeFromOpenAPI(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestExtensionsBad1Fail(t *testing.T) {
+func TestExtensionsBadEncodingFail(t *testing.T) {
 	routes := []*Route{
 		{
-			Name:           "bad1",
+			Name:           "badEncoding",
 			Path:           "extensions",
 			Method:         http.MethodGet,
 			JSONInputValue: func() interface{} { return nil },
-			JSONOutputValue: func() interface{} { return &TestExtensionsBad1{} },
+			JSONOutputValue: func() interface{} { return &TestExtensionsBadEncoding{} },
 			JSONOutputCodes: []int{http.StatusOK},
 		},
 	}
 
-	assert.PanicsWithValue(t, "invalid schema: FF00258: Invalid extension 'x-key1' - extensions must follow the format 'x-<name>=<value>'", func() {
+	assert.PanicsWithValue(t, "invalid schema: FF00258: Invalid extension 'x-key1=value1%' - extensions should be RFC 3986 compliant query parameter format (e.g. x-name=value with percent-encoding for special characters): invalid URL escape \"%\"", func() {
 		_ = NewSwaggerGen(&SwaggerGenOptions{
 			Title:   "UnitTest",
 			Version: "1.0",
@@ -638,82 +626,19 @@ func TestExtensionsBad1Fail(t *testing.T) {
 	})
 }
 
-func TestExtensionsBad2Fail(t *testing.T) {
-	routes := []*Route{
-		{
-			Name:           "bad2",
-			Path:           "extensions",
-			Method:         http.MethodGet,
-			JSONInputValue: func() interface{} { return nil },
-			JSONOutputValue: func() interface{} { return &TestExtensionsBad2{} },
-			JSONOutputCodes: []int{http.StatusOK},
-		},
-	}
-
-	assert.PanicsWithValue(t, "invalid schema: FF00259: Invalid extension key 'key1' - extension keys must follow the format 'x-<name>'", func() {
-		_ = NewSwaggerGen(&SwaggerGenOptions{
-			Title:   "UnitTest",
-			Version: "1.0",
-			BaseURL: "http://localhost:12345/api/v1",
-		}).Generate(context.Background(), routes)
-	})
-}
-
-func TestExtensionsBad3Fail(t *testing.T) {
+func TestExtensionsBadKeyFail(t *testing.T) {
 	routes := []*Route{
 		{
 			Name:           "bad3",
 			Path:           "extensions",
 			Method:         http.MethodGet,
 			JSONInputValue: func() interface{} { return nil },
-			JSONOutputValue: func() interface{} { return &TestExtensionsBad3{} },
+			JSONOutputValue: func() interface{} { return &TestExtensionsBadKey{} },
 			JSONOutputCodes: []int{http.StatusOK},
 		},
 	}
 
 	assert.PanicsWithValue(t, "invalid schema: FF00259: Invalid extension key 'x-' - extension keys must follow the format 'x-<name>'", func() {
-		_ = NewSwaggerGen(&SwaggerGenOptions{
-			Title:   "UnitTest",
-			Version: "1.0",
-			BaseURL: "http://localhost:12345/api/v1",
-		}).Generate(context.Background(), routes)
-	})
-}
-
-func TestExtensionsBadKeyEncodingFail(t *testing.T) {
-	routes := []*Route{
-		{
-			Name:           "badKeyEncoding",
-			Path:           "extensions",
-			Method:         http.MethodGet,
-			JSONInputValue: func() interface{} { return nil },
-			JSONOutputValue: func() interface{} { return &TestExtensionsBadKeyEncoding{} },
-			JSONOutputCodes: []int{http.StatusOK},
-		},
-	}
-
-	assert.PanicsWithValue(t, "invalid schema: FF00260: Invalid extension key encoding 'x-key%'", func() {
-		_ = NewSwaggerGen(&SwaggerGenOptions{
-			Title:   "UnitTest",
-			Version: "1.0",
-			BaseURL: "http://localhost:12345/api/v1",
-		}).Generate(context.Background(), routes)
-	})
-}
-
-func TestExtensionsBadValueEncodingFail(t *testing.T) {
-	routes := []*Route{
-		{
-			Name:           "badValueEncoding",
-			Path:           "extensions",
-			Method:         http.MethodGet,
-			JSONInputValue: func() interface{} { return nil },
-			JSONOutputValue: func() interface{} { return &TestExtensionsBadValueEncoding{} },
-			JSONOutputCodes: []int{http.StatusOK},
-		},
-	}
-
-	assert.PanicsWithValue(t, "invalid schema: FF00261: Invalid extension value encoding 'value1%' for key 'x-key1'", func() {
 		_ = NewSwaggerGen(&SwaggerGenOptions{
 			Title:   "UnitTest",
 			Version: "1.0",
