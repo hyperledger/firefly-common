@@ -1,4 +1,4 @@
-// Copyright © 2025 Kaleido, Inc.
+// Copyright © 2026 Kaleido, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
 //
@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/gorilla/mux"
@@ -65,6 +66,7 @@ type apiServer[T any] struct {
 	alwaysPaginate            bool
 	handleYAML                bool
 	monitoringEnabled         bool
+	goProcessMetricsEnabled   bool
 	metricsPath               string
 	livenessPath              string
 	loggingPath               string
@@ -116,15 +118,17 @@ func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APISe
 	}
 
 	as := &apiServer[T]{
-		defaultFilterLimit:        options.APIConfig.GetUint64(ConfAPIDefaultFilterLimit),
-		maxFilterLimit:            options.APIConfig.GetUint64(ConfAPIMaxFilterLimit),
-		maxFilterSkip:             options.APIConfig.GetUint64(ConfAPIMaxFilterSkip),
-		requestTimeout:            options.APIConfig.GetDuration(ConfAPIRequestTimeout),
-		requestMaxTimeout:         options.APIConfig.GetDuration(ConfAPIRequestMaxTimeout),
-		monitoringEnabled:         options.MonitoringConfig.GetBool(ConfMonitoringServerEnabled),
-		metricsPath:               options.MonitoringConfig.GetString(ConfMonitoringServerMetricsPath),
-		livenessPath:              options.MonitoringConfig.GetString(ConfMonitoringServerLivenessPath),
-		loggingPath:               options.MonitoringConfig.GetString(ConfMonitoringServerLoggingPath),
+		defaultFilterLimit:      options.APIConfig.GetUint64(ConfAPIDefaultFilterLimit),
+		maxFilterLimit:          options.APIConfig.GetUint64(ConfAPIMaxFilterLimit),
+		maxFilterSkip:           options.APIConfig.GetUint64(ConfAPIMaxFilterSkip),
+		requestTimeout:          options.APIConfig.GetDuration(ConfAPIRequestTimeout),
+		requestMaxTimeout:       options.APIConfig.GetDuration(ConfAPIRequestMaxTimeout),
+		monitoringEnabled:       options.MonitoringConfig.GetBool(ConfMonitoringServerEnabled),
+		goProcessMetricsEnabled: options.MonitoringConfig.GetBool(ConfMonitoringGoProcessMetricsEnabled),
+		metricsPath:             options.MonitoringConfig.GetString(ConfMonitoringServerMetricsPath),
+		livenessPath:            options.MonitoringConfig.GetString(ConfMonitoringServerLivenessPath),
+		loggingPath:             options.MonitoringConfig.GetString(ConfMonitoringServerLoggingPath),
+
 		alwaysPaginate:            options.APIConfig.GetBool(ConfAPIAlwaysPaginate),
 		handleYAML:                options.HandleYAML,
 		apiDynamicPublicURLHeader: options.APIConfig.GetString(ConfAPIDynamicPublicURLHeader),
@@ -306,6 +310,11 @@ func (as *apiServer[T]) createMuxRouter(ctx context.Context) (*mux.Router, error
 	}
 
 	if as.monitoringEnabled {
+		if as.goProcessMetricsEnabled {
+			as.MetricsRegistry.MustRegisterCollector(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+			as.MetricsRegistry.MustRegisterCollector(collectors.NewGoCollector())
+		}
+		as.MetricsRegistry.MustRegisterCollector(collectors.NewBuildInfoCollector())
 		h, _ := as.MetricsRegistry.GetHTTPMetricsInstrumentationsMiddlewareForSubsystem(ctx, as.metricsSubsystemName())
 		r.Use(h)
 	}
