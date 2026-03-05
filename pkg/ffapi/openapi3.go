@@ -82,12 +82,16 @@ var (
 )
 
 type SwaggerGen struct {
-	options *SwaggerGenOptions
+	options      *SwaggerGenOptions
+	ffTagHandler *OpenAPITagHandler
 }
 
 func NewSwaggerGen(options *SwaggerGenOptions) *SwaggerGen {
 	return &SwaggerGen{
 		options: options,
+		ffTagHandler: &OpenAPITagHandler{
+			PanicOnMissingDescription: options.PanicOnMissingDescription,
+		},
 	}
 }
 
@@ -164,12 +168,12 @@ func (sg *SwaggerGen) initInput(op *openapi3.Operation) {
 	}
 }
 
-func (sg *SwaggerGen) isTrue(str string) bool {
+func isTrue(str string) bool {
 	return strings.EqualFold(str, "true")
 }
 
 func (sg *SwaggerGen) ffInputTagHandler(ctx context.Context, route *Route, name string, tag reflect.StructTag, schema *openapi3.Schema) error {
-	if sg.isTrue(tag.Get("ffexcludeinput")) {
+	if isTrue(tag.Get("ffexcludeinput")) {
 		return &openapi3gen.ExcludeSchemaSentinel{}
 	}
 	if taggedRoutes, ok := tag.Lookup("ffexcludeinput"); ok {
@@ -179,17 +183,17 @@ func (sg *SwaggerGen) ffInputTagHandler(ctx context.Context, route *Route, name 
 			}
 		}
 	}
-	return sg.ffTagHandler(ctx, route, name, tag, schema)
+	return sg.ffTagHandler.HandleFFTags(ctx, route, name, tag, schema)
 }
 
 func (sg *SwaggerGen) ffOutputTagHandler(ctx context.Context, route *Route, name string, tag reflect.StructTag, schema *openapi3.Schema) error {
-	if sg.isTrue(tag.Get("ffexcludeoutput")) {
+	if isTrue(tag.Get("ffexcludeoutput")) {
 		return &openapi3gen.ExcludeSchemaSentinel{}
 	}
-	return sg.ffTagHandler(ctx, route, name, tag, schema)
+	return sg.ffTagHandler.HandleFFTags(ctx, route, name, tag, schema)
 }
 
-func (sg *SwaggerGen) applyFFExtensionsTag(ctx context.Context, schema *openapi3.Schema, tag string) error {
+func applyFFExtensionsTag(ctx context.Context, schema *openapi3.Schema, tag string) error {
 	if tag == "" {
 		return nil
 	}
@@ -211,16 +215,20 @@ func (sg *SwaggerGen) applyFFExtensionsTag(ctx context.Context, schema *openapi3
 	return nil
 }
 
-func (sg *SwaggerGen) ffTagHandler(ctx context.Context, route *Route, name string, tag reflect.StructTag, schema *openapi3.Schema) error {
+type OpenAPITagHandler struct {
+	PanicOnMissingDescription bool
+}
+
+func (th *OpenAPITagHandler) HandleFFTags(ctx context.Context, route *Route, name string, tag reflect.StructTag, schema *openapi3.Schema) error {
 	if ffEnum := tag.Get("ffenum"); ffEnum != "" {
 		schema.Enum = fftypes.FFEnumValues(ffEnum)
 	}
 	if ffExtensions := tag.Get("ffschemaext"); ffExtensions != "" {
-		if err := sg.applyFFExtensionsTag(ctx, schema, ffExtensions); err != nil {
+		if err := applyFFExtensionsTag(ctx, schema, ffExtensions); err != nil {
 			return err
 		}
 	}
-	if sg.isTrue(tag.Get("ffexclude")) {
+	if isTrue(tag.Get("ffexclude")) {
 		return &openapi3gen.ExcludeSchemaSentinel{}
 	}
 	if taggedRoutes, ok := tag.Lookup("ffexclude"); ok {
@@ -234,11 +242,11 @@ func (sg *SwaggerGen) ffTagHandler(ctx context.Context, route *Route, name strin
 		if structName, ok := tag.Lookup("ffstruct"); ok {
 			key := fmt.Sprintf("%s.%s", structName, name)
 			description := i18n.Expand(ctx, i18n.MessageKey(key))
-			if description == key && sg.options.PanicOnMissingDescription {
+			if description == key && th.PanicOnMissingDescription {
 				return i18n.NewError(ctx, i18n.MsgFieldDescriptionMissing, key, route.Name)
 			}
 			schema.Description = description
-		} else if sg.options.PanicOnMissingDescription {
+		} else if th.PanicOnMissingDescription {
 			return i18n.NewError(ctx, i18n.MsgFFStructTagMissing, name, route.Name)
 		}
 	}
@@ -351,11 +359,7 @@ func (sg *SwaggerGen) addURLEncodedFormInput(ctx context.Context, op *openapi3.O
 // CheckObjectDocumented lets unit tests on individual structures validate that all the ffstruct tags are set,
 // without having to build their own swagger.
 func CheckObjectDocumented(example interface{}) {
-	(&SwaggerGen{
-		options: &SwaggerGenOptions{
-			PanicOnMissingDescription: true,
-		},
-	}).Generate(context.Background(), []*Route{{
+	(NewSwaggerGen(&SwaggerGenOptions{PanicOnMissingDescription: true})).Generate(context.Background(), []*Route{{
 		Name:           "doctest",
 		Path:           "doctest",
 		Method:         http.MethodPost,
