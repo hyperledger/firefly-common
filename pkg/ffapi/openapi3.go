@@ -66,8 +66,9 @@ type SwaggerGenOptions struct {
 	RouteCustomizations func(ctx context.Context, sg *SwaggerGen, route *Route, op *openapi3.Operation)
 
 	// OpenAPI 3.0.x specific options
-	Tags         openapi3.Tags
-	ExternalDocs *openapi3.ExternalDocs
+	Tags                openapi3.Tags
+	ExternalDocs        *openapi3.ExternalDocs
+	ExportComponentOpts *openapi3gen.ExportComponentSchemasOptions
 }
 
 type BaseURLVariable struct {
@@ -277,23 +278,31 @@ func (sg *SwaggerGen) addCustomType(t reflect.Type, schema *openapi3.Schema) {
 	}
 }
 
+func (sg *SwaggerGen) schemaRefOptions(ctx context.Context, route *Route, tagHandler func(ctx context.Context, route *Route, name string, tag reflect.StructTag, schema *openapi3.Schema) error) []openapi3gen.Option {
+	schemaCustomizer := func(name string, t reflect.Type, tag reflect.StructTag, schema *openapi3.Schema) error {
+		sg.addCustomType(t, schema)
+		return tagHandler(ctx, route, name, tag, schema)
+	}
+	options := []openapi3gen.Option{openapi3gen.SchemaCustomizer(schemaCustomizer)}
+	if sg.options != nil && sg.options.ExportComponentOpts != nil {
+		options = append(options, openapi3gen.CreateComponentSchemas(*sg.options.ExportComponentOpts))
+	}
+	return options
+}
+
 func (sg *SwaggerGen) addInput(ctx context.Context, doc *openapi3.T, route *Route, op *openapi3.Operation) {
 	var schemaRef *openapi3.SchemaRef
 	var err error
-	schemaCustomizer := func(name string, t reflect.Type, tag reflect.StructTag, schema *openapi3.Schema) error {
-		sg.addCustomType(t, schema)
-		return sg.ffInputTagHandler(ctx, route, name, tag, schema)
-	}
 	switch {
 	case route.JSONInputSchema != nil:
 		schemaRef, err = route.JSONInputSchema(ctx, func(obj interface{}) (*openapi3.SchemaRef, error) {
-			return openapi3gen.NewSchemaRefForValue(obj, doc.Components.Schemas, openapi3gen.SchemaCustomizer(schemaCustomizer))
+			return openapi3gen.NewSchemaRefForValue(obj, doc.Components.Schemas, sg.schemaRefOptions(ctx, route, sg.ffInputTagHandler)...)
 		})
 		if err != nil {
 			panic(fmt.Sprintf("invalid schema: %s", err))
 		}
 	case route.JSONInputValue != nil:
-		schemaRef, err = openapi3gen.NewSchemaRefForValue(route.JSONInputValue(), doc.Components.Schemas, openapi3gen.SchemaCustomizer(schemaCustomizer))
+		schemaRef, err = openapi3gen.NewSchemaRefForValue(route.JSONInputValue(), doc.Components.Schemas, sg.schemaRefOptions(ctx, route, sg.ffInputTagHandler)...)
 		if err != nil {
 			panic(fmt.Sprintf("invalid schema: %s", err))
 		}
@@ -372,14 +381,10 @@ func (sg *SwaggerGen) addOutput(ctx context.Context, doc *openapi3.T, route *Rou
 	var schemaRef *openapi3.SchemaRef
 	var err error
 	s := i18n.Expand(ctx, i18n.APISuccessResponse)
-	schemaCustomizer := func(name string, t reflect.Type, tag reflect.StructTag, schema *openapi3.Schema) error {
-		sg.addCustomType(t, schema)
-		return sg.ffOutputTagHandler(ctx, route, name, tag, schema)
-	}
 	switch {
 	case route.JSONOutputSchema != nil:
 		schemaRef, err = route.JSONOutputSchema(ctx, func(obj interface{}) (*openapi3.SchemaRef, error) {
-			return openapi3gen.NewSchemaRefForValue(obj, doc.Components.Schemas, openapi3gen.SchemaCustomizer(schemaCustomizer))
+			return openapi3gen.NewSchemaRefForValue(obj, doc.Components.Schemas, sg.schemaRefOptions(ctx, route, sg.ffOutputTagHandler)...)
 		})
 		if err != nil {
 			panic(fmt.Sprintf("invalid schema: %s", err))
@@ -387,7 +392,7 @@ func (sg *SwaggerGen) addOutput(ctx context.Context, doc *openapi3.T, route *Rou
 	case route.JSONOutputValue != nil:
 		outputValue := route.JSONOutputValue()
 		if outputValue != nil {
-			schemaRef, err = openapi3gen.NewSchemaRefForValue(outputValue, doc.Components.Schemas, openapi3gen.SchemaCustomizer(schemaCustomizer))
+			schemaRef, err = openapi3gen.NewSchemaRefForValue(outputValue, doc.Components.Schemas, sg.schemaRefOptions(ctx, route, sg.ffOutputTagHandler)...)
 			if err != nil {
 				panic(fmt.Sprintf("invalid schema: %s", err))
 			}
