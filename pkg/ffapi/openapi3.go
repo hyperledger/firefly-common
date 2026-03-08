@@ -66,9 +66,10 @@ type SwaggerGenOptions struct {
 	RouteCustomizations func(ctx context.Context, sg *SwaggerGen, route *Route, op *openapi3.Operation)
 
 	// OpenAPI 3.0.x specific options
-	Tags                openapi3.Tags
-	ExternalDocs        *openapi3.ExternalDocs
-	ExportComponentOpts *openapi3gen.ExportComponentSchemasOptions
+	Tags                       openapi3.Tags
+	ExternalDocs               *openapi3.ExternalDocs
+	ExportComponentOpts        *openapi3gen.ExportComponentSchemasOptions
+	AdditionalSchemaCustomizer func(name string, t reflect.Type, tag reflect.StructTag, schema *openapi3.Schema) error
 }
 
 type BaseURLVariable struct {
@@ -281,7 +282,11 @@ func (sg *SwaggerGen) addCustomType(t reflect.Type, schema *openapi3.Schema) {
 func (sg *SwaggerGen) schemaRefOptions(ctx context.Context, route *Route, tagHandler func(ctx context.Context, route *Route, name string, tag reflect.StructTag, schema *openapi3.Schema) error) []openapi3gen.Option {
 	schemaCustomizer := func(name string, t reflect.Type, tag reflect.StructTag, schema *openapi3.Schema) error {
 		sg.addCustomType(t, schema)
-		return tagHandler(ctx, route, name, tag, schema)
+		err := tagHandler(ctx, route, name, tag, schema)
+		if err == nil && sg.options != nil && sg.options.AdditionalSchemaCustomizer != nil {
+			err = sg.options.AdditionalSchemaCustomizer(name, t, tag, schema)
+		}
+		return err
 	}
 	options := []openapi3gen.Option{openapi3gen.SchemaCustomizer(schemaCustomizer)}
 	if sg.options != nil && sg.options.ExportComponentOpts != nil {

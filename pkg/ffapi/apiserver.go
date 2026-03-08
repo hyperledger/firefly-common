@@ -22,9 +22,11 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"reflect"
 	"strings"
 	"time"
 
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3gen"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -78,22 +80,23 @@ type apiServer[T any] struct {
 }
 
 type APIServerOptions[T any] struct {
-	MetricsRegistry            metric.MetricsRegistry
-	MetricsSubsystemName       string
-	Routes                     []*Route // move to use VersionedAPIs for support of Tags and ExternalDocs
-	VersionedAPIs              *VersionedAPIs
-	MonitoringRoutes           []*Route
-	EnrichRequest              func(r *APIRequest) (T, error)
-	Description                string
-	APIConfig                  config.Section
-	MonitoringConfig           config.Section
-	CORSConfig                 config.Section
-	FavIcon16                  []byte
-	FavIcon32                  []byte
-	PanicOnMissingDescription  bool
-	SupportFieldRedaction      bool
-	HandleYAML                 bool
-	SwaggerExportComponentOpts *openapi3gen.ExportComponentSchemasOptions
+	MetricsRegistry                   metric.MetricsRegistry
+	MetricsSubsystemName              string
+	Routes                            []*Route // move to use VersionedAPIs for support of Tags and ExternalDocs
+	VersionedAPIs                     *VersionedAPIs
+	MonitoringRoutes                  []*Route
+	EnrichRequest                     func(r *APIRequest) (T, error)
+	Description                       string
+	APIConfig                         config.Section
+	MonitoringConfig                  config.Section
+	CORSConfig                        config.Section
+	FavIcon16                         []byte
+	FavIcon32                         []byte
+	PanicOnMissingDescription         bool
+	SupportFieldRedaction             bool
+	HandleYAML                        bool
+	SwaggerExportComponentOpts        *openapi3gen.ExportComponentSchemasOptions
+	SwaggerAdditionalSchemaCustomizer func(name string, t reflect.Type, tag reflect.StructTag, schema *openapi3.Schema) error
 }
 
 type VersionedAPIs struct {
@@ -134,12 +137,13 @@ func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APISe
 		APIServerOptions:          options,
 		started:                   make(chan struct{}),
 		baseSwaggerGenOptions: SwaggerGenOptions{
-			Title:                     options.Description,
-			Version:                   "1.0",
-			PanicOnMissingDescription: options.PanicOnMissingDescription,
-			DefaultRequestTimeout:     options.APIConfig.GetDuration(ConfAPIRequestTimeout),
-			SupportFieldRedaction:     options.SupportFieldRedaction,
-			ExportComponentOpts:       options.SwaggerExportComponentOpts,
+			Title:                      options.Description,
+			Version:                    "1.0",
+			PanicOnMissingDescription:  options.PanicOnMissingDescription,
+			DefaultRequestTimeout:      options.APIConfig.GetDuration(ConfAPIRequestTimeout),
+			SupportFieldRedaction:      options.SupportFieldRedaction,
+			ExportComponentOpts:        options.SwaggerExportComponentOpts,
+			AdditionalSchemaCustomizer: options.SwaggerAdditionalSchemaCustomizer,
 		},
 	}
 	if as.FavIcon16 == nil {
