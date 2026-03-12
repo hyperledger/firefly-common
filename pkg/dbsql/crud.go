@@ -148,12 +148,59 @@ type CrudBase[T Resource] struct {
 	ReadOnlyColumns   []string
 	ReadQueryModifier QueryModifier
 	AfterLoad         func(ctx context.Context, inst T) error // perform final validation/formatting after an instance is loaded from db
+
+	// FilterFieldOrColumns enables OR-expansion for filter fields that span multiple
+	// database columns (e.g. asset lookups that resolve through joined tables).
+	// When a filter operation targets one of these fields, the single condition is
+	// expanded into an OR across all listed columns, allowing the database to use
+	// individual column indexes instead of evaluating a COALESCE expression.
+	// The FilterFieldMap entry for the same field is still used for ORDER BY / GROUP BY.
+	FilterFieldOrColumns map[string][]string
 }
 
 func (c *CrudBase[T]) Scoped(scope sq.Eq) CRUD[T] {
 	cScoped := *c
 	cScoped.ScopedFilter = func() sq.Eq { return scope }
 	return &cScoped
+}
+
+// expandOrFields rewrites the finalized filter tree so that any leaf operation
+// on a field listed in FilterFieldOrColumns is replaced with an OR across all
+// the listed columns. This lets the database use per-column indexes instead of
+// evaluating a COALESCE/expression wrapper.
+func (c *CrudBase[T]) expandOrFields(fi *ffapi.FilterInfo) *ffapi.FilterInfo {
+	if len(c.FilterFieldOrColumns) == 0 || fi == nil {
+		return fi
+	}
+	return expandOrFieldsWalk(fi, c.FilterFieldOrColumns)
+}
+
+func expandOrFieldsWalk(fi *ffapi.FilterInfo, orMap map[string][]string) *ffapi.FilterInfo {
+	if fi.Op == ffapi.FilterOpAnd || fi.Op == ffapi.FilterOpOr {
+		newChildren := make([]*ffapi.FilterInfo, len(fi.Children))
+		for i, child := range fi.Children {
+			newChildren[i] = expandOrFieldsWalk(child, orMap)
+		}
+		expanded := *fi
+		expanded.Children = newChildren
+		return &expanded
+	}
+
+	cols, ok := orMap[fi.Field]
+	if !ok || len(cols) == 0 {
+		return fi
+	}
+
+	children := make([]*ffapi.FilterInfo, len(cols))
+	for i, col := range cols {
+		child := *fi
+		child.Field = col
+		children[i] = &child
+	}
+	return &ffapi.FilterInfo{
+		Op:       ffapi.FilterOpOr,
+		Children: children,
+	}
 }
 
 func (c *CrudBase[T]) TableAlias() string {
@@ -709,6 +756,7 @@ func (c *CrudBase[T]) GetMany(ctx context.Context, filter ffapi.Filter) (instanc
 	if err != nil {
 		return nil, nil, err
 	}
+	fi = c.expandOrFields(fi)
 	tableFrom, cols, readCols := c.getReadCols(fi)
 	var preconditions []sq.Sqlizer
 	if c.ScopedFilter != nil {
@@ -819,6 +867,7 @@ func (c *CrudBase[T]) Count(ctx context.Context, filter ffapi.Filter) (count int
 	var fop sq.Sqlizer
 	fi, err := filter.Finalize()
 	if err == nil {
+		fi = c.expandOrFields(fi)
 		fop, err = c.DB.filterOp(ctx, c.Table, fi, c.FilterFieldMap)
 	}
 	if err != nil {

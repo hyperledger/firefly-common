@@ -1525,3 +1525,69 @@ func TestCustomIDColumn(t *testing.T) {
 	}
 	tc.Validate()
 }
+
+func TestExpandOrFieldsLeafExpansion(t *testing.T) {
+	sf := (&ffapi.StringField{}).GetSerialization()
+	_ = sf.Scan("abc")
+
+	fi := &ffapi.FilterInfo{
+		Op:    ffapi.FilterOpEq,
+		Field: "asset",
+		Value: sf,
+	}
+	orMap := map[string][]string{
+		"asset": {"data.asset_id", "pools.asset", "nfts.asset"},
+	}
+	result := expandOrFieldsWalk(fi, orMap)
+	assert.Equal(t, ffapi.FilterOpOr, result.Op)
+	require.Len(t, result.Children, 3)
+	assert.Equal(t, "data.asset_id", result.Children[0].Field)
+	assert.Equal(t, "pools.asset", result.Children[1].Field)
+	assert.Equal(t, "nfts.asset", result.Children[2].Field)
+	for _, child := range result.Children {
+		assert.Equal(t, ffapi.FilterOpEq, child.Op)
+		v, _ := child.Value.Value()
+		assert.Equal(t, "abc", v)
+	}
+}
+
+func TestExpandOrFieldsInsideAnd(t *testing.T) {
+	sf1 := (&ffapi.StringField{}).GetSerialization()
+	_ = sf1.Scan("x")
+	sf2 := (&ffapi.StringField{}).GetSerialization()
+	_ = sf2.Scan("y")
+
+	fi := &ffapi.FilterInfo{
+		Op: ffapi.FilterOpAnd,
+		Children: []*ffapi.FilterInfo{
+			{Op: ffapi.FilterOpEq, Field: "asset", Value: sf1},
+			{Op: ffapi.FilterOpEq, Field: "name", Value: sf2},
+		},
+	}
+	orMap := map[string][]string{"asset": {"col1", "col2"}}
+	result := expandOrFieldsWalk(fi, orMap)
+	assert.Equal(t, ffapi.FilterOpAnd, result.Op)
+	require.Len(t, result.Children, 2)
+	assert.Equal(t, ffapi.FilterOpOr, result.Children[0].Op)
+	require.Len(t, result.Children[0].Children, 2)
+	assert.Equal(t, ffapi.FilterOpEq, result.Children[1].Op)
+	assert.Equal(t, "name", result.Children[1].Field)
+}
+
+func TestExpandOrFieldsNilAndEmpty(t *testing.T) {
+	crud := &CrudBase[*TestCRUDable]{}
+	assert.Nil(t, crud.expandOrFields(nil))
+
+	fi := &ffapi.FilterInfo{Op: ffapi.FilterOpEq, Field: "f1"}
+	assert.Same(t, fi, crud.expandOrFields(fi))
+}
+
+func TestExpandOrFieldsNoMatch(t *testing.T) {
+	sf := (&ffapi.StringField{}).GetSerialization()
+	_ = sf.Scan("z")
+
+	fi := &ffapi.FilterInfo{Op: ffapi.FilterOpEq, Field: "name", Value: sf}
+	orMap := map[string][]string{"asset": {"col1", "col2"}}
+	result := expandOrFieldsWalk(fi, orMap)
+	assert.Same(t, fi, result)
+}
