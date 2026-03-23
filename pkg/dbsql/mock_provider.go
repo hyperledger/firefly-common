@@ -40,6 +40,10 @@ type MockProvider struct {
 	mmg    *dbmigratemocks.Driver
 }
 
+type MockProviderConnScoped struct {
+	MockProvider
+}
+
 type MockProviderConfig struct {
 	FakePSQLInsert             bool
 	OpenError                  error
@@ -106,5 +110,9 @@ func (mp *MockProvider) Open(_ string) (*sql.DB, error) {
 }
 
 func (mp *MockProvider) GetMigrationDriver(_ *sql.DB) (migratedb.Driver, error) {
+	return mp.mmg, mp.GetMigrationDriverError
+}
+
+func (mp *MockProviderConnScoped) GetMigrationDriverConn(_ *sql.DB) (migratedb.Driver, error) {
 	return mp.mmg, mp.GetMigrationDriverError
 }
