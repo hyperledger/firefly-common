@@ -22,19 +22,17 @@ import (
 )
 
 var (
-	ConfMonitoringServerEnabled           = "enabled"
-	ConfMonitoringServerMetricsPath       = "metricsPath"
-	ConfMonitoringServerLivenessPath      = "livenessPath"
-	ConfMonitoringServerLoggingPath       = "loggingPath"
-	ConfMonitoringGoProcessMetricsEnabled = "goProcessMetricsEnabled"
-
-	ConfAPIDefaultFilterLimit     = "defaultFilterLimit"
-	ConfAPIMaxFilterLimit         = "maxFilterLimit"
-	ConfAPIMaxFilterSkip          = "maxFilterSkip"
-	ConfAPIRequestTimeout         = "requestTimeout"
-	ConfAPIRequestMaxTimeout      = "requestMaxTimeout"
-	ConfAPIAlwaysPaginate         = "alwaysPaginate"
-	ConfAPIDynamicPublicURLHeader = "dynamicPublicURLHeader"
+	ConfMonitoringServerEnabled      = "enabled"
+	ConfMonitoringServerMetricsPath  = "metricsPath"
+	ConfMonitoringServerLivenessPath = "livenessPath"
+	ConfMonitoringServerLoggingPath  = "loggingPath"
+	ConfAPIDefaultFilterLimit        = "defaultFilterLimit"
+	ConfAPIMaxFilterLimit            = "maxFilterLimit"
+	ConfAPIMaxFilterSkip             = "maxFilterSkip"
+	ConfAPIRequestTimeout            = "requestTimeout"
+	ConfAPIRequestMaxTimeout         = "requestMaxTimeout"
+	ConfAPIAlwaysPaginate            = "alwaysPaginate"
+	ConfAPIDynamicPublicURLHeader    = "dynamicPublicURLHeader"
 )
 
 func InitAPIServerConfig(apiConfig, monitoringConfig, corsConfig config.Section) {
@@ -51,7 +49,6 @@ func InitAPIServerConfig(apiConfig, monitoringConfig, corsConfig config.Section)
 
 	httpserver.InitHTTPConfig(monitoringConfig, 6000)
 	monitoringConfig.AddKnownKey(ConfMonitoringServerEnabled, true)
-	monitoringConfig.AddKnownKey(ConfMonitoringGoProcessMetricsEnabled, false)
 	monitoringConfig.AddKnownKey(ConfMonitoringServerMetricsPath, "/metrics")
 	monitoringConfig.AddKnownKey(ConfMonitoringServerLivenessPath, "/livez")
 	monitoringConfig.AddKnownKey(ConfMonitoringServerLoggingPath, "/logging")
