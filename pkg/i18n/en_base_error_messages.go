@@ -192,4 +192,5 @@ var (
 	MsgRoutePathNotStartWithSlash                  = ffe("FF00255", "Route path '%s' must not start with '/'")
 	MsgMethodNotAllowed                            = ffe("FF00256", "Method not allowed", http.StatusMethodNotAllowed)
 	MsgInvalidLogLevel                             = ffe("FF00257", "Invalid log level: '%s'", http.StatusBadRequest)
+	MsgDBFailedToExtractDBName                     = ffe("FF00258", "Failed to extract database name from PostgreSQL URL")
 )

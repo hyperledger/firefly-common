@@ -18,15 +18,74 @@ package dbsql
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
+	"github.com/hyperledger/firefly-common/mocks/metricmocks"
 	"github.com/hyperledger/firefly-common/pkg/metric"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
-func TestEnableMetrics(t *testing.T) {
-	ctx := context.TODO()
-	mp := NewMockProvider()
+func TestEnableDBMetrics(t *testing.T) {
+	defer func() { metricsRegistry = nil; metricsManager = nil }()
+
+	ctx := context.Background()
 	mr := metric.NewPrometheusMetricsRegistry("ut")
 
-	EnableDBMetrics(ctx, mr, mp.db, WithDBName("utdb"))
+	err := EnableDBMetrics(ctx, mr)
+	assert.NoError(t, err)
+
+	// second call is a no-op
+	err = EnableDBMetrics(ctx, mr)
+	assert.NoError(t, err)
+
+	// test error from NewMetricsManagerForSubsystem
+	metricsRegistry = nil
+	metricsManager = nil
+	mmr := metricmocks.NewMetricsRegistry(t)
+	mmr.On("NewMetricsManagerForSubsystem", mock.Anything, mock.Anything).Return(nil, errors.New("pop"))
+	err = EnableDBMetrics(ctx, mmr)
+	assert.Error(t, err)
+	assert.Regexp(t, "pop", err)
+	assert.Nil(t, metricsRegistry)
+	assert.Nil(t, metricsManager)
+}
+
+func TestObserveOpNoManager(t *testing.T) {
+	defer func() { metricsRegistry = nil; metricsManager = nil }()
+
+	db := &Database{dbName: "testdb"}
+	// should not panic when metricsManager is nil
+	db.observeOp(context.Background(), "things", "query", time.Millisecond)
+	db.incOpError(context.Background(), "things", "query")
+	db.observeTx(context.Background(), time.Millisecond, "commit")
+	db.observeMigration(context.Background(), time.Millisecond)
+}
+
+func TestObserveOpWithManager(t *testing.T) {
+	defer func() { metricsRegistry = nil; metricsManager = nil }()
+
+	ctx := context.Background()
+	mr := metric.NewPrometheusMetricsRegistry("ut_observe")
+	err := EnableDBMetrics(ctx, mr)
+	assert.NoError(t, err)
+
+	db := &Database{dbName: "testdb"}
+
+	db.observeOp(ctx, "things", "query", 10*time.Millisecond)
+	db.observeOp(ctx, "things", "insert", 5*time.Millisecond)
+	db.observeOp(ctx, "things", "update", 3*time.Millisecond)
+	db.observeOp(ctx, "things", "delete", 2*time.Millisecond)
+	db.observeOp(ctx, "things", "count", 1*time.Millisecond)
+	db.observeOp(ctx, "things", "exec", 1*time.Millisecond)
+
+	db.incOpError(ctx, "things", "query")
+	db.incOpError(ctx, "things", "insert")
+
+	db.observeTx(ctx, 50*time.Millisecond, "commit")
+	db.observeTx(ctx, 20*time.Millisecond, "rollback")
+
+	db.observeMigration(ctx, 100*time.Millisecond)
 }
