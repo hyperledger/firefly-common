@@ -416,7 +416,7 @@ type logSettingChange struct {
 	New      any `json:"new"`
 }
 
-func (as *apiServer[T]) loggingSettingsHandler(res http.ResponseWriter, req *http.Request) (status int, err error) {
+func LoggingSettingsHandler(res http.ResponseWriter, req *http.Request) (status int, err error) {
 	if req.Method != http.MethodPut {
 		return http.StatusMethodNotAllowed, i18n.NewError(req.Context(), i18n.MsgMethodNotAllowed)
 	}
@@ -467,7 +467,7 @@ func (as *apiServer[T]) createMonitoringMuxRouter(ctx context.Context) (*mux.Rou
 		panic(err)
 	}
 	r.Path(as.metricsPath).Handler(h)
-	r.Path(as.loggingPath).Handler(hf.APIWrapper(as.loggingSettingsHandler))
+	r.Path(as.loggingPath).Handler(hf.APIWrapper(LoggingSettingsHandler))
 	r.HandleFunc(as.livenessPath, as.noContentResponder)
 
 	for _, route := range as.MonitoringRoutes {
