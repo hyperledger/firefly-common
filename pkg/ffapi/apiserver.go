@@ -23,9 +23,12 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"reflect"
 	"strings"
 	"time"
 
+	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/getkin/kin-openapi/openapi3gen"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -72,26 +75,29 @@ type apiServer[T any] struct {
 	monitoringPublicURL       string
 	mux                       *mux.Router
 	oah                       *OpenAPIHandlerFactory
+	baseSwaggerGenOptions     SwaggerGenOptions
 
 	APIServerOptions[T]
 }
 
 type APIServerOptions[T any] struct {
-	MetricsRegistry           metric.MetricsRegistry
-	MetricsSubsystemName      string
-	Routes                    []*Route // move to use VersionedAPIs for support of Tags and ExternalDocs
-	VersionedAPIs             *VersionedAPIs
-	MonitoringRoutes          []*Route
-	EnrichRequest             func(r *APIRequest) (T, error)
-	Description               string
-	APIConfig                 config.Section
-	MonitoringConfig          config.Section
-	CORSConfig                config.Section
-	FavIcon16                 []byte
-	FavIcon32                 []byte
-	PanicOnMissingDescription bool
-	SupportFieldRedaction     bool
-	HandleYAML                bool
+	MetricsRegistry                   metric.MetricsRegistry
+	MetricsSubsystemName              string
+	Routes                            []*Route // move to use VersionedAPIs for support of Tags and ExternalDocs
+	VersionedAPIs                     *VersionedAPIs
+	MonitoringRoutes                  []*Route
+	EnrichRequest                     func(r *APIRequest) (T, error)
+	Description                       string
+	APIConfig                         config.Section
+	MonitoringConfig                  config.Section
+	CORSConfig                        config.Section
+	FavIcon16                         []byte
+	FavIcon32                         []byte
+	PanicOnMissingDescription         bool
+	SupportFieldRedaction             bool
+	HandleYAML                        bool
+	SwaggerExportComponentOpts        *openapi3gen.ExportComponentSchemasOptions
+	SwaggerAdditionalSchemaCustomizer func(name string, t reflect.Type, tag reflect.StructTag, schema *openapi3.Schema) error
 }
 
 type VersionedAPIs struct {
@@ -132,6 +138,15 @@ func NewAPIServer[T any](ctx context.Context, options APIServerOptions[T]) APISe
 		apiDynamicPublicURLHeader: options.APIConfig.GetString(ConfAPIDynamicPublicURLHeader),
 		APIServerOptions:          options,
 		started:                   make(chan struct{}),
+		baseSwaggerGenOptions: SwaggerGenOptions{
+			Title:                      options.Description,
+			Version:                    "1.0",
+			PanicOnMissingDescription:  options.PanicOnMissingDescription,
+			DefaultRequestTimeout:      options.APIConfig.GetDuration(ConfAPIRequestTimeout),
+			SupportFieldRedaction:      options.SupportFieldRedaction,
+			ExportComponentOpts:        options.SwaggerExportComponentOpts,
+			AdditionalSchemaCustomizer: options.SwaggerAdditionalSchemaCustomizer,
+		},
 	}
 	if as.FavIcon16 == nil {
 		as.FavIcon16 = ffLogo16
@@ -297,14 +312,8 @@ func (as *apiServer[T]) createMuxRouter(ctx context.Context) (*mux.Router, error
 	hf := as.handlerFactory(logrus.InfoLevel)
 
 	as.oah = &OpenAPIHandlerFactory{
-		BaseSwaggerGenOptions: SwaggerGenOptions{
-			Title:                     as.Description,
-			Version:                   "1.0",
-			PanicOnMissingDescription: as.PanicOnMissingDescription,
-			DefaultRequestTimeout:     as.requestTimeout,
-			SupportFieldRedaction:     as.SupportFieldRedaction,
-		},
-		StaticPublicURL: as.apiPublicURL, // this is most likely not yet set, we'll ensure its set later on
+		BaseSwaggerGenOptions: as.baseSwaggerGenOptions,
+		StaticPublicURL:       as.apiPublicURL, // this is most likely not yet set, we'll ensure its set later on
 	}
 
 	if as.monitoringEnabled {

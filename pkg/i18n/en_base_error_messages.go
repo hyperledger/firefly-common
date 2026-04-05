@@ -192,5 +192,10 @@ var (
 	MsgRoutePathNotStartWithSlash                  = ffe("FF00255", "Route path '%s' must not start with '/'")
 	MsgMethodNotAllowed                            = ffe("FF00256", "Method not allowed", http.StatusMethodNotAllowed)
 	MsgInvalidLogLevel                             = ffe("FF00257", "Invalid log level: '%s'", http.StatusBadRequest)
+<<<<<<< HEAD
 	MsgDBFailedToExtractDBName                     = ffe("FF00258", "Failed to extract database name from PostgreSQL URL")
+=======
+	MsgFFExtensionsInvalid                         = ffe("FF00258", "Invalid extension '%s' - extensions should be RFC 3986 compliant query parameter format (e.g. x-name=value with percent-encoding for special characters)", http.StatusBadRequest)
+	MsgFFExtensionsInvalidEncoding                 = ffe("FF00259", "Invalid extension key '%s' - extension keys must follow the format 'x-<name>'", http.StatusBadRequest)
+>>>>>>> 4dfd058ac87e999c155d22d9a77932f9488e573c
 )

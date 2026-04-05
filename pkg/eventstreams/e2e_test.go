@@ -35,6 +35,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/wsserver"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type testData struct {
@@ -106,7 +107,7 @@ func TestE2E_DeliveryWebSockets(t *testing.T) {
 	close(ts.started) // start delivery immediately - will block as no WS connected
 
 	mgr, err := NewEventStreamManager[*GenericEventStream, testData](ctx, GenerateConfig[*GenericEventStream, testData](ctx), p, wss, ts)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Create a stream to sub-select one topic
 	es1 := &GenericEventStream{
@@ -117,14 +118,14 @@ func TestE2E_DeliveryWebSockets(t *testing.T) {
 		},
 	}
 	created, err := mgr.UpsertStream(ctx, "stream1", es1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, created)
 
 	// Connect our websocket and start it
 	err = wsc.Connect()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = wsc.Send(ctx, []byte(`{"type":"start","stream":"stream1"}`))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	expectedNumber := 1
 	for i := 0; i < 10; i++ {
@@ -153,7 +154,7 @@ func TestE2E_DeliveryWebSocketsBroadcast(t *testing.T) {
 	close(ts.started) // start delivery immediately - will block as no WS connected
 
 	mgr, err := NewEventStreamManager[*GenericEventStream, testData](ctx, GenerateConfig[*GenericEventStream, testData](ctx), p, wss, ts)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Create a stream to sub-select one topic
 	es1 := &GenericEventStream{
@@ -167,21 +168,21 @@ func TestE2E_DeliveryWebSocketsBroadcast(t *testing.T) {
 		},
 	}
 	created, err := mgr.UpsertStream(ctx, "stream1", es1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, created)
 
 	// Connect our websocket and start it
 	err = wsc.Connect()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = wsc.Send(ctx, []byte(`{"type":"start","stream":"stream1"}`))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	expectedNumber := 1
 	for i := 0; i < 10; i++ {
 		data := <-wsc.Receive()
 		var batch EventBatch[testData]
 		err := json.Unmarshal(data, &batch)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		// each batch should be 10
 		assert.Len(t, batch.Events, 10)
 		for _, e := range batch.Events {
@@ -207,7 +208,7 @@ func TestE2E_DeliveryWebSocketsNack(t *testing.T) {
 	close(ts.started) // start delivery immediately - will block as no WS connected
 
 	mgr, err := NewEventStreamManager[*GenericEventStream, testData](ctx, GenerateConfig[*GenericEventStream, testData](ctx), p, wss, ts)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Create a stream to sub-select one topic
 	es1 := &GenericEventStream{
@@ -218,14 +219,14 @@ func TestE2E_DeliveryWebSocketsNack(t *testing.T) {
 		},
 	}
 	created, err := mgr.UpsertStream(ctx, "stream1", es1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, created)
 
 	// Connect our websocket and start it
 	err = wsc.Connect()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = wsc.Send(ctx, []byte(`{"type":"start","stream":"stream1"}`))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	for i := 0; i < 5; i++ {
 		wsReceiveNack(ctx, t, wsc, func(batch *EventBatch[testData]) {
@@ -253,7 +254,7 @@ func TestE2E_WebsocketDeliveryRestartReset(t *testing.T) {
 	close(ts.started) // start delivery immediately - will block as no WS connected
 
 	mgr, err := NewEventStreamManager[*GenericEventStream, testData](ctx, GenerateConfig[*GenericEventStream, testData](ctx), p, wss, ts)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Create a stream to sub-select one topic
 	es1 := &GenericEventStream{
@@ -264,14 +265,14 @@ func TestE2E_WebsocketDeliveryRestartReset(t *testing.T) {
 		},
 	}
 	created, err := mgr.UpsertStream(ctx, "stream1", es1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, created)
 
 	// Connect our websocket and start it
 	err = wsc.Connect()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = wsc.Send(ctx, []byte(`{"type":"start","stream":"stream1"}`))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Get the first batch
 	wsReceiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {})
@@ -283,23 +284,23 @@ func TestE2E_WebsocketDeliveryRestartReset(t *testing.T) {
 	for ess == nil || ess.Statistics == nil || ess.Statistics.Checkpoint == "" {
 		time.Sleep(1 * time.Millisecond)
 		ess, err = mgr.GetStreamByID(ctx, es1.GetID())
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}
 
 	// Restart and check we get called with the checkpoint - note we don't reconnect the
 	// websocket or restart that - it remains "started" from the websocket protocol
 	// perspective throughout
 	err = mgr.StopStream(ctx, es1.GetID())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = mgr.StartStream(ctx, es1.GetID())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	wsReceiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {})
 	assert.Equal(t, "000000000091", ts.sequenceStartedWith)
 	assert.Equal(t, 2, ts.startCount)
 
 	// Reset it and check we get the reset
 	err = mgr.ResetStream(ctx, es1.GetID(), ptrTo("first"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	wsReceiveAck(ctx, t, wsc, func(batch *EventBatch[testData]) {})
 	assert.Equal(t, "first", ts.sequenceStartedWith)
 	assert.Equal(t, 3, ts.startCount)
@@ -313,7 +314,7 @@ func TestE2E_ResetStreamWhileAwaitingAck(t *testing.T) {
 	close(ts.started) // start delivery immediately - will block as no WS connected
 
 	mgr, err := NewEventStreamManager[*GenericEventStream, testData](ctx, GenerateConfig[*GenericEventStream, testData](ctx), p, wss, ts)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Create a stream to sub-select one topic
 	es1 := &GenericEventStream{
@@ -324,29 +325,29 @@ func TestE2E_ResetStreamWhileAwaitingAck(t *testing.T) {
 		},
 	}
 	created, err := mgr.UpsertStream(ctx, "stream1", es1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, created)
 
 	// Connect our websocket and start it
 	err = wsc.Connect()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = wsc.Send(ctx, []byte(`{"type":"start","stream":"stream1"}`))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Receive the message batch
 	data := <-wsc.Receive()
 	var batch EventBatch[testData]
 	err = json.Unmarshal(data, &batch)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Do a reset before we ack.
 	err = mgr.ResetStream(ctx, "stream1", ptrTo("12345"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Should get the batch again
 	data = <-wsc.Receive()
 	err = json.Unmarshal(data, &batch)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check we did the reset
 	done()
@@ -362,7 +363,7 @@ func TestE2E_DeliveryWebHooks200(t *testing.T) {
 	close(ts.started) // start delivery immediately - will block as no WS connected
 
 	mgr, err := NewEventStreamManager[*GenericEventStream, testData](ctx, GenerateConfig[*GenericEventStream, testData](ctx), p, wss, ts)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	got100 := make(chan struct{})
 	var received int64
@@ -374,7 +375,7 @@ func TestE2E_DeliveryWebHooks200(t *testing.T) {
 
 		var batch EventBatch[testData]
 		err := json.NewDecoder(req.Body).Decode(&batch)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// each batch should be 10
 		assert.Len(t, batch.Events, 10)
@@ -410,14 +411,14 @@ func TestE2E_DeliveryWebHooks200(t *testing.T) {
 		},
 	}
 	created, err := mgr.UpsertStream(ctx, "stream1", es1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, created)
 
 	// Connect our websocket and start it
 	err = wsc.Connect()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = wsc.Send(ctx, []byte(`{"type":"start","stream":"stream1"}`))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check we ran the loop just once, and from the empty string for the checkpoint (as there was no InitialSequenceID)
 	<-got100
@@ -435,7 +436,7 @@ func TestE2E_DeliveryWebHooks500Retry(t *testing.T) {
 	close(ts.started) // start delivery immediately - will block as no WS connected
 
 	mgr, err := NewEventStreamManager[*GenericEventStream, testData](ctx, GenerateConfig[*GenericEventStream, testData](ctx), p, wss, ts)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	gotFiveTimes := make(chan struct{})
 	var received int64
@@ -446,7 +447,7 @@ func TestE2E_DeliveryWebHooks500Retry(t *testing.T) {
 
 		var batch EventBatch[testData]
 		err := json.NewDecoder(req.Body).Decode(&batch)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// We should get the same batch redelivered
 		expectedNumber := 1
@@ -482,14 +483,14 @@ func TestE2E_DeliveryWebHooks500Retry(t *testing.T) {
 		},
 	}
 	created, err := mgr.UpsertStream(ctx, "stream1", es1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, created)
 
 	// Connect our websocket and start it
 	err = wsc.Connect()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = wsc.Send(ctx, []byte(`{"type":"start","stream":"stream1"}`))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check we ran the loop just once, and from the empty string for the checkpoint (as there was no InitialSequenceID)
 	<-gotFiveTimes
@@ -507,7 +508,7 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 	}
 
 	mgr, err := NewEventStreamManager[*GenericEventStream, testData](ctx, GenerateConfig[*GenericEventStream, testData](ctx), p, wss, ts)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Create first event stream started
 	es1 := &GenericEventStream{
@@ -517,7 +518,7 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 		},
 	}
 	created, err := mgr.UpsertStream(ctx, "stream1", es1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, created)
 
 	// Create second event stream stopped
@@ -529,12 +530,12 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 		},
 	}
 	created, err = mgr.UpsertStream(ctx, "stream2", es2)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, created)
 
 	// Find the second one by topic filter
 	esList, _, err := mgr.ListStreams(ctx, GenericEventStreamFilters.NewFilter(ctx).Eq("topicfilter", "topic2"))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Len(t, esList, 1)
 	assert.Equal(t, "stream2", *esList[0].Name)
 	assert.Equal(t, "topic2", *esList[0].TopicFilter)
@@ -543,38 +544,38 @@ func TestE2E_CRUDLifecycle(t *testing.T) {
 
 	// Get the first by ID
 	es1c, err := mgr.GetStreamByID(ctx, es1.GetID(), dbsql.FailIfNotFound)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "stream1", *es1c.Name)
 	assert.Equal(t, EventStreamStatusStarted, *es1c.Status)
 
 	// Rename second event stream
 	es2.Name = ptrTo("stream2a")
 	created, err = mgr.UpsertStream(ctx, "" /* ID is in es2 object */, es2)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, created)
 
 	// Start and re-stop, then delete the second event stream
 	err = mgr.StartStream(ctx, es2.GetID())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	es2c, err := mgr.GetStreamByID(ctx, es2.GetID(), dbsql.FailIfNotFound)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, EventStreamStatusStarted, *es2c.Status)
 	assert.Equal(t, "stream2a", *es2c.Name)
 	err = mgr.StopStream(ctx, es2.GetID())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	es2c, err = mgr.GetStreamByID(ctx, es2.GetID(), dbsql.FailIfNotFound)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, EventStreamStatusStopped, *es2c.Status)
 	err = mgr.DeleteStream(ctx, es2.GetID())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Delete the first stream (which is running still)
 	err = mgr.DeleteStream(ctx, *es1.Name)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Check no streams left
 	esList, _, err = mgr.ListStreams(ctx, GenericEventStreamFilters.NewFilter(ctx).And())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Empty(t, esList)
 
 }
@@ -583,20 +584,20 @@ func wsReceiveAck(ctx context.Context, t *testing.T, wsc wsclient.WSClient, cb f
 	data := <-wsc.Receive()
 	var batch EventBatch[testData]
 	err := json.Unmarshal(data, &batch)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	cb(&batch)
 	err = wsc.Send(ctx, []byte(fmt.Sprintf(`{"type":"ack","stream":"stream1","batchNumber":%d}`, batch.BatchNumber)))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func wsReceiveNack(ctx context.Context, t *testing.T, wsc wsclient.WSClient, cb func(batch *EventBatch[testData])) {
 	data := <-wsc.Receive()
 	var batch EventBatch[testData]
 	err := json.Unmarshal(data, &batch)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	cb(&batch)
 	err = wsc.Send(ctx, []byte(fmt.Sprintf(`{"type":"nack","stream":"stream1","batchNumber":%d}`, batch.BatchNumber)))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func setupE2ETest(t *testing.T, extraSetup ...func()) (context.Context, Persistence[*GenericEventStream], wsserver.Protocol, wsclient.WSClient, func()) {
@@ -625,7 +626,7 @@ func setupE2ETest(t *testing.T, extraSetup ...func()) (context.Context, Persiste
 	}
 
 	db, err := dbsql.NewSQLiteProvider(ctx, dbConf)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	p := NewGenericEventStreamPersistence(db, dbsql.UUIDValidator)
 	p.EventStreams().Validate()

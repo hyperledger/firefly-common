@@ -64,6 +64,20 @@ type TestStruct2 struct {
 	JSONAny1 *fftypes.JSONAny `ffstruct:"ut1" json:"jsonAny1,omitempty"`
 }
 
+type TestExtensions struct {
+	String1 string `ffstruct:"ut1" json:"string1" ffschemaext:"x-key1=value1"`
+	String2 string `ffstruct:"ut1" json:"string2" ffschemaext:"x-key1=value1&x-key1=value2&x-key2=value2%26value3"`
+	String3 string `ffstruct:"ut1" json:"string3" ffschemaext:""`
+}
+
+type TestExtensionsBadKey struct {
+	String1 string `ffstruct:"ut1" json:"string1" ffschemaext:"x-=value1"`
+}
+
+type TestExtensionsBadEncoding struct {
+	String1 string `ffstruct:"ut1" json:"string1" ffschemaext:"x-key1=value1%"`
+}
+
 var ExampleDesc = i18n.FFM(language.AmericanEnglish, "TestKey", "Test Description")
 
 var example2TagName = "Example 2"
@@ -193,6 +207,18 @@ var testRoutes = []*Route{
 		},
 		Tag: example2TagName,
 	},
+	{
+		Name:       "op8",
+		Path:       "example8",
+		Method:     http.MethodGet,
+		PathParams: nil,
+		QueryParams: nil,
+		Description: ExampleDesc,
+		JSONInputValue: func() interface{} { return nil},
+		JSONOutputValue: func() interface{} { return &TestExtensions{} },
+		JSONOutputCodes: []int{http.StatusOK},
+	},
+
 }
 
 type TestInOutType struct {
@@ -577,4 +603,46 @@ func TestExcludeFromOpenAPI(t *testing.T) {
 	// Verify the document is valid
 	err := doc.Validate(context.Background())
 	assert.NoError(t, err)
+}
+
+func TestExtensionsBadEncodingFail(t *testing.T) {
+	routes := []*Route{
+		{
+			Name:           "badEncoding",
+			Path:           "extensions",
+			Method:         http.MethodGet,
+			JSONInputValue: func() interface{} { return nil },
+			JSONOutputValue: func() interface{} { return &TestExtensionsBadEncoding{} },
+			JSONOutputCodes: []int{http.StatusOK},
+		},
+	}
+
+	assert.PanicsWithValue(t, "invalid schema: FF00258: Invalid extension 'x-key1=value1%' - extensions should be RFC 3986 compliant query parameter format (e.g. x-name=value with percent-encoding for special characters): invalid URL escape \"%\"", func() {
+		_ = NewSwaggerGen(&SwaggerGenOptions{
+			Title:   "UnitTest",
+			Version: "1.0",
+			BaseURL: "http://localhost:12345/api/v1",
+		}).Generate(context.Background(), routes)
+	})
+}
+
+func TestExtensionsBadKeyFail(t *testing.T) {
+	routes := []*Route{
+		{
+			Name:           "bad3",
+			Path:           "extensions",
+			Method:         http.MethodGet,
+			JSONInputValue: func() interface{} { return nil },
+			JSONOutputValue: func() interface{} { return &TestExtensionsBadKey{} },
+			JSONOutputCodes: []int{http.StatusOK},
+		},
+	}
+
+	assert.PanicsWithValue(t, "invalid schema: FF00259: Invalid extension key 'x-' - extension keys must follow the format 'x-<name>'", func() {
+		_ = NewSwaggerGen(&SwaggerGenOptions{
+			Title:   "UnitTest",
+			Version: "1.0",
+			BaseURL: "http://localhost:12345/api/v1",
+		}).Generate(context.Background(), routes)
+	})
 }
