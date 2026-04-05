@@ -87,20 +87,20 @@ func TestGetPostgreSQLDatabaseName(t *testing.T) {
 
 	// No dbname in scheme URL — must error, not return host/user/password
 	_, err = GetPostgreSQLDatabaseName("postgres://user:password@host:5432")
-	assert.Regexp(t, "FF00258", err)
+	assert.Regexp(t, "FF00260", err)
 
 	_, err = GetPostgreSQLDatabaseName("postgres://user:password@host:5432/")
-	assert.Regexp(t, "FF00258", err)
+	assert.Regexp(t, "FF00260", err)
 
 	_, err = GetPostgreSQLDatabaseName("postgres://user:password@host:5432?sslmode=disable")
-	assert.Regexp(t, "FF00258", err)
+	assert.Regexp(t, "FF00260", err)
 
 	// No scheme — not a valid libpq URI
 	_, err = GetPostgreSQLDatabaseName("host:5432/dbname")
-	assert.Regexp(t, "FF00258", err)
+	assert.Regexp(t, "FF00260", err)
 
 	// Empty string
 	_, err = GetPostgreSQLDatabaseName("")
-	assert.Regexp(t, "FF00258", err)
+	assert.Regexp(t, "FF00260", err)
 
 }
