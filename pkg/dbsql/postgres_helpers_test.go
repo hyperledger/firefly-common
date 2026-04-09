@@ -60,4 +60,3 @@ func TestBuildPostgreSQLOptimizedUpsertFail(t *testing.T) {
 	assert.Regexp(t, "FF00247", err)
 
 }
-

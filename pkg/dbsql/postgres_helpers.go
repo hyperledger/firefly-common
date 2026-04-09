@@ -44,4 +44,3 @@ func BuildPostgreSQLOptimizedUpsert(ctx context.Context, table string, idColumn 
 	}
 	return insert.Suffix(fmt.Sprintf("ON CONFLICT (%s) DO UPDATE", idColumn)).SuffixExpr(sq.Expr(updateSQL, updateValues...)).Suffix("RETURNING " + returnCol), nil
 }
-
