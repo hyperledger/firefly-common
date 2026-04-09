@@ -52,7 +52,6 @@ type MockProviderConfig struct {
 	MultiRowInsert             bool
 	MaxPlaceholders            int
 	FakePSQLUpsertOptimization bool
-	FakePSQLArrayInsert        bool
 }
 
 func NewMockProvider() *MockProvider {
@@ -95,9 +94,6 @@ func (mp *MockProvider) Features() SQLFeatures {
 	}
 	features.MultiRowInsert = mp.MultiRowInsert
 	features.MaxPlaceholders = mp.MaxPlaceholders
-	if mp.FakePSQLArrayInsert {
-		features.ArrayInsertBuilder = BuildPostgreSQLArrayInsert
-	}
 	if mp.FakePSQLUpsertOptimization {
 		features.DBOptimizedUpsertBuilder = BuildPostgreSQLOptimizedUpsert
 	}

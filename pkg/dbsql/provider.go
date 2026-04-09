@@ -38,11 +38,6 @@ type SQLFeatures struct {
 	// When >0 and MultiRowInsert is true, InsertMany will chunk rows so that
 	// rows*columns never exceeds this limit. PostgreSQL's wire protocol limit is 65535.
 	MaxPlaceholders int
-	// ArrayInsertBuilder enables column-wise array-based bulk inserts (e.g. PostgreSQL UNNEST).
-	// When set, InsertMany prefers this over multi-row VALUES inserts.
-	// The builder receives column names and per-column value slices, and returns raw SQL + args.
-	// The returned SQL must include a RETURNING clause for the sequence column if sequences are needed.
-	ArrayInsertBuilder func(ctx context.Context, table string, columns []string, columnValues [][]interface{}, sequenceColumn string) (sql string, args []interface{}, err error)
 }
 
 func DefaultSQLProviderFeatures() SQLFeatures {

@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-	"time"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/hyperledger/firefly-common/pkg/ffapi"
@@ -497,11 +496,7 @@ func (c *CrudBase[T]) InsertMany(ctx context.Context, instances []T, allowPartia
 		return err
 	}
 	defer c.DB.RollbackTx(ctx, tx, autoCommit)
-	if c.DB.Features().ArrayInsertBuilder != nil {
-		if err := c.insertManyArray(ctx, tx, instances); err != nil {
-			return err
-		}
-	} else if c.DB.Features().MultiRowInsert {
+	if c.DB.Features().MultiRowInsert {
 		if err := c.insertManyMultiRow(ctx, tx, instances, allowPartialSuccess); err != nil {
 			return err
 		}
@@ -565,54 +560,6 @@ func (c *CrudBase[T]) insertManyMultiRow(ctx context.Context, tx *TXWrapper, ins
 	for i, seq := range allSequences {
 		c.attemptSetSequence(instances[i], seq)
 	}
-	return nil
-}
-
-func (c *CrudBase[T]) insertManyArray(ctx context.Context, tx *TXWrapper, instances []T) error {
-	l := log.L(ctx)
-	builder := c.DB.Features().ArrayInsertBuilder
-
-	columnValues := make([][]interface{}, len(c.Columns))
-	for i := range c.Columns {
-		columnValues[i] = make([]interface{}, len(instances))
-	}
-
-	for rowIdx, inst := range instances {
-		c.setInsertTimestamps(inst, fftypes.Now())
-		for colIdx, col := range c.Columns {
-			columnValues[colIdx][rowIdx] = c.getFieldValue(inst, col)
-		}
-	}
-
-	sqlQuery, args, err := builder(ctx, c.Table, c.Columns, columnValues, c.DB.SequenceColumn())
-	if err != nil {
-		return i18n.WrapError(ctx, err, i18n.MsgDBQueryBuildFailed)
-	}
-
-	before := time.Now()
-	l.Tracef(`SQL-> array insert: %s (args: %d arrays)`, sqlQuery, len(args))
-	rows, err := tx.sqlTX.QueryContext(ctx, sqlQuery, args...)
-	if err != nil {
-		l.Errorf(`SQL array insert failed: %s sql=[ %s ]: %s`, err, sqlQuery, err)
-		return i18n.WrapError(ctx, err, i18n.MsgDBInsertFailed)
-	}
-	defer rows.Close()
-
-	for i := 0; i < len(instances) && rows.Next(); i++ {
-		var seq int64
-		if err := rows.Scan(&seq); err != nil {
-			return i18n.WrapError(ctx, err, i18n.MsgDBReadErr, c.Table)
-		}
-		c.attemptSetSequence(instances[i], seq)
-	}
-
-	for _, inst := range instances {
-		if c.EventHandler != nil {
-			c.EventHandler(inst.GetID(), Created)
-		}
-	}
-
-	l.Debugf(`SQL<- array insert %s rows=%d (%.2fms)`, c.Table, len(instances), floatMillisSince(before))
 	return nil
 }
 
