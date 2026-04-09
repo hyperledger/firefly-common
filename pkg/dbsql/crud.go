@@ -521,9 +521,6 @@ func (c *CrudBase[T]) insertManyMultiRow(ctx context.Context, tx *TXWrapper, ins
 	chunkSize := len(instances)
 	if maxPlaceholders := c.DB.Features().MaxPlaceholders; maxPlaceholders > 0 && len(c.Columns) > 0 {
 		chunkSize = maxPlaceholders / len(c.Columns)
-		if chunkSize < 1 {
-			chunkSize = 1
-		}
 	}
 
 	allSequences := make([]int64, len(instances))
