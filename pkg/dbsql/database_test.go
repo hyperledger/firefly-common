@@ -78,6 +78,25 @@ func TestInitDatabaseFeatures(t *testing.T) {
 	assert.Equal(t, false, s.Features().MultiRowInsert)
 }
 
+func TestInitDatabaseMaxPlaceholdersConfig(t *testing.T) {
+	s := &Database{}
+	tp := NewMockProvider()
+	s.InitConfig(tp, tp.config)
+	tp.config.Set(SQLConfMaxPlaceholders, 1000)
+	err := s.Init(context.Background(), tp, tp.config)
+	assert.NoError(t, err)
+	assert.Equal(t, 1000, s.Features().MaxPlaceholders)
+}
+
+func TestInitDatabaseMaxPlaceholdersProviderDefault(t *testing.T) {
+	mp := NewMockProvider()
+	mp.MaxPlaceholders = 65535
+	mp.Database.InitConfig(mp, mp.config)
+	err := mp.Database.Init(context.Background(), mp, mp.config)
+	assert.NoError(t, err)
+	assert.Equal(t, 65535, mp.Database.Features().MaxPlaceholders)
+}
+
 func TestInitDatabaseOpenFailed(t *testing.T) {
 	mp := NewMockProvider()
 	mp.OpenError = fmt.Errorf("pop")

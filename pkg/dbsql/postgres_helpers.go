@@ -26,7 +26,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 )
 
-// PostgreSQL helper to avoid implementing this lots of times in child packages
+// BuildPostgreSQLOptimizedUpsert is a PostgreSQL helper to avoid implementing this lots of times in child packages
 func BuildPostgreSQLOptimizedUpsert(ctx context.Context, table string, idColumn string, insertCols, updateCols []string, returnCol string, values map[string]driver.Value) (insert sq.InsertBuilder, err error) {
 	insertValues := make([]interface{}, 0, len(insertCols))
 	for _, c := range insertCols {
@@ -43,5 +43,43 @@ func BuildPostgreSQLOptimizedUpsert(ctx context.Context, table string, idColumn 
 		return insert, i18n.NewError(ctx, i18n.MsgDBErrorBuildingStatement, err)
 	}
 	return insert.Suffix(fmt.Sprintf("ON CONFLICT (%s) DO UPDATE", idColumn)).SuffixExpr(sq.Expr(updateSQL, updateValues...)).Suffix("RETURNING " + returnCol), nil
+}
 
+// PostgreSQLArrayInsertBuilder returns an ArrayInsertBuilder for PostgreSQL using UNNEST.
+// wrapArray must convert a []interface{} into a driver-compatible array value
+// (e.g. pass pq.Array from lib/pq). For unit tests, pass a no-op wrapper.
+func PostgreSQLArrayInsertBuilder(wrapArray func([]interface{}) interface{}) func(ctx context.Context, table string, columns []string, columnValues [][]interface{}, sequenceColumn string) (string, []interface{}, error) {
+	return func(_ context.Context, table string, columns []string, columnValues [][]interface{}, sequenceColumn string) (string, []interface{}, error) {
+		unnests := make([]string, len(columns))
+		args := make([]interface{}, len(columns))
+		for i := range columns {
+			unnests[i] = fmt.Sprintf("UNNEST($%d)", i+1)
+			args[i] = wrapArray(columnValues[i])
+		}
+		sql := fmt.Sprintf(
+			"INSERT INTO %s (%s) SELECT %s RETURNING %s",
+			table,
+			strings.Join(columns, ", "),
+			strings.Join(unnests, ", "),
+			sequenceColumn,
+		)
+		return sql, args, nil
+	}
+}
+
+// mockArrayValue wraps a slice so database/sql treats it as a single driver.Value.
+type mockArrayValue struct {
+	values []interface{}
+}
+
+func (m mockArrayValue) Value() (driver.Value, error) {
+	return fmt.Sprintf("{%d values}", len(m.values)), nil
+}
+
+// BuildPostgreSQLArrayInsert is a convenience for tests that don't need real pq.Array wrapping.
+// It uses a mock driver.Valuer so sqlmock can accept the args.
+func BuildPostgreSQLArrayInsert(ctx context.Context, table string, columns []string, columnValues [][]interface{}, sequenceColumn string) (string, []interface{}, error) {
+	return PostgreSQLArrayInsertBuilder(func(vals []interface{}) interface{} {
+		return mockArrayValue{values: vals}
+	})(ctx, table, columns, columnValues, sequenceColumn)
 }

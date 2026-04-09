@@ -1013,6 +1013,157 @@ func TestInsertManyMultiRowFail(t *testing.T) {
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestInsertManyMultiRowChunkedOK(t *testing.T) {
+	mp := NewMockProvider()
+	mp.MultiRowInsert = true
+	mp.MaxPlaceholders = 22 // 11 columns per row, so 2 rows per chunk
+	db, mock := mp.UTInit()
+	db.FakePSQLInsert = true
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	// First chunk: 2 rows
+	mock.ExpectQuery(`INSERT INTO crudables.*VALUES \(.*\),\(.*\)`).WillReturnRows(
+		sqlmock.NewRows([]string{db.sequenceColumn}).
+			AddRow(101).
+			AddRow(102),
+	)
+	// Second chunk: 1 row
+	mock.ExpectQuery(`INSERT INTO crudables.*VALUES \(.*\)`).WillReturnRows(
+		sqlmock.NewRows([]string{db.sequenceColumn}).
+			AddRow(103),
+	)
+	mock.ExpectCommit()
+	err := tc.InsertMany(context.Background(), []*TestCRUDable{
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
+	}, false)
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestInsertManyMultiRowChunkedFailSecondChunk(t *testing.T) {
+	mp := NewMockProvider()
+	mp.MultiRowInsert = true
+	mp.MaxPlaceholders = 22
+	db, mock := mp.UTInit()
+	db.FakePSQLInsert = true
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectQuery(`INSERT INTO crudables.*VALUES \(.*\),\(.*\)`).WillReturnRows(
+		sqlmock.NewRows([]string{db.sequenceColumn}).
+			AddRow(101).
+			AddRow(102),
+	)
+	mock.ExpectQuery(`INSERT INTO crudables.*VALUES \(.*\)`).WillReturnError(fmt.Errorf("pop"))
+	err := tc.InsertMany(context.Background(), []*TestCRUDable{
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
+	}, false)
+	assert.Regexp(t, "FF00177", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestInsertManyMultiRowNoChunkingWhenUnderLimit(t *testing.T) {
+	mp := NewMockProvider()
+	mp.MultiRowInsert = true
+	mp.MaxPlaceholders = 100 // 11 columns * 2 rows = 22, well under 100
+	db, mock := mp.UTInit()
+	db.FakePSQLInsert = true
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectQuery(`INSERT INTO crudables.*VALUES \(.*\),\(.*\)`).WillReturnRows(
+		sqlmock.NewRows([]string{db.sequenceColumn}).
+			AddRow(201).
+			AddRow(202),
+	)
+	mock.ExpectCommit()
+	err := tc.InsertMany(context.Background(), []*TestCRUDable{
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
+	}, false)
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestInsertManyArrayInsertOK(t *testing.T) {
+	mp := NewMockProvider()
+	mp.FakePSQLArrayInsert = true
+	db, mock := mp.UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectQuery(`INSERT INTO crudables .* SELECT UNNEST.*RETURNING seq`).WillReturnRows(
+		sqlmock.NewRows([]string{db.sequenceColumn}).
+			AddRow(301).
+			AddRow(302),
+	)
+	mock.ExpectCommit()
+	err := tc.InsertMany(context.Background(), []*TestCRUDable{
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
+	}, false)
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestInsertManyArrayInsertFail(t *testing.T) {
+	mp := NewMockProvider()
+	mp.FakePSQLArrayInsert = true
+	db, mock := mp.UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectQuery(`INSERT INTO crudables .* SELECT UNNEST.*`).WillReturnError(fmt.Errorf("pop"))
+	err := tc.InsertMany(context.Background(), []*TestCRUDable{
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
+	}, false)
+	assert.Regexp(t, "FF00177", err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestInsertManyArrayInsertPrefersOverMultiRow(t *testing.T) {
+	mp := NewMockProvider()
+	mp.FakePSQLArrayInsert = true
+	mp.MultiRowInsert = true
+	db, mock := mp.UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	// Should use UNNEST, not multi-row VALUES
+	mock.ExpectQuery(`INSERT INTO crudables .* SELECT UNNEST.*RETURNING seq`).WillReturnRows(
+		sqlmock.NewRows([]string{db.sequenceColumn}).
+			AddRow(401),
+	)
+	mock.ExpectCommit()
+	err := tc.InsertMany(context.Background(), []*TestCRUDable{
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
+	}, false)
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestInsertManyArrayInsertWithEvents(t *testing.T) {
+	mp := NewMockProvider()
+	mp.FakePSQLArrayInsert = true
+	db, mock := mp.UTInit()
+	tc := newCRUDCollection(&db.Database, "ns1")
+	mock.ExpectBegin()
+	mock.ExpectQuery(`INSERT INTO crudables .* SELECT UNNEST.*RETURNING seq`).WillReturnRows(
+		sqlmock.NewRows([]string{db.sequenceColumn}).
+			AddRow(501).
+			AddRow(502),
+	)
+	mock.ExpectCommit()
+	err := tc.InsertMany(context.Background(), []*TestCRUDable{
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
+		{ResourceBase: ResourceBase{ID: fftypes.NewUUID()}},
+	}, false)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(tc.events))
+	assert.Equal(t, Created, tc.events[0])
+	assert.Equal(t, Created, tc.events[1])
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestInsertManyFallbackSingleRowFail(t *testing.T) {
 	db, mock := NewMockProvider().UTInit()
 	tc := newCRUDCollection(&db.Database, "ns1")

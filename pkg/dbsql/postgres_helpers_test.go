@@ -60,3 +60,47 @@ func TestBuildPostgreSQLOptimizedUpsertFail(t *testing.T) {
 	assert.Regexp(t, "FF00247", err)
 
 }
+
+func TestBuildPostgreSQLArrayInsert(t *testing.T) {
+	sqlStr, args, err := BuildPostgreSQLArrayInsert(
+		context.Background(),
+		"transfers",
+		[]string{"id", "sender", "amount"},
+		[][]interface{}{
+			{"id1", "id2"},
+			{"0xaaa", "0xbbb"},
+			{100, 200},
+		},
+		"seq",
+	)
+	assert.NoError(t, err)
+	assert.Equal(t, "INSERT INTO transfers (id, sender, amount) SELECT UNNEST($1), UNNEST($2), UNNEST($3) RETURNING seq", sqlStr)
+	assert.Len(t, args, 3)
+	// Args are mockArrayValue wrappers for database/sql compatibility
+	for _, arg := range args {
+		_, ok := arg.(mockArrayValue)
+		assert.True(t, ok, "expected mockArrayValue, got %T", arg)
+	}
+}
+
+func TestPostgreSQLArrayInsertBuilderWithCustomWrapper(t *testing.T) {
+	wrapCalled := 0
+	builder := PostgreSQLArrayInsertBuilder(func(vals []interface{}) interface{} {
+		wrapCalled++
+		return vals
+	})
+	sql, args, err := builder(
+		context.Background(),
+		"things",
+		[]string{"a", "b"},
+		[][]interface{}{
+			{1, 2, 3},
+			{"x", "y", "z"},
+		},
+		"seq",
+	)
+	assert.NoError(t, err)
+	assert.Equal(t, "INSERT INTO things (a, b) SELECT UNNEST($1), UNNEST($2) RETURNING seq", sql)
+	assert.Len(t, args, 2)
+	assert.Equal(t, 2, wrapCalled)
+}
