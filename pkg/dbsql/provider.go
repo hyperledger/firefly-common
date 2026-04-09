@@ -59,7 +59,7 @@ type Provider interface {
 	// Open creates the DB instances
 	Open(url string) (*sql.DB, error)
 
-	// GetDriver returns the driver implementation
+	// GetDriver returns the driver implementation - preferred if supported to implement GetMigrationDriverConn so the connection can be cleaned up (cleaning this driver up closes the whole DB)
 	GetMigrationDriver(*sql.DB) (migratedb.Driver, error)
 
 	// Features returns database specific configuration switches
@@ -67,4 +67,10 @@ type Provider interface {
 
 	// ApplyInsertQueryCustomizations updates the INSERT query for returning the Sequence, and returns whether it needs to be run as a query to return the Sequence field
 	ApplyInsertQueryCustomizations(insert sq.InsertBuilder, requestConflictEmptyResult bool) (updatedInsert sq.InsertBuilder, runAsQuery bool)
+}
+
+// Implementing this interface allows cleanup of the connection used during migration
+type ProviderCloseableMigrationDriver interface {
+	// Returns the driver implementation that is safe to close. Specifically this means the WithConnection() use in migration, rather than WithInstance().
+	GetMigrationDriverClosable(*sql.DB) (migratedb.Driver, error)
 }

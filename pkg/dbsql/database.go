@@ -30,6 +30,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/i18n"
 	"github.com/hyperledger/firefly-common/pkg/log"
 
+	"github.com/golang-migrate/migrate/v4/database"
 	// Import migrate file source
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
@@ -139,8 +140,17 @@ func (s *Database) RunAsGroup(ctx context.Context, fn func(ctx context.Context) 
 	return s.CommitTx(ctx, tx, false /* we _are_ the auto-committer */)
 }
 
-func (s *Database) applyDBMigrations(ctx context.Context, config config.Section, provider Provider) error {
-	driver, err := provider.GetMigrationDriver(s.db)
+func (s *Database) applyDBMigrations(ctx context.Context, config config.Section, provider Provider) (err error) {
+	var driver database.Driver
+	providerClosable, isClosable := provider.(ProviderCloseableMigrationDriver)
+	if isClosable {
+		driver, err = providerClosable.GetMigrationDriverClosable(s.db)
+		defer func() {
+			_ = driver.Close()
+		}()
+	} else {
+		driver, err = provider.GetMigrationDriver(s.db)
+	}
 	if err == nil {
 		fileURL := "file://" + config.GetString(SQLConfMigrationsDirectory)
 		log.L(ctx).Infof("Running migrations in: %s", fileURL)
@@ -184,7 +194,7 @@ func (s *Database) BeginOrUseTx(ctx context.Context) (ctx1 context.Context, tx *
 	ctx1 = log.WithLogger(ctx, l)
 	before := time.Now()
 	l.Tracef("SQL-> begin")
-	sqlTX, err := s.db.Begin()
+	sqlTX, err := s.db.BeginTx(ctx /* transaction should auto-rollback on context cancel */, nil /* default options */)
 	if err != nil {
 		return ctx1, nil, false, i18n.WrapError(ctx1, err, i18n.MsgDBBeginFailed)
 	}
