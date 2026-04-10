@@ -37,8 +37,6 @@ const (
 	SQLConfMaxIdleConns = "maxIdleConns"
 	// SQLConfMaxConnLifetime maximum connections to the database
 	SQLConfMaxConnLifetime = "maxConnLifetime"
-	// SQLConfMaxPlaceholders overrides the provider's max SQL placeholders per statement (0 = use provider default)
-	SQLConfMaxPlaceholders = "maxPlaceholders"
 )
 
 const (
@@ -53,5 +51,4 @@ func (s *Database) InitConfig(provider Provider, config config.Section) {
 	config.AddKnownKey(SQLConfMaxConnIdleTime, "1m")
 	config.AddKnownKey(SQLConfMaxIdleConns) // defaults to the max connections
 	config.AddKnownKey(SQLConfMaxConnLifetime)
-	config.AddKnownKey(SQLConfMaxPlaceholders) // overrides provider default for max SQL placeholders
 }

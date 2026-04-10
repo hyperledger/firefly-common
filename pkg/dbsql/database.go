@@ -80,10 +80,6 @@ func (s *Database) Init(ctx context.Context, provider Provider, config config.Se
 	s.features = s.provider.Features()
 	s.sequenceColumn = s.provider.SequenceColumn()
 
-	if maxPlaceholders := config.GetInt(SQLConfMaxPlaceholders); maxPlaceholders > 0 {
-		s.features.MaxPlaceholders = maxPlaceholders
-	}
-
 	if config.GetString(SQLConfDatasourceURL) == "" {
 		return i18n.NewError(ctx, i18n.MsgMissingConfig, "url", fmt.Sprintf("database.%s", s.provider.Name()))
 	}
