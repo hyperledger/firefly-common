@@ -50,6 +50,7 @@ type MockProviderConfig struct {
 	GetMigrationDriverError    error
 	IndividualSort             bool
 	MultiRowInsert             bool
+	MaxPlaceholders            int
 	FakePSQLUpsertOptimization bool
 }
 
@@ -92,6 +93,7 @@ func (mp *MockProvider) Features() SQLFeatures {
 		return fmt.Sprintf(`<acquire lock %s>`, lockName)
 	}
 	features.MultiRowInsert = mp.MultiRowInsert
+	features.MaxPlaceholders = mp.MaxPlaceholders
 	if mp.FakePSQLUpsertOptimization {
 		features.DBOptimizedUpsertBuilder = BuildPostgreSQLOptimizedUpsert
 	}
