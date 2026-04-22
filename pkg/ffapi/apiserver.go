@@ -53,6 +53,7 @@ type APIServer interface {
 	Started() <-chan struct{}
 	MuxRouter(ctx context.Context) (*mux.Router, error)
 	APIPublicURL() string // valid to call after server is successfully started
+	MonitoringPublicURL() string
 }
 
 type apiServer[T any] struct {
