@@ -208,17 +208,16 @@ var testRoutes = []*Route{
 		Tag: example2TagName,
 	},
 	{
-		Name:       "op8",
-		Path:       "example8",
-		Method:     http.MethodGet,
-		PathParams: nil,
-		QueryParams: nil,
-		Description: ExampleDesc,
-		JSONInputValue: func() interface{} { return nil},
+		Name:            "op8",
+		Path:            "example8",
+		Method:          http.MethodGet,
+		PathParams:      nil,
+		QueryParams:     nil,
+		Description:     ExampleDesc,
+		JSONInputValue:  func() interface{} { return nil },
 		JSONOutputValue: func() interface{} { return &TestExtensions{} },
 		JSONOutputCodes: []int{http.StatusOK},
 	},
-
 }
 
 type TestInOutType struct {
@@ -608,10 +607,10 @@ func TestExcludeFromOpenAPI(t *testing.T) {
 func TestExtensionsBadEncodingFail(t *testing.T) {
 	routes := []*Route{
 		{
-			Name:           "badEncoding",
-			Path:           "extensions",
-			Method:         http.MethodGet,
-			JSONInputValue: func() interface{} { return nil },
+			Name:            "badEncoding",
+			Path:            "extensions",
+			Method:          http.MethodGet,
+			JSONInputValue:  func() interface{} { return nil },
 			JSONOutputValue: func() interface{} { return &TestExtensionsBadEncoding{} },
 			JSONOutputCodes: []int{http.StatusOK},
 		},
@@ -629,10 +628,10 @@ func TestExtensionsBadEncodingFail(t *testing.T) {
 func TestExtensionsBadKeyFail(t *testing.T) {
 	routes := []*Route{
 		{
-			Name:           "bad3",
-			Path:           "extensions",
-			Method:         http.MethodGet,
-			JSONInputValue: func() interface{} { return nil },
+			Name:            "bad3",
+			Path:            "extensions",
+			Method:          http.MethodGet,
+			JSONInputValue:  func() interface{} { return nil },
 			JSONOutputValue: func() interface{} { return &TestExtensionsBadKey{} },
 			JSONOutputCodes: []int{http.StatusOK},
 		},
@@ -645,4 +644,16 @@ func TestExtensionsBadKeyFail(t *testing.T) {
 			BaseURL: "http://localhost:12345/api/v1",
 		}).Generate(context.Background(), routes)
 	})
+}
+
+func TestOpenAPIVersion(t *testing.T) {
+	doc := NewSwaggerGen(&SwaggerGenOptions{
+		Title:          "UnitTest",
+		Version:        "1.0",
+		OpenAPIVersion: "3.1.1",
+		BaseURL:        "http://localhost:12345/api/v1",
+	}).Generate(context.Background(), testRoutes)
+	err := doc.Validate(context.Background())
+	assert.NoError(t, err)
+	assert.Equal(t, "3.1.1", doc.OpenAPI)
 }

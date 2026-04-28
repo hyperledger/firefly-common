@@ -44,6 +44,8 @@ type SwaggerGenOptions struct {
 	Version     string
 	Description string
 
+	OpenAPIVersion string
+
 	// descriptions for the route parameters are parsed from the ffstruct tags
 	// when set this flag to true, if a description is not found, the generator will panic
 	// this is useful to ensure that all fields are documented
@@ -113,8 +115,13 @@ func (sg *SwaggerGen) Generate(ctx context.Context, routes []*Route) *openapi3.T
 		}
 	}
 
+	openAPIVersion := "3.0.2"
+	if sg.options.OpenAPIVersion != "" {
+		openAPIVersion = sg.options.OpenAPIVersion
+	}
+
 	doc := &openapi3.T{
-		OpenAPI: "3.0.2",
+		OpenAPI: openAPIVersion,
 		Servers: openapi3.Servers{
 			server,
 		},
