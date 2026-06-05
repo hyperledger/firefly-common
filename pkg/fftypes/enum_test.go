@@ -73,4 +73,10 @@ func TestFFEnumParseString(t *testing.T) {
 	v, err = FFEnumParseString(ctx, "ut", "foobar")
 	assert.Regexp(t, "FF00172", err)
 	assert.Empty(t, v)
+
+	mixed := FFEnumValue("ut_mixed", "Test_Enum_Mixed")
+	v, err = FFEnumParseString(ctx, "ut_mixed", "test_enum_mixed")
+	assert.NoError(t, err)
+	assert.Equal(t, FFEnum("test_enum_mixed"), v)
+	assert.Equal(t, mixed.Lower(), v)
 }

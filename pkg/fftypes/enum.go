@@ -74,8 +74,12 @@ func FFEnumParseString(ctx context.Context, t, val string) (FFEnum, error) {
 		return "", i18n.NewError(ctx, i18n.MsgInvalidEnum, t)
 	}
 	for _, possible := range e {
-		if possible == strings.ToLower(val) {
-			return FFEnum(strings.ToLower(val)), nil
+		possibleStr, ok := possible.(string)
+		if !ok {
+			continue
+		}
+		if strings.EqualFold(possibleStr, val) {
+			return FFEnum(strings.ToLower(possibleStr)), nil
 		}
 	}
 	return "", i18n.NewError(ctx, i18n.MsgInvalidEnumValue, val, t, e)
