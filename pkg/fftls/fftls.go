@@ -226,6 +226,11 @@ func recordCACertExpiryMetrics(ctx context.Context, pemBytes []byte) {
 
 // recordLeafCertExpiryMetric records the expiry gauge for the leaf certificate of a configured key
 // pair - using the client gauge for ClientType TLS and the server gauge for ServerType TLS.
+//
+// The configured cert/key may be a bundle (leaf followed by its intermediate chain). crypto/tls
+// guarantees the leaf is first: X509KeyPair/LoadX509KeyPair require Certificate[0] to be the
+// certificate that matches the private key, so we record the expiry of Certificate[0] - never an
+// intermediate from the chain.
 func recordLeafCertExpiryMetric(ctx context.Context, cert *tls.Certificate, tlsType TLSType) {
 	if certMetricsManager == nil || len(cert.Certificate) == 0 {
 		return
