@@ -81,6 +81,10 @@ const (
 	// HTTPMaxIdleConnsPerHost the max number of idle connections per host
 	HTTPMaxIdleConnsPerHost = "maxIdleConnsPerHost"
 
+	// HTTPDNSServers an optional list of DNS server addresses (host or host:port, port defaults to 53) to use for
+	// name resolution. Setting this forces use of Go's built-in DNS resolver rather than the system resolver.
+	HTTPDNSServers = "dnsServers"
+
 	// HTTPConnectionTimeout the connection timeout for new connections
 	HTTPConnectionTimeout = "connectionTimeout"
 	// HTTPTLSHandshakeTimeout the TLS handshake connection timeout
@@ -112,6 +116,7 @@ func InitConfig(conf config.Section) {
 	conf.AddKnownKey(HTTPMaxIdleConns, defaultHTTPMaxIdleConns)
 	conf.AddKnownKey(HTTPMaxConnsPerHost, defaultHTTPMaxConnsPerHost)
 	conf.AddKnownKey(HTTPMaxIdleConnsPerHost, defaultHTTPMaxIdleConnsPerHost)
+	conf.AddKnownKey(HTTPDNSServers)
 	conf.AddKnownKey(HTTPConnectionTimeout, defaultHTTPConnectionTimeout)
 	conf.AddKnownKey(HTTPTLSHandshakeTimeout, defaultHTTPTLSHandshakeTimeout)
 	conf.AddKnownKey(HTTPExpectContinueTimeout, defaultHTTPExpectContinueTimeout)
@@ -142,6 +147,7 @@ func GenerateConfig(ctx context.Context, conf config.Section) (*Config, error) {
 			HTTPMaxIdleConns:              conf.GetInt(HTTPMaxIdleConns),
 			HTTPMaxConnsPerHost:           conf.GetInt(HTTPMaxConnsPerHost),
 			HTTPMaxIdleConnsPerHost:       conf.GetInt(HTTPMaxIdleConnsPerHost),
+			DNSServers:                    conf.GetStringSlice(HTTPDNSServers),
 			HTTPConnectionTimeout:         fftypes.FFDuration(conf.GetDuration(HTTPConnectionTimeout)),
 			HTTPTLSHandshakeTimeout:       fftypes.FFDuration(conf.GetDuration(HTTPTLSHandshakeTimeout)),
 			HTTPExpectContinueTimeout:     fftypes.FFDuration(conf.GetDuration(HTTPExpectContinueTimeout)),
