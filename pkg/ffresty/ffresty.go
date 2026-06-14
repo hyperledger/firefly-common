@@ -394,18 +394,26 @@ func dnsResolver(ffrestyConfig *Config) *net.Resolver {
 	if ffrestyConfig.Resolver != nil {
 		return ffrestyConfig.Resolver
 	}
-	if len(ffrestyConfig.DNSServers) == 0 {
+	return NewDNSResolver(ffrestyConfig.DNSServers, time.Duration(ffrestyConfig.HTTPConnectionTimeout))
+}
+
+// NewDNSResolver builds a pure-Go *net.Resolver that dials the given DNS servers
+// (each host or host:port, port defaulting to 53) in order, failing over to the
+// next on error. Returns nil when no servers are given (use the system resolver).
+// Exported so non-ffresty dialers — e.g. a WebSocket dialer — can honour the same
+// dnsServers config as the HTTP client.
+func NewDNSResolver(dnsServers []string, dialTimeout time.Duration) *net.Resolver {
+	if len(dnsServers) == 0 {
 		return nil
 	}
-	servers := make([]string, len(ffrestyConfig.DNSServers))
-	for i, server := range ffrestyConfig.DNSServers {
+	servers := make([]string, len(dnsServers))
+	for i, server := range dnsServers {
 		servers[i] = withDefaultDNSPort(server)
 	}
-	timeout := time.Duration(ffrestyConfig.HTTPConnectionTimeout)
 	return &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
-			d := net.Dialer{Timeout: timeout}
+			d := net.Dialer{Timeout: dialTimeout}
 			var err error
 			for _, server := range servers {
 				var conn net.Conn
