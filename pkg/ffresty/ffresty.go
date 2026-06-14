@@ -91,8 +91,10 @@ type HTTPConfig struct {
 	HTTPPassthroughHeadersEnabled bool                                      `ffstruct:"RESTConfig" json:"httpPassthroughHeadersEnabled,omitempty"`
 	HTTPHeaders                   fftypes.JSONObject                        `ffstruct:"RESTConfig" json:"headers,omitempty"`
 	HTTPTLSHandshakeTimeout       fftypes.FFDuration                        `ffstruct:"RESTConfig" json:"tlsHandshakeTimeout,omitempty"`
+	DNSServers                    []string                                  `ffstruct:"RESTConfig" json:"dnsServers,omitempty"` // optional DNS servers (host or host:port); forces use of Go's built-in resolver
 	HTTPCustomClient              interface{}                               `json:"-"`
 	TLSClientConfig               *tls.Config                               `json:"-"` // should be built from separate TLSConfig using fftls utils
+	Resolver                      *net.Resolver                             `json:"-"` // programmatic DNS resolver override; takes precedence over DNSServers
 	OnCheckRetry                  func(res *resty.Response, err error) bool `json:"-"` // response could be nil on err
 	OnBeforeRequest               func(req *resty.Request) error            `json:"-"` // called before each request, even retry
 }
@@ -209,12 +211,19 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 
 	if client == nil {
 
+		dialer := &net.Dialer{
+			Timeout:   time.Duration(ffrestyConfig.HTTPConnectionTimeout),
+			KeepAlive: time.Duration(ffrestyConfig.HTTPConnectionTimeout),
+		}
+		// An explicit programmatic resolver wins; otherwise build one from any configured DNS servers.
+		// Either way the system resolver is replaced with Go's built-in resolver.
+		if resolver := dnsResolver(&ffrestyConfig); resolver != nil {
+			dialer.Resolver = resolver
+		}
+
 		httpTransport := &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			DialContext: (&net.Dialer{
-				Timeout:   time.Duration(ffrestyConfig.HTTPConnectionTimeout),
-				KeepAlive: time.Duration(ffrestyConfig.HTTPConnectionTimeout),
-			}).DialContext,
+			Proxy:                 http.ProxyFromEnvironment,
+			DialContext:           dialer.DialContext,
 			ForceAttemptHTTP2:     true,
 			MaxIdleConns:          ffrestyConfig.HTTPMaxIdleConns,
 			MaxConnsPerHost:       ffrestyConfig.HTTPMaxConnsPerHost,
@@ -374,6 +383,47 @@ func NewWithConfig(ctx context.Context, ffrestyConfig Config) (client *resty.Cli
 	}
 
 	return client
+}
+
+// dnsResolver derives the resolver to attach to the dialer based on config precedence:
+//   - an explicitly provided programmatic Resolver always wins
+//   - otherwise, if DNSServers are configured, a pure-Go resolver that dials those servers
+//     (in order, failing over to the next on error) is built
+//   - otherwise nil, leaving Go's default system resolver selection in place
+func dnsResolver(ffrestyConfig *Config) *net.Resolver {
+	if ffrestyConfig.Resolver != nil {
+		return ffrestyConfig.Resolver
+	}
+	if len(ffrestyConfig.DNSServers) == 0 {
+		return nil
+	}
+	servers := make([]string, len(ffrestyConfig.DNSServers))
+	for i, server := range ffrestyConfig.DNSServers {
+		servers[i] = withDefaultDNSPort(server)
+	}
+	timeout := time.Duration(ffrestyConfig.HTTPConnectionTimeout)
+	return &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			d := net.Dialer{Timeout: timeout}
+			var err error
+			for _, server := range servers {
+				var conn net.Conn
+				if conn, err = d.DialContext(ctx, network, server); err == nil {
+					return conn, nil
+				}
+			}
+			return nil, err
+		},
+	}
+}
+
+// withDefaultDNSPort ensures a DNS server address has a port, defaulting to 53.
+func withDefaultDNSPort(server string) string {
+	if _, _, err := net.SplitHostPort(server); err == nil {
+		return server
+	}
+	return net.JoinHostPort(server, "53")
 }
 
 func traceBody(v any) string {

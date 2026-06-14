@@ -47,6 +47,7 @@ func TestWSConfigGeneration(t *testing.T) {
 	utConf.Set(HTTPTLSHandshakeTimeout, 1)
 	utConf.Set(HTTPExpectContinueTimeout, 1)
 	utConf.Set(HTTPPassthroughHeadersEnabled, true)
+	utConf.Set(HTTPDNSServers, []string{"8.8.8.8", "1.1.1.1:53"})
 
 	ctx := context.Background()
 	config, err := GenerateConfig(ctx, utConf)
@@ -68,6 +69,7 @@ func TestWSConfigGeneration(t *testing.T) {
 	assert.Equal(t, fftypes.FFDuration(1000000), config.HTTPConnectionTimeout)
 	assert.Equal(t, 1, config.HTTPMaxIdleConns)
 	assert.Equal(t, "custom value", config.HTTPHeaders.GetString("custom-header"))
+	assert.Equal(t, []string{"8.8.8.8", "1.1.1.1:53"}, config.DNSServers)
 }
 
 func TestWSConfigTLSGenerationFail(t *testing.T) {
